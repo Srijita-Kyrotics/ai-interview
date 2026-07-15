@@ -7,8 +7,10 @@ from typing import Any, Dict, List, Optional
 DB_FILE = Path(__file__).resolve().parents[2] / "backend" / "app.db"
 
 def get_connection():
-    conn = sqlite3.connect(DB_FILE)
+    conn = sqlite3.connect(DB_FILE, timeout=15)
     conn.row_factory = sqlite3.Row
+    conn.execute("PRAGMA journal_mode=WAL")
+    conn.execute("PRAGMA busy_timeout=10000")
     return conn
 
 def init_db():
@@ -309,5 +311,20 @@ def load_proctoring(session_id: str) -> Optional[Dict[str, Any]]:
         if row:
             return json.loads(row["data"])
         return None
+    finally:
+        conn.close()
+
+
+def cleanup_stale_data(otp_ttl: int = 600, captcha_ttl: int = 600, session_retention_days: int = 30):
+    now = time.time()
+    conn = get_connection()
+    try:
+        c = conn.cursor()
+        c.execute("DELETE FROM otp_state WHERE updated_at < ?", (now - otp_ttl,))
+        c.execute("DELETE FROM captcha_state WHERE updated_at < ?", (now - captcha_ttl,))
+        c.execute("DELETE FROM sessions WHERE updated_at < ?", (now - session_retention_days * 86400,))
+        deleted = c.rowcount
+        conn.commit()
+        return deleted
     finally:
         conn.close()
