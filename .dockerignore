@@ -1,0 +1,9 @@
+node_modules
+.git
+__pycache__
+*.pyc
+.pytest_cache
+.env
+*.db
+.jwt_secret
+frontend/dist
