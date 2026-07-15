@@ -152,3 +152,11 @@ class TestJWT:
     def test_invalid_token(self, client):
         from app.main import decode_token
         assert decode_token("invalid.token.here") is None
+
+
+class TestSecurityHeaders:
+    def test_security_headers_present(self, client):
+        resp = client.get("/health")
+        assert resp.headers["X-Content-Type-Options"] == "nosniff"
+        assert resp.headers["X-Frame-Options"] == "DENY"
+        assert resp.headers["Referrer-Policy"] == "strict-origin-when-cross-origin"
