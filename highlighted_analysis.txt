@@ -1,0 +1,688 @@
+Total highlighted questions: 98
+
+[verbal-0742] score=0
+  Sentence: The small child does whatever his father was done.
+  Option[0]: has done
+  Highlighted: 
+  Before: 
+  After: The small child does whatever his father was done.
+
+[verbal-0743] score=6
+  Sentence: You need not come unless you want to.
+  Option[0]: You don't need to come unless you want to
+  Highlighted: You need not come unless you want
+  Before: 
+  After: to.
+
+[verbal-0744] score=0
+  Sentence: There are not many men who are so famous that they are frequently referred to by their short names only
+  Option[0]: initials
+  Highlighted: 
+  Before: 
+  After: There are not many men who are so famous that they are frequently referred to by their short names only
+
+[verbal-0745] score=3
+  Sentence: The man to who I sold my house was a cheat.
+  Option[0]: to whom I sell
+  Highlighted: The man to who I
+  Before: 
+  After: sold my house was a cheat.
+
+[verbal-0746] score=4
+  Sentence: They were all shocked at his failure in the competition.
+  Option[0]: were shocked at all
+  Highlighted: They were all shocked at
+  Before: 
+  After: his failure in the competition.
+
+[verbal-0747] score=1
+  Sentence: I need not offer any explanation regarding this incident - my behaviour is speaking itself.
+  Option[0]: will speak to itself
+  Highlighted: I
+  Before: 
+  After: need not offer any explanation regarding this incident - my behaviour is speaking itself.
+
+[verbal-0748] score=0
+  Sentence: He is too important for tolerating any delay.
+  Option[0]: to tolerate
+  Highlighted: 
+  Before: 
+  After: He is too important for tolerating any delay.
+
+[verbal-0749] score=4
+  Sentence: The population of Tokyo is greater than that of any other town in the world.
+  Option[0]: greatest among any other
+  Highlighted: The population of Tokyo is greater than that of any other town in the
+  Before: 
+  After: world.
+
+[verbal-0750] score=2
+  Sentence: The performance of our players was rather worst than I had expected.
+  Option[0]: bad as I had expected
+  Highlighted: The performance of our players was rather worst than I had
+  Before: 
+  After: expected.
+
+[verbal-0751] score=3
+  Sentence: Why did you not threw the bag away?
+  Option[0]: did you not throw
+  Highlighted: Why did you not
+  Before: 
+  After: threw the bag away?
+
+[verbal-0752] score=0
+  Sentence: Shapes of gods and goddess are worshipped by people.
+  Option[0]: Images
+  Highlighted: 
+  Before: 
+  After: Shapes of gods and goddess are worshipped by people.
+
+[verbal-0753] score=3
+  Sentence: In addition to enhanced their reputations through strategic use of philanthropy, companies are sponsoring social initiatives to open new markets.
+  Option[0]: of enhancing their reputation
+  Highlighted: In addition to enhanced their reputations through strategic use of
+  Before: 
+  After: philanthropy, companies are sponsoring social initiatives to open new markets.
+
+[verbal-0754] score=2
+  Sentence: The intruder stood quietly for few moments
+  Option[0]: for few time
+  Highlighted: The intruder stood quietly for few
+  Before: 
+  After: moments
+
+[verbal-0755] score=3
+  Sentence: The police has so far succeeded in recovering only a part of the stolen property.
+  Option[0]: thus far succeeded for recovery
+  Highlighted: The police has so far succeeded in recovering only a
+  Before: 
+  After: part of the stolen property.
+
+[verbal-0756] score=3
+  Sentence: He confidentially asked the crowd if they thought he was right and the crowd shouted that they did.
+  Option[0]: that he did
+  Highlighted: He confidentially asked the crowd if they thought he was right and the crowd shouted that
+  Before: 
+  After: they did.
+
+[verbal-0757] score=4
+  Sentence: Why should the candidates be afraid of English Language is not clear.
+  Option[0]: the candidates should be
+  Highlighted: Why should the candidates be
+  Before: 
+  After: afraid of English Language is not clear.
+
+[verbal-0758] score=3
+  Sentence: He found the gold coin as he cleans the floor.
+  Option[0]: as he had cleaned
+  Highlighted: He found the gold coin as he
+  Before: 
+  After: cleans the floor.
+
+[verbal-0759] score=7
+  Sentence: He admired the speed with which he completed the work and appreciating the method adopted by him
+  Option[0]: appreciate the method being adopted
+  Highlighted: He admired the speed with which he completed the work and appreciating the method adopted
+  Before: 
+  After: by him
+
+[verbal-0760] score=3
+  Sentence: Maria unnecessarily picked up a quarrel with Rani and left the party hurried.
+  Option[0]: has picked up
+  Highlighted: Maria unnecessarily picked up a
+  Before: 
+  After: quarrel with Rani and left the party hurried.
+
+[verbal-0761] score=1
+  Sentence: She cooks, washes dishes, does her homework and then relaxing.
+  Option[0]: relaxing then
+  Highlighted: She cooks, washes dishes, does her homework and then
+  Before: 
+  After: relaxing.
+
+[verbal-0762] score=3
+  Sentence: Acquisition of certain specific skills can be facilitated from general awareness, education to novel situations
+  Option[0]: can be facilitated by
+  Highlighted: Acquisition of certain specific skills can be facilitated
+  Before: 
+  After: from general awareness, education to novel situations
+
+[verbal-0763] score=3
+  Sentence: He never has and ever will take such strong measures.
+  Option[0]: had taken nor will ever take
+  Highlighted: He never has and ever will take
+  Before: 
+  After: such strong measures.
+
+[verbal-0764] score=4
+  Sentence: Technology must use to feed the forces of change.
+  Option[0]: must be used to feed
+  Highlighted: Technology must use to feed
+  Before: 
+  After: the forces of change.
+
+[verbal-0765] score=4
+  Sentence: Anyone interested in the use of computers can learn much if you have access to a personal computer.
+  Option[0]: they have access
+  Highlighted: Anyone interested in the use of computers can learn much if you have access to a
+  Before: 
+  After: personal computer.
+
+[verbal-0766] score=2
+  Sentence: They are not beware of all the facts
+  Option[0]: are not aware for
+  Highlighted: They are not
+  Before: 
+  After: beware of all the facts
+
+[verbal-0767] score=4
+  Sentence: We can not always convey ourselves in simple sentences.
+  Option[0]: cannot always convey
+  Highlighted: We can not always convey
+  Before: 
+  After: ourselves in simple sentences.
+
+[verbal-0768] score=3
+  Sentence: What does agonise me most is not this criticism, but the trivial reason behind it.
+  Option[0]: most agonising me
+  Highlighted: What does agonise me most is
+  Before: 
+  After: not this criticism, but the trivial reason behind it.
+
+[verbal-0769] score=1
+  Sentence: As there was no time, the remaining items were deferred into the next meeting.
+  Option[0]: are deferred till
+  Highlighted: As there was no time, the remaining items were deferred
+  Before: 
+  After: into the next meeting.
+
+[verbal-0770] score=3
+  Sentence: Despite of their differences on matters of principles, they all agree on the demand of hike is salary?
+  Option[0]: Despite their
+  Highlighted: Despite of their differences on matters of principles, they all agree on the
+  Before: 
+  After: demand of hike is salary?
+
+[verbal-0771] score=5
+  Sentence: The man who has committed such a serious crime must get the mostly severe punishment.
+  Option[0]: be getting the mostly severely
+  Highlighted: The man who has committed such a serious crime must get the mostly severe
+  Before: 
+  After: punishment.
+
+[verbal-0772] score=0
+  Sentence: For many centuries in Indian History there was no city so famous like the city of Ujjain.
+  Option[0]: as
+  Highlighted: 
+  Before: 
+  After: For many centuries in Indian History there was no city so famous like the city of Ujjain.
+
+[verbal-0773] score=4
+  Sentence: We don't know how did the thief made an escape.
+  Option[0]: how the thief did make
+  Highlighted: We don't know how did the thief
+  Before: 
+  After: made an escape.
+
+[verbal-0774] score=3
+  Sentence: He is a singer of repute, but his yesterday's performance was quite disappointing.
+  Option[0]: performances of yesterday were
+  Highlighted: He is a singer of repute, but his yesterday's performance
+  Before: 
+  After: was quite disappointing.
+
+[verbal-0775] score=4
+  Sentence: Their earnings are such that they find it difficult to make both ends to meet.
+  Option[0]: to makings both ends meet
+  Highlighted: Their earnings are such that they find it difficult to make both ends to
+  Before: 
+  After: meet.
+
+[verbal-0776] score=5
+  Sentence: He has received no other message than an urgent telegram asking him to rush his village immediately.
+  Option[0]: asked him to rush his village
+  Highlighted: He has received no other message than an urgent telegram asking him to rush his village
+  Before: 
+  After: immediately.
+
+[verbal-0777] score=0
+  Sentence: One of the most significant phenomenons of our time has been the development of cinema.
+  Option[0]: phenomenon
+  Highlighted: 
+  Before: 
+  After: One of the most significant phenomenons of our time has been the development of cinema.
+
+[verbal-0778] score=5
+  Sentence: Had you been told me about your problem, I would have helped you.
+  Option[0]: If you would have told
+  Highlighted: Had you been told me about your problem, I would have
+  Before: 
+  After: helped you.
+
+[verbal-0779] score=6
+  Sentence: It was until many years later that Gandhi became a rebel against authority.
+  Option[0]: It was not until many years
+  Highlighted: It was until many years later that Gandhi became a
+  Before: 
+  After: rebel against authority.
+
+[verbal-0780] score=1
+  Sentence: Anand has the guts to rise from the occasion and come out successfully.
+  Option[0]: in rising from
+  Highlighted: Anand has the guts to rise from
+  Before: 
+  After: the occasion and come out successfully.
+
+[verbal-0781] score=1
+  Sentence: If you are thinking about investigation overseas, isn't it makes sense to find an experience guide?
+  Option[0]: it is not making
+  Highlighted: If you are thinking about investigation overseas, isn't it
+  Before: 
+  After: makes sense to find an experience guide?
+
+[verbal-0782] score=5
+  Sentence: This is one of the most important inventions of this century.
+  Option[0]: invention of this century
+  Highlighted: This is one of the most important inventions of this
+  Before: 
+  After: century.
+
+[verbal-0783] score=2
+  Sentence: The orator had been left the auditorium before the audience stood up.
+  Option[0]: had been leaving
+  Highlighted: The orator had been
+  Before: 
+  After: left the auditorium before the audience stood up.
+
+[verbal-0784] score=2
+  Sentence: He dislikes the word dislike, isn't he
+  Option[0]: didn't he
+  Highlighted: He dislikes the word dislike, isn't he
+  Before: 
+  After: 
+
+[verbal-0785] score=4
+  Sentence: We must take it granted that Madhu will not come for today's function.
+  Option[0]: take it for granted
+  Highlighted: We must take it granted that Madhu will not come for
+  Before: 
+  After: today's function.
+
+[verbal-0786] score=2
+  Sentence: The research study is an eye-opener and attempts to acquaint us with the problems of poor nations.
+  Option[0]: attempted to acquaint
+  Highlighted: The research study is an eye-opener and attempts to acquaint
+  Before: 
+  After: us with the problems of poor nations.
+
+[verbal-0787] score=3
+  Sentence: It was unanimously resolved that the parties should unitedly undertook launching of popular programmes.
+  Option[0]: should be united undertook
+  Highlighted: It was unanimously resolved that the parties should unitedly undertook
+  Before: 
+  After: launching of popular programmes.
+
+[verbal-0788] score=4
+  Sentence: They continued to work in the field despite of the heavy rains.
+  Option[0]: even though there is heavy rain
+  Highlighted: They continued to work in the field despite of the heavy
+  Before: 
+  After: rains.
+
+[verbal-0789] score=4
+  Sentence: It is always better to make people realise the importance of discipline than to impose them on it.
+  Option[0]: impose it with them
+  Highlighted: It is always better to make people realise the importance of discipline than to impose them
+  Before: 
+  After: on it.
+
+[verbal-0790] score=7
+  Sentence: My doctor knew that I would eventually recover and do kind of work I would be doing before
+  Option[0]: would have been doing
+  Highlighted: My doctor knew that I would eventually recover and do kind of work I would be doing
+  Before: 
+  After: before
+
+[verbal-0791] score=3
+  Sentence: Later he became unpopular because he tried to lord it on his followers.
+  Option[0]: to lord it for
+  Highlighted: Later he became unpopular because he tried to lord it
+  Before: 
+  After: on his followers.
+
+[verbal-0792] score=3
+  Sentence: The crops are dying; it must not had rained.
+  Option[0]: must had not
+  Highlighted: The crops are dying; it must not had
+  Before: 
+  After: rained.
+
+[verbal-0793] score=4
+  Sentence: The courts are actively to safeguard the interests and the rights of the poor.
+  Option[0]: are actively to safeguarding
+  Highlighted: The courts are actively to safeguard
+  Before: 
+  After: the interests and the rights of the poor.
+
+[verbal-0794] score=4
+  Sentence: The drama had many scenes which were so humorous that it was hardly possible to keep a straight face.
+  Option[0]: hardly possible for keeping
+  Highlighted: The drama had many scenes which were so humorous that it was hardly possible to keep a
+  Before: 
+  After: straight face.
+
+[verbal-0795] score=3
+  Sentence: Hardly does the sun rise when the stars disappeared.
+  Option[0]: have the sun rose
+  Highlighted: Hardly does the sun rise when the
+  Before: 
+  After: stars disappeared.
+
+[verbal-0796] score=2
+  Sentence: You will be late if you do not leave now
+  Option[0]: did not leave
+  Highlighted: You will be late if you do not leave
+  Before: 
+  After: now
+
+[verbal-0797] score=2
+  Sentence: The train will leave at 8.30 pm, we have been ready by 7.30pm so that, we can reach the station in time.
+  Option[0]: were
+  Highlighted: The train will leave at 8.30 pm, we have been ready by 7.30pm so that, we
+  Before: 
+  After: can reach the station in time.
+
+[verbal-0798] score=1
+  Sentence: All the allegations levelled against him were found to be baseless.
+  Option[0]: level against
+  Highlighted: All the allegations levelled against
+  Before: 
+  After: him were found to be baseless.
+
+[verbal-0799] score=2
+  Sentence: Ramesh is as tall if not, taller than Mahesh.
+  Option[0]: not as tall but
+  Highlighted: Ramesh is as tall
+  Before: 
+  After: if not, taller than Mahesh.
+
+[verbal-0800] score=4
+  Sentence: He hesitated to listen to what his brother was saying.
+  Option[0]: listened to hesitate
+  Highlighted: He hesitated to listen to
+  Before: 
+  After: what his brother was saying.
+
+[verbal-0801] score=0
+  Sentence: The prosecution failed in establish in every case today.
+  Option[0]: to
+  Highlighted: 
+  Before: 
+  After: The prosecution failed in establish in every case today.
+
+[verbal-0802] score=3
+  Sentence: One of my drawbacks is that I do not have to tolerance of ambiguity.
+  Option[0]: do not have
+  Highlighted: One of my drawbacks is that I do not have
+  Before: 
+  After: to tolerance of ambiguity.
+
+[verbal-0803] score=2
+  Sentence: They should have calmly thought of the advantages that would accrue to them.
+  Option[0]: should have been calm in thinking about
+  Highlighted: They should have
+  Before: 
+  After: calmly thought of the advantages that would accrue to them.
+
+[verbal-0804] score=10
+  Sentence: The easiest of the thing to do is to ask the address to the postman.
+  Option[0]: of the things to do
+  Highlighted: The easiest of the thing to do is to ask the address to the
+  Before: 
+  After: postman.
+
+[verbal-0805] score=1
+  Sentence: We demonstrated to them how we were prepared the artistic patterns.
+  Option[0]: are prepared
+  Highlighted: We demonstrated to them how we were prepared
+  Before: 
+  After: the artistic patterns.
+
+[verbal-0806] score=2
+  Sentence: Because of his mastery in this field, his suggestions are wide accepted.
+  Option[0]: are widely accepted
+  Highlighted: Because of his mastery in this field, his suggestions are wide
+  Before: 
+  After: accepted.
+
+[verbal-0807] score=0
+  Sentence: They felt humiliated because they realised that they had cheated.
+  Option[0]: have been cheated
+  Highlighted: 
+  Before: 
+  After: They felt humiliated because they realised that they had cheated.
+
+[verbal-0808] score=1
+  Sentence: Tax evaders should heavily punished as they do it intentionally.
+  Option[0]: should be heavy fined
+  Highlighted: Tax evaders should
+  Before: 
+  After: heavily punished as they do it intentionally.
+
+[verbal-0809] score=1
+  Sentence: We met him immediately after the session in which he had been given a nice speech.
+  Option[0]: would be giving
+  Highlighted: We met him immediately after the session in
+  Before: 
+  After: which he had been given a nice speech.
+
+[verbal-0810] score=3
+  Sentence: For some days the new professor lectured above the heads of his pupils.
+  Option[0]: over the head of
+  Highlighted: For some days the new professor lectured above the heads of
+  Before: 
+  After: his pupils.
+
+[verbal-0811] score=2
+  Sentence: The accused now flatly denies have admitted his guilt in his first statement.
+  Option[0]: having admitted
+  Highlighted: The accused now flatly denies have admitted his guilt in
+  Before: 
+  After: his first statement.
+
+[verbal-0812] score=1
+  Sentence: We were still standing in the queue when the film was beginning.
+  Option[0]: film began
+  Highlighted: We were still standing in the queue when the film
+  Before: 
+  After: was beginning.
+
+[verbal-0813] score=5
+  Sentence: If I would have realised the nature of job earlier, I would not have accepted it.
+  Option[0]: If I have had
+  Highlighted: If I would have realised the nature of job earlier, I would not have
+  Before: 
+  After: accepted it.
+
+[verbal-0814] score=2
+  Sentence: The crime has growth rapidly in Russia since the disintegration of the communist system.
+  Option[0]: rapid crime has grown
+  Highlighted: The crime has
+  Before: 
+  After: growth rapidly in Russia since the disintegration of the communist system.
+
+[verbal-0815] score=5
+  Sentence: They failed in their attempt to repair the demolished portion of that building.
+  Option[0]: for their attempt to repair
+  Highlighted: They failed in their attempt to repair the
+  Before: 
+  After: demolished portion of that building.
+
+[verbal-0816] score=3
+  Sentence: I earnestly believe that you will visit our relatives during your forthcoming trip to Mumbai.
+  Option[0]: had hardly believe that
+  Highlighted: I earnestly believe that
+  Before: 
+  After: you will visit our relatives during your forthcoming trip to Mumbai.
+
+[verbal-0817] score=2
+  Sentence: By such time you finish that chapter, I will write a letter.
+  Option[0]: The time when
+  Highlighted: By such time you finish that chapter, I
+  Before: 
+  After: will write a letter.
+
+[verbal-0818] score=9
+  Sentence: Though we have kept in mind to try and maintain most facilities, we would like to request you to kindly bear with us any inconvenience that may be caused.
+  Option[0]: must keep in mind to try and maintain
+  Highlighted: Though we have kept in mind to try and maintain most facilities, we would like to request you to kindly bear with us
+  Before: 
+  After: any inconvenience that may be caused.
+
+[verbal-0819] score=3
+  Sentence: The tea-estate administration is in such mess there is no leader to set the things right.
+  Option[0]: in such a mess here
+  Highlighted: The tea-estate administration is in such mess
+  Before: 
+  After: there is no leader to set the things right.
+
+[verbal-0820] score=2
+  Sentence: They examined both the samples very carefully but failed to detect any difference in them.
+  Option[0]: some difference in
+  Highlighted: They examined both the samples very carefully but failed to detect any difference in
+  Before: 
+  After: them.
+
+[verbal-0821] score=0
+  Sentence: "Friends and comrades, the light has gone away from our lives and there is darkness everywhere"
+  Option[0]: off
+  Highlighted: 
+  Before: 
+  After: "Friends and comrades, the light has gone away from our lives and there is darkness everywhere"
+
+[verbal-0822] score=4
+  Sentence: Because of his ill health, the doctor has advised him not to refrain from smoking.
+  Option[0]: to not refrain from
+  Highlighted: Because of his ill health, the doctor has advised him not to refrain from
+  Before: 
+  After: smoking.
+
+[verbal-0823] score=2
+  Sentence: They have a scheme of rewarding the best of the performers every year.
+  Option[0]: a best performer
+  Highlighted: They have a scheme of rewarding the best
+  Before: 
+  After: of the performers every year.
+
+[verbal-0824] score=1
+  Sentence: What happens to all those travellers on the ship was not known?
+  Option[0]: What happened of
+  Highlighted: What
+  Before: 
+  After: happens to all those travellers on the ship was not known?
+
+[verbal-0825] score=1
+  Sentence: Making friends is more rewarding than to make enemies.
+  Option[0]: to be unsociable
+  Highlighted: Making friends is more rewarding than to
+  Before: 
+  After: make enemies.
+
+[verbal-0826] score=1
+  Sentence: The moment they saw me, they were delight
+  Option[0]: had delighted
+  Highlighted: The moment they saw me, they were delight
+  Before: 
+  After: 
+
+[verbal-0827] score=2
+  Sentence: He should not had done it.
+  Option[0]: had not
+  Highlighted: He should not had
+  Before: 
+  After: done it.
+
+[verbal-0828] score=3
+  Sentence: No sooner do the bells ring than the curtain rose.
+  Option[0]: did the bell ring
+  Highlighted: No sooner do the bells ring than the
+  Before: 
+  After: curtain rose.
+
+[verbal-0829] score=4
+  Sentence: The moment the manager came to know fraudulent action of his assistant, he order immediately dismissed him.
+  Option[0]: immediately ordered his dismissed
+  Highlighted: The moment the manager came to know fraudulent action of his assistant, he order immediately dismissed
+  Before: 
+  After: him.
+
+[verbal-0830] score=4
+  Sentence: The meeting was attended to by all invitees.
+  Option[0]: all attended to by
+  Highlighted: The meeting was attended to by all
+  Before: 
+  After: invitees.
+
+[verbal-0831] score=3
+  Sentence: If he has to spend five hours in the queue, it was really a wastage.
+  Option[0]: is a really wastage
+  Highlighted: If he has to spend five hours in the queue, it was really a
+  Before: 
+  After: wastage.
+
+[verbal-0832] score=0
+  Sentence: The world has seen small real attempt at population and resource planning.
+  Option[0]: few
+  Highlighted: 
+  Before: 
+  After: The world has seen small real attempt at population and resource planning.
+
+[verbal-0833] score=2
+  Sentence: My hair stood off ends when I saw the horrible sight.
+  Option[0]: stood at ends
+  Highlighted: My hair stood off ends
+  Before: 
+  After: when I saw the horrible sight.
+
+[verbal-0834] score=7
+  Sentence: The long or short of it is that I do not want to deal with that new firm.
+  Option[0]: The long and short of it
+  Highlighted: The long or short of it is that I
+  Before: 
+  After: do not want to deal with that new firm.
+
+[verbal-0835] score=6
+  Sentence: Can you tell me why did you not speak the truth?
+  Option[0]: why did not you speak
+  Highlighted: Can you tell me why did you not speak
+  Before: 
+  After: the truth?
+
+[verbal-0836] score=1
+  Sentence: The people generally try to curry favour with the corrupt but influential person.
+  Option[0]: cook favour
+  Highlighted: The people generally try to curry favour
+  Before: 
+  After: with the corrupt but influential person.
+
+[verbal-0837] score=1
+  Sentence: I have got some tea, but I do not have a sugar.
+  Option[0]: some
+  Highlighted: I have got some
+  Before: 
+  After: tea, but I do not have a sugar.
+
+[verbal-0838] score=5
+  Sentence: Had I realised how close I was to the edge of the valley, I would not have carried the bags there.
+  Option[0]: Had I been realised
+  Highlighted: Had I realised how close I was to the edge of the valley, I
+  Before: 
+  After: would not have carried the bags there.
+
+[verbal-0839] score=5
+  Sentence: Most of the Indian workers are as healthy as, if not healthier than, British workers.
+  Option[0]: as if healthy as not healthier
+  Highlighted: Most of the Indian workers are as healthy as, if not healthier
+  Before: 
+  After: than, British workers.
+

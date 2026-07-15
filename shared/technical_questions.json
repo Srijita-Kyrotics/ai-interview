@@ -1,0 +1,13 @@
+[
+  {"id": 1, "question": "Explain OOPs."},
+  {"id": 2, "question": "What is DBMS?"},
+  {"id": 3, "question": "What is an API?"},
+  {"id": 4, "question": "Explain your project."},
+  {"id": 5, "question": "What is polymorphism?"},
+  {"id": 6, "question": "Difference between SQL and NoSQL?"},
+  {"id": 7, "question": "What is REST?"},
+  {"id": 8, "question": "What is middleware?"},
+  {"id": 9, "question": "Explain authentication vs authorization."},
+  {"id": 10, "question": "What is caching?"}
+]
+

@@ -1,0 +1,14 @@
+[
+  {
+    "email": "pausali2004@gmail.com",
+    "name": "Pausali Sengupta",
+    "salt": "2094f31c857839bc75bf4819de5ce3fb",
+    "hash": "31120f711620b62c75f300b8713f4b56dc09c00f243aea4a1f066800ad9a6576"
+  },
+  {
+    "email": "anquuws@mailto.plus",
+    "name": "Test Candidate",
+    "salt": "2ebec1098a98af4a06461c18c76dc14c",
+    "hash": "76d5ae351b511524dcbcc0866622837f7cf8956899951129d86fec6e769864d8"
+  }
+]

@@ -1,0 +1,198 @@
+{
+  "Google": {
+    "rounds": [
+      { "key": "aptitude-1", "label": "Aptitude Round 1", "type": "aptitude" },
+      { "key": "coding-1", "label": "Coding Round 1", "type": "coding" },
+      { "key": "coding-2", "label": "Coding Round 2", "type": "coding" },
+      { "key": "coding-3", "label": "Coding Round 3", "type": "coding" },
+      { "key": "technical-1", "label": "Technical Interview 1", "type": "technical" },
+      { "key": "technical-2", "label": "Technical Interview 2", "type": "technical" },
+      { "key": "hr-1", "label": "HR Interview", "type": "hr" }
+    ]
+  },
+  "Microsoft": {
+    "rounds": [
+      { "key": "aptitude-1", "label": "Aptitude Round 1", "type": "aptitude" },
+      { "key": "coding-1", "label": "Coding Round 1", "type": "coding" },
+      { "key": "coding-2", "label": "Coding Round 2", "type": "coding" },
+      { "key": "technical-1", "label": "Technical Interview", "type": "technical" },
+      { "key": "technical-2", "label": "Technical Interview 2", "type": "technical" },
+      { "key": "hr-1", "label": "HR Interview", "type": "hr" }
+    ]
+  },
+  "Amazon": {
+    "rounds": [
+      { "key": "aptitude-1", "label": "Aptitude Round 1", "type": "aptitude" },
+      { "key": "coding-1", "label": "Coding Round 1", "type": "coding" },
+      { "key": "technical-1", "label": "Technical Interview", "type": "technical" },
+      { "key": "hr-1", "label": "HR Interview", "type": "hr" }
+    ]
+  },
+  "Adobe": {
+    "rounds": [
+      { "key": "aptitude-1", "label": "Aptitude Round 1", "type": "aptitude" },
+      { "key": "coding-1", "label": "Coding Round 1", "type": "coding" },
+      { "key": "coding-2", "label": "Coding Round 2", "type": "coding" },
+      { "key": "technical-1", "label": "Technical Interview", "type": "technical" },
+      { "key": "hr-1", "label": "HR Interview", "type": "hr" }
+    ]
+  },
+  "Oracle": {
+    "rounds": [
+      { "key": "aptitude-1", "label": "Aptitude Round 1", "type": "aptitude" },
+      { "key": "coding-1", "label": "Coding Round 1", "type": "coding" },
+      { "key": "technical-1", "label": "Technical Interview", "type": "technical" },
+      { "key": "technical-2", "label": "Technical Interview 2", "type": "technical" },
+      { "key": "hr-1", "label": "HR Interview", "type": "hr" }
+    ]
+  },
+  "Salesforce": {
+    "rounds": [
+      { "key": "aptitude-1", "label": "Aptitude Round 1", "type": "aptitude" },
+      { "key": "coding-1", "label": "Coding Round 1", "type": "coding" },
+      { "key": "technical-1", "label": "Technical Interview", "type": "technical" },
+      { "key": "hr-1", "label": "HR Interview", "type": "hr" }
+    ]
+  },
+  "Atlassian": {
+    "rounds": [
+      { "key": "aptitude-1", "label": "Aptitude Round 1", "type": "aptitude" },
+      { "key": "coding-1", "label": "Coding Round 1", "type": "coding" },
+      { "key": "coding-2", "label": "Coding Round 2", "type": "coding" },
+      { "key": "technical-1", "label": "Technical Interview", "type": "technical" },
+      { "key": "technical-2", "label": "Technical Interview 2", "type": "technical" },
+      { "key": "hr-1", "label": "HR Interview", "type": "hr" }
+    ]
+  },
+  "NVIDIA": {
+    "rounds": [
+      { "key": "aptitude-1", "label": "Aptitude Round 1", "type": "aptitude" },
+      { "key": "coding-1", "label": "Coding Round 1", "type": "coding" },
+      { "key": "coding-2", "label": "Coding Round 2", "type": "coding" },
+      { "key": "technical-1", "label": "Technical Interview", "type": "technical" },
+      { "key": "technical-2", "label": "Technical Interview 2", "type": "technical" },
+      { "key": "hr-1", "label": "HR Interview", "type": "hr" }
+    ]
+  },
+  "TCS": {
+    "rounds": [
+      { "key": "aptitude-1", "label": "Aptitude Round 1", "type": "aptitude" },
+      { "key": "aptitude-2", "label": "Aptitude Round 2", "type": "aptitude" },
+      { "key": "coding-1", "label": "Coding Round 1", "type": "coding" },
+      { "key": "technical-1", "label": "Technical Interview", "type": "technical" },
+      { "key": "hr-1", "label": "HR Interview", "type": "hr" }
+    ]
+  },
+  "Infosys": {
+    "rounds": [
+      { "key": "aptitude-1", "label": "Aptitude Round 1", "type": "aptitude" },
+      { "key": "aptitude-2", "label": "Aptitude Round 2", "type": "aptitude" },
+      { "key": "coding-1", "label": "Coding Round 1", "type": "coding" },
+      { "key": "technical-1", "label": "Technical Interview", "type": "technical" },
+      { "key": "hr-1", "label": "HR Interview", "type": "hr" }
+    ]
+  },
+  "Wipro": {
+    "rounds": [
+      { "key": "aptitude-1", "label": "Aptitude Round 1", "type": "aptitude" },
+      { "key": "coding-1", "label": "Coding Round 1", "type": "coding" },
+      { "key": "technical-1", "label": "Technical Interview", "type": "technical" },
+      { "key": "hr-1", "label": "HR Interview", "type": "hr" }
+    ]
+  },
+  "HCLTech": {
+    "rounds": [
+      { "key": "aptitude-1", "label": "Aptitude Round 1", "type": "aptitude" },
+      { "key": "aptitude-2", "label": "Aptitude Round 2", "type": "aptitude" },
+      { "key": "coding-1", "label": "Coding Round 1", "type": "coding" },
+      { "key": "technical-1", "label": "Technical Interview", "type": "technical" },
+      { "key": "hr-1", "label": "HR Interview", "type": "hr" }
+    ]
+  },
+  "Tech Mahindra": {
+    "rounds": [
+      { "key": "aptitude-1", "label": "Aptitude Round 1", "type": "aptitude" },
+      { "key": "coding-1", "label": "Coding Round 1", "type": "coding" },
+      { "key": "technical-1", "label": "Technical Interview", "type": "technical" },
+      { "key": "hr-1", "label": "HR Interview", "type": "hr" }
+    ]
+  },
+  "Cognizant": {
+    "rounds": [
+      { "key": "aptitude-1", "label": "Aptitude Round 1", "type": "aptitude" },
+      { "key": "aptitude-2", "label": "Aptitude Round 2", "type": "aptitude" },
+      { "key": "coding-1", "label": "Coding Round 1", "type": "coding" },
+      { "key": "technical-1", "label": "Technical Interview", "type": "technical" },
+      { "key": "hr-1", "label": "HR Interview", "type": "hr" }
+    ]
+  },
+  "Capgemini": {
+    "rounds": [
+      { "key": "aptitude-1", "label": "Aptitude Round 1", "type": "aptitude" },
+      { "key": "aptitude-2", "label": "Aptitude Round 2", "type": "aptitude" },
+      { "key": "coding-1", "label": "Coding Round 1", "type": "coding" },
+      { "key": "technical-1", "label": "Technical Interview", "type": "technical" },
+      { "key": "hr-1", "label": "HR Interview", "type": "hr" }
+    ]
+  },
+  "LTIMindtree": {
+    "rounds": [
+      { "key": "aptitude-1", "label": "Aptitude Round 1", "type": "aptitude" },
+      { "key": "aptitude-2", "label": "Aptitude Round 2", "type": "aptitude" },
+      { "key": "coding-1", "label": "Coding Round 1", "type": "coding" },
+      { "key": "technical-1", "label": "Technical Interview", "type": "technical" },
+      { "key": "hr-1", "label": "HR Interview", "type": "hr" }
+    ]
+  },
+  "Accenture": {
+    "rounds": [
+      { "key": "aptitude-1", "label": "Aptitude Round 1", "type": "aptitude" },
+      { "key": "coding-1", "label": "Coding Round 1", "type": "coding" },
+      { "key": "coding-2", "label": "Coding Round 2", "type": "coding" },
+      { "key": "technical-1", "label": "Technical Interview", "type": "technical" },
+      { "key": "hr-1", "label": "HR Interview", "type": "hr" }
+    ]
+  },
+  "IBM": {
+    "rounds": [
+      { "key": "aptitude-1", "label": "Aptitude Round 1", "type": "aptitude" },
+      { "key": "coding-1", "label": "Coding Round 1", "type": "coding" },
+      { "key": "technical-1", "label": "Technical Interview", "type": "technical" },
+      { "key": "technical-2", "label": "Technical Interview 2", "type": "technical" },
+      { "key": "hr-1", "label": "HR Interview", "type": "hr" }
+    ]
+  },
+  "SAP": {
+    "rounds": [
+      { "key": "aptitude-1", "label": "Aptitude Round 1", "type": "aptitude" },
+      { "key": "coding-1", "label": "Coding Round 1", "type": "coding" },
+      { "key": "technical-1", "label": "Technical Interview", "type": "technical" },
+      { "key": "hr-1", "label": "HR Interview", "type": "hr" }
+    ]
+  },
+  "Cisco": {
+    "rounds": [
+      { "key": "aptitude-1", "label": "Aptitude Round 1", "type": "aptitude" },
+      { "key": "coding-1", "label": "Coding Round 1", "type": "coding" },
+      { "key": "coding-2", "label": "Coding Round 2", "type": "coding" },
+      { "key": "technical-1", "label": "Technical Interview", "type": "technical" },
+      { "key": "hr-1", "label": "HR Interview", "type": "hr" }
+    ]
+  },
+  "Zoho": {
+    "rounds": [
+      { "key": "aptitude-1", "label": "Aptitude Round 1", "type": "aptitude" },
+      { "key": "coding-1", "label": "Coding Round 1", "type": "coding" },
+      { "key": "technical-1", "label": "Technical Interview", "type": "technical" },
+      { "key": "hr-1", "label": "HR Interview", "type": "hr" }
+    ]
+  },
+  "Freshworks": {
+    "rounds": [
+      { "key": "aptitude-1", "label": "Aptitude Round 1", "type": "aptitude" },
+      { "key": "coding-1", "label": "Coding Round 1", "type": "coding" },
+      { "key": "technical-1", "label": "Technical Interview", "type": "technical" },
+      { "key": "hr-1", "label": "HR Interview", "type": "hr" }
+    ]
+  }
+}

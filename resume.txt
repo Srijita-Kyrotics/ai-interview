@@ -1,0 +1,19 @@
+Name: John Doe
+Email: john.doe@example.com
+Phone: +1-555-0199
+
+Summary:
+Experienced software engineer with a strong background in React, Node.js, Python, SQL, and AWS.
+
+Skills:
+React, JavaScript, TypeScript, Node.js, Python, SQL, AWS, Git
+
+Education:
+Bachelor of Science in Computer Science - University of Science, 2018-2022
+
+Experience:
+Frontend Developer - Software Inc, 2022-Present
+Worked on React web applications, integrated REST APIs, and managed state using Redux.
+
+Projects:
+E-commerce Platform - Built a full-stack e-commerce application using React, Node.js, and MongoDB.

@@ -1,0 +1,13 @@
+[
+  {"id": 1, "question": "Tell me about yourself."},
+  {"id": 2, "question": "Why should we hire you?"},
+  {"id": 3, "question": "What are your strengths?"},
+  {"id": 4, "question": "Where do you see yourself in five years?"},
+  {"id": 5, "question": "Why do you want to work here?"},
+  {"id": 6, "question": "Tell me about a challenge you handled."},
+  {"id": 7, "question": "How do you handle teamwork?"},
+  {"id": 8, "question": "What motivates you?"},
+  {"id": 9, "question": "How do you handle feedback?"},
+  {"id": 10, "question": "What is your expected work style?"}
+]
+
