@@ -257,6 +257,7 @@ function AuthPage({ onAuth }) {
                 value={form.email}
                 onChange={(e) => updateField('email', e.target.value)}
                 placeholder="you@example.com"
+                aria-label="Email address"
               />
               {fieldErrors.email ? <div className="field-error">{fieldErrors.email}</div> : null}
             </label>
@@ -270,6 +271,7 @@ function AuthPage({ onAuth }) {
                       value={form.name}
                       onChange={(e) => updateField('name', e.target.value)}
                       placeholder="Jane Doe"
+                      aria-label="Full name"
                     />
                     {fieldErrors.name ? <div className="field-error">{fieldErrors.name}</div> : null}
                   </label>
@@ -283,6 +285,7 @@ function AuthPage({ onAuth }) {
                       value={form.password}
                       onChange={(e) => updateField('password', e.target.value)}
                       placeholder="At least 8 characters and a special character"
+                      aria-label={isCreate ? 'Create password' : 'Password'}
                     />
                     <button
                       className="eye-toggle"

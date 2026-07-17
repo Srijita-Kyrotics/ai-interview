@@ -17,8 +17,12 @@ function ReportPage({ state, proctoring }) {
       } catch (err) {
         console.error("AI feedback generation failed", err)
       }
-      const data = await api.get(`/report?session_id=${state.sessionId}`)
-      setReport(data)
+      try {
+        const data = await api.get(`/report?session_id=${state.sessionId}`)
+        setReport(data)
+      } catch (err) {
+        console.error("Failed to load report", err)
+      }
       setIsGenerating(false)
     }
     fetchReport()

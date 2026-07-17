@@ -1,20 +1,33 @@
-import React, { useEffect, useState } from 'react'
+import React, { useEffect, useRef, useState } from 'react'
 import { Shield, X } from 'lucide-react'
 import { api } from '../api'
-
-function scoreClass(score) {
-  if (score >= 70) return 'score-good'
-  if (score >= 50) return 'score-mid'
-  return 'score-low'
-}
+import { scoreClass } from '../utils/score'
 
 function AdminSessionModal({ sessionId, modalType = 'report', onClose }) {
   const [detail, setDetail] = useState(null)
   const [loading, setLoading] = useState(true)
+  const contentRef = useRef(null)
 
   useEffect(() => {
-    api.get(`/admin/sessions/${sessionId}`).then(r => { setDetail(r); setLoading(false) }).catch(() => setLoading(false))
-  }, [sessionId])
+    const onKey = (e) => { if (e.key === 'Escape') onClose() }
+    document.addEventListener('keydown', onKey)
+    return () => document.removeEventListener('keydown', onKey)
+  }, [onClose])
+
+  useEffect(() => {
+    if (!loading && contentRef.current) contentRef.current.focus()
+  }, [loading])
+
+  useEffect(() => {
+    if (modalType === 'proctoring') {
+      api.get(`/admin/sessions/${sessionId}/proctoring`).then(r => {
+        setDetail({ proctoring: r })
+        setLoading(false)
+      }).catch(() => setLoading(false))
+    } else {
+      api.get(`/admin/sessions/${sessionId}`).then(r => { setDetail(r); setLoading(false) }).catch(() => setLoading(false))
+    }
+  }, [sessionId, modalType])
 
   if (loading) {
     return (
@@ -33,7 +46,7 @@ function AdminSessionModal({ sessionId, modalType = 'report', onClose }) {
 
   return (
     <div className="modal-overlay" onClick={onClose}>
-      <div className="modal-content" onClick={e => e.stopPropagation()}>
+      <div className="modal-content" ref={contentRef} tabIndex={-1} onClick={e => e.stopPropagation()}>
         <div className="modal-header">
           <h3>
             {modalType === 'proctoring' ? 'Proctoring Details' : 'Session Report'} — {report.candidateName || 'Candidate'}

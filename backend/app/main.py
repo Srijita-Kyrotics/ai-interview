@@ -25,11 +25,14 @@ from app.db import (
     save_proctoring, load_proctoring,
 )
 import fitz
+import httpx
+import asyncio
 
 from app.resume_parser import parse_resume_text, extract_text_from_pdf_content
 
 from fastapi import FastAPI, File, UploadFile, Header, HTTPException, Depends, Request
 from fastapi.middleware.cors import CORSMiddleware
+from contextlib import asynccontextmanager
 from dotenv import load_dotenv
 from pydantic import BaseModel
 
@@ -40,7 +43,15 @@ FRONTEND_QUESTIONS_DIR = BASE_DIR / "frontend" / "public" / "questions"
 load_dotenv(BASE_DIR / "backend" / ".env")
 load_dotenv(BASE_DIR / ".env")
 
-app = FastAPI(title="AI Mock Recruitment Platform")
+@asynccontextmanager
+async def lifespan(app):
+    init_db()
+    _accounts_file = BASE_DIR / "backend" / "accounts.json"
+    migrate_accounts_json(_accounts_file)
+    cleanup_stale_data()
+    yield
+
+app = FastAPI(title="AI Mock Recruitment Platform", lifespan=lifespan)
 
 ALLOWED_ORIGINS = os.getenv("ALLOWED_ORIGINS", "http://localhost:5173,http://127.0.0.1:5173").split(",")
 app.add_middleware(
@@ -58,6 +69,8 @@ async def add_security_headers(request, call_next):
     response.headers["X-Frame-Options"] = "DENY"
     response.headers["Referrer-Policy"] = "strict-origin-when-cross-origin"
     response.headers["Permissions-Policy"] = "camera=(), microphone=(), geolocation=()"
+    response.headers["Content-Security-Policy"] = "default-src 'self'; script-src 'self' 'unsafe-inline' 'unsafe-eval'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; connect-src 'self'"
+    response.headers["Strict-Transport-Security"] = "max-age=31536000; includeSubDomains"
     return response
 
 JWT_SECRET_FILE = BASE_DIR / "backend" / ".jwt_secret"
@@ -78,14 +91,6 @@ def _load_or_create_jwt_secret() -> str:
 
 
 JWT_SECRET = _load_or_create_jwt_secret()
-
-
-@app.on_event("startup")
-def startup_event():
-    init_db()
-    _accounts_file = BASE_DIR / "backend" / "accounts.json"
-    migrate_accounts_json(_accounts_file)
-    cleanup_stale_data()
 
 
 def create_token(email: str, role: str) -> str:
@@ -547,10 +552,6 @@ async def upload_resume(file: UploadFile = File(...), user: Dict[str, Any] = Dep
     if filename.endswith(".pdf"):
         text = extract_text_from_pdf_content(content)
 
-        print("\n========== PDF TEXT ==========\n")
-        print(text)
-        print("\n==============================\n")
-
     elif filename.endswith(".txt"):
         text = content.decode("utf-8", errors="ignore")
 
@@ -630,7 +631,7 @@ def start_round(payload: StartRoundRequest):
     state["currentRound"] = payload.round_key
     state["currentQuestion"] = 0
     save_session(payload.session_id, state)
-    return {"session_id": payload.session_id, "round_key": payload.round_key, "state": state}
+    return {"session_id": payload.session_id, "round_key": payload.round_key}
 
 
 @app.post("/submit-answer")
@@ -660,7 +661,7 @@ def submit_answer(payload: SubmitAnswerRequest):
                 if is_correct:
                     state["aptitudeScore"][category]["correct"] += 1
     save_session(payload.session_id, state)
-    return {"ok": True, "state": state}
+    return {"ok": True}
 
 
 @app.post("/submit-code")
@@ -677,7 +678,7 @@ def submit_code(payload: SubmitCodeRequest):
         }
     )
     save_session(payload.session_id, state)
-    return {"ok": True, "state": state}
+    return {"ok": True}
 
 
 @app.get("/rounds/{company}")
@@ -701,9 +702,6 @@ def get_questions(round_type: str):
 
 
 
-
-import httpx
-import asyncio
 
 async def simulate_code_run(question_id: int, language: str, code: str) -> Dict[str, Any]:
     question = next((q for q in CODING_QUESTIONS if q.get("id") == question_id), None)
@@ -830,7 +828,7 @@ async def simulate_code_run(question_id: int, language: str, code: str) -> Dict[
 
 
 @app.post("/run-code")
-async def run_code(payload: RunCodeRequest):
+async def run_code(payload: RunCodeRequest, user: Dict[str, Any] = Depends(require_candidate)):
     return await simulate_code_run(payload.question_id, payload.language, payload.code)
 
 

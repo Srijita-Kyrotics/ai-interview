@@ -1,15 +1,10 @@
-import React, { useEffect, useMemo, useState } from 'react'
+import React, { useEffect, useMemo, useRef, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { BarChart2, Building2, Calendar, TrendingUp, Award } from 'lucide-react'
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend } from 'recharts'
 import { api } from '../api'
 import { SessionDetailModal } from './SessionDetailModal'
-
-function scoreClass(score) {
-  if (score >= 70) return 'score-good'
-  if (score >= 50) return 'score-mid'
-  return 'score-low'
-}
+import { scoreClass } from '../utils/score'
 
 function DashboardPage({ user }) {
   const navigate = useNavigate()
@@ -17,8 +12,12 @@ function DashboardPage({ user }) {
   const [sessions, setSessions] = useState([])
   const [selectedSession, setSelectedSession] = useState(null)
   const [loading, setLoading] = useState(true)
+  const lastFetchAtRef = useRef(0)
 
   const fetchData = () => {
+    const now = Date.now()
+    if (now - lastFetchAtRef.current < 2000) return
+    lastFetchAtRef.current = now
     setLoading(true)
     Promise.all([api.get('/user/stats'), api.get('/user/sessions')])
       .then(([s, sess]) => { setStats(s); setSessions(sess.sessions || []) })
@@ -68,7 +67,7 @@ function DashboardPage({ user }) {
           <h2>Your Dashboard</h2>
           <p className="muted" style={{ fontSize: '0.85rem', margin: '0.25rem 0 0' }}>Track your interview performance over time</p>
         </div>
-        <button className="btn primary" onClick={() => navigate('/resume')}>Start New Interview</button>
+        <button className="btn primary" onClick={() => navigate('/resume')} aria-label="Start a new mock interview">Start New Interview</button>
       </div>
 
       {/* Stats Cards */}

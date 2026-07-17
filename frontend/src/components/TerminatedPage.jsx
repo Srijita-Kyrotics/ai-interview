@@ -1,6 +1,8 @@
 import React from 'react'
+import { useNavigate } from 'react-router-dom'
 
 function TerminatedPage() {
+  const navigate = useNavigate()
   return (
     <div className="termination-screen">
       <div className="termination-card">
@@ -9,7 +11,7 @@ function TerminatedPage() {
         <div className="termination-message">
           Your assessment has been terminated due to repeated malpractice detection (tab switching, loss of focus, or exiting fullscreen).
         </div>
-        <button className="btn ghost" type="button" onClick={() => window.location.href = '/'}>
+        <button className="btn ghost" type="button" onClick={() => navigate('/')}>
           Return to Dashboard
         </button>
       </div>

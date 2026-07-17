@@ -2,12 +2,7 @@ import React, { useEffect, useState } from 'react'
 import { LayoutDashboard, Users, BarChart2, Search } from 'lucide-react'
 import { api } from '../api'
 import { AdminSessionModal } from './AdminSessionModal'
-
-function scoreClass(score) {
-  if (score >= 70) return 'score-good'
-  if (score >= 50) return 'score-mid'
-  return 'score-low'
-}
+import { scoreClass } from '../utils/score'
 
 function RecruiterPage({ user }) {
   const [tab, setTab] = useState('overview')

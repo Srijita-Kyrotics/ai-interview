@@ -1,4 +1,4 @@
-import React, { useState } from 'react'
+import React, { useEffect, useState } from 'react'
 import { Navigate, useNavigate } from 'react-router-dom'
 import { api } from '../api'
 import { COMPANY_META, COMPANY_GROUPS, ROLE_MAPPINGS } from '../constants'
@@ -71,6 +71,10 @@ function CompanyPage({ state, setState }) {
   const [error, setError] = useState('')
   const [selectedCompanies, setSelectedCompanies] = useState([])
   const [mode, setMode] = useState('company') // 'company' or 'role'
+
+  useEffect(() => {
+    setState((s) => ({ ...s, stage: 'company', company: '', rounds: [] }))
+  }, [])
 
   const toggleCompany = (company) => {
     setSelectedCompanies((prev) => {

@@ -1,12 +1,7 @@
 import React, { useEffect, useState } from 'react'
 import { X } from 'lucide-react'
 import { api } from '../api'
-
-function scoreClass(score) {
-  if (score >= 70) return 'score-good'
-  if (score >= 50) return 'score-mid'
-  return 'score-low'
-}
+import { scoreClass } from '../utils/score'
 
 function SessionDetailModal({ sessionId, onClose }) {
   const [detail, setDetail] = useState(null)

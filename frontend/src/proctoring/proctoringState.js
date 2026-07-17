@@ -12,7 +12,8 @@ export const VIOLATION_PENALTIES = {
   copy_paste: 15,
   devtools: 20,
   right_click: 0,
-  shortcut: 0
+  shortcut: 0,
+  half_face: 15
 }
 
 export const defaultProctoringState = {

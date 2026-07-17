@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { VIOLATION_PENALTIES } from './proctoringState'
 import * as faceapi from 'face-api.js'
+import { API } from '../api.js'
 
 const COOLDOWN_MS = 5000
 const NO_FACE_LIMIT_MS = 2000
@@ -16,7 +17,8 @@ const violationLabels = {
   copy_paste: 'Copy/Paste',
   devtools: 'Developer Tools',
   right_click: 'Right Click',
-  shortcut: 'Restricted Shortcut'
+  shortcut: 'Restricted Shortcut',
+  half_face: 'Partial Face Detected'
 }
 
 function nowLabel(date = new Date()) {
@@ -25,7 +27,7 @@ function nowLabel(date = new Date()) {
 
 async function postQuietly(path, body) {
   try {
-    await fetch(`http://127.0.0.1:8000${path}`, {
+    await fetch(`${API}${path}`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(body)
@@ -254,7 +256,7 @@ export function useAssessmentProctoring({
       const video = webcamVideoRef.current
       try {
         if (objectModel && video?.readyState >= 2) {
-          const predictions = await objectModel.detect(video, 20, 0.15)
+          await objectModel.detect(video, 20, 0.15)
         }
 
         if (faceModelsLoaded && video?.readyState >= 2) {

@@ -255,7 +255,7 @@ function ChatInterview({ title, questions, state, setState, proctoring, setProct
     submittingRef.current = false
     if (idx < activeQuestions.length - 1) {
       setIdx(idx + 1)
-      setTimeLeft(180)
+      setTimeLeft(interviewQuestionDuration)
       setMessages([])
     } else {
       const nextStage = title.toLowerCase().includes('hr') ? 'report' : 'hr'
@@ -274,7 +274,7 @@ function ChatInterview({ title, questions, state, setState, proctoring, setProct
     submittingRef.current = false
     if (idx < activeQuestions.length - 1) {
       setIdx(idx + 1)
-      setTimeLeft(180)
+      setTimeLeft(interviewQuestionDuration)
       setMessages([])
     } else {
       const nextStage = title.toLowerCase().includes('hr') ? 'report' : 'hr'
@@ -299,8 +299,8 @@ function ChatInterview({ title, questions, state, setState, proctoring, setProct
           <span className={timerClass}>{formatTime(timeLeft)}</span>
         </div>
         <div className="action-row compact">
-          <button className="btn ghost" type="button" onClick={() => current && speak(formatQuestionText(current.question))}>Replay</button>
-          <button className="btn ghost" type="button" onClick={() => setMuted((m) => !m)}>{muted ? 'Unmute' : 'Mute'}</button>
+          <button className="btn ghost" type="button" onClick={() => current && speak(formatQuestionText(current.question))} aria-label="Replay question audio">Replay</button>
+          <button className="btn ghost" type="button" onClick={() => setMuted((m) => !m)} aria-label={muted ? 'Unmute audio' : 'Mute audio'}>{muted ? 'Unmute' : 'Mute'}</button>
         </div>
       </div>
 
@@ -329,9 +329,9 @@ function ChatInterview({ title, questions, state, setState, proctoring, setProct
         onAudioChange={setAudioBlob}
       />
       <div className="chat-input">
-        <input className="input" value={text} onChange={(e) => setText(e.target.value)} placeholder="Review or type your answer before submitting" />
-        <button className="btn ghost" type="button" onClick={skipQuestion} disabled={submittingRef.current}>Skip</button>
-        <button className="btn primary" type="button" onClick={() => send(false)} disabled={(!text.trim() && !audioBlob) || submittingRef.current}>Submit answer</button>
+        <input className="input" value={text} onChange={(e) => setText(e.target.value)} placeholder="Review or type your answer before submitting" aria-label="Type your answer" />
+        <button className="btn ghost" type="button" onClick={skipQuestion} disabled={submittingRef.current} aria-label="Skip this question">Skip</button>
+        <button className="btn primary" type="button" onClick={() => send(false)} disabled={(!text.trim() && !audioBlob) || submittingRef.current} aria-label="Submit answer">Submit answer</button>
       </div>
     </section>
   )
