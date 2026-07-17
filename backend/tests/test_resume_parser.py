@@ -1,6 +1,5 @@
 """Tests for resume_parser.py."""
-from app.resume_parser import parse_resume_text, normalize_skill_text, extract_text_from_pdf_content
-
+from app.resume_parser import extract_text_from_pdf_content, normalize_skill_text, parse_resume_text
 
 SAMPLE_RESUME = """
 John Doe

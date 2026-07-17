@@ -5,39 +5,52 @@ import hmac
 import json
 import logging
 import random
+import re
 import secrets
 import smtplib
 import ssl
 import time
 import uuid
 from collections import defaultdict
+from contextlib import asynccontextmanager
 from email.message import EmailMessage
-from pathlib import Path
-from typing import Any, Dict, List, Optional
-import re
-import jwt
+from typing import Any
+
 import google.generativeai as genai
-from app.config import settings, BASE_DIR
-from app.db import (
-    init_db, migrate_accounts_json, cleanup_stale_data, close_pool, check_db_health,
-    save_session, load_session, get_first_session_id, get_sessions_by_user, get_all_sessions,
-    save_user, load_user, user_exists, get_all_users, update_user_role,
-    save_otp, load_otp, delete_otp,
-    save_captcha, load_captcha, delete_captcha,
-    save_proctoring, load_proctoring,
-)
-import fitz
 import httpx
-import asyncio
-
-from app.resume_parser import parse_resume_text, extract_text_from_pdf_content
-
-from fastapi import FastAPI, File, UploadFile, Header, HTTPException, Depends, Request
+import jwt
+from fastapi import Depends, FastAPI, File, Header, HTTPException, Request, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
-from contextlib import asynccontextmanager
 from pydantic import BaseModel
 from pythonjsonlogger import json as json_logger
+
+from app.config import BASE_DIR, settings
+from app.db import (
+    check_db_health,
+    cleanup_stale_data,
+    close_pool,
+    delete_captcha,
+    delete_otp,
+    get_all_sessions,
+    get_all_users,
+    get_sessions_by_user,
+    init_db,
+    load_captcha,
+    load_otp,
+    load_proctoring,
+    load_session,
+    load_user,
+    migrate_accounts_json,
+    save_captcha,
+    save_otp,
+    save_proctoring,
+    save_session,
+    save_user,
+    update_user_role,
+    user_exists,
+)
+from app.resume_parser import extract_text_from_pdf_content, parse_resume_text
 
 logger = logging.getLogger("ai_interview")
 
@@ -104,7 +117,7 @@ def health_check():
 
 
 # ─── Rate Limiting ───────────────────────────────────────────────────────────
-_rate_limits: Dict[str, List[float]] = defaultdict(list)
+_rate_limits: dict[str, list[float]] = defaultdict(list)
 
 def _check_rate_limit(key: str, limit: int, window: int) -> bool:
     now = time.time()
@@ -120,7 +133,7 @@ def _client_ip(request: Request) -> str:
 
 
 # ─── Response Caching ────────────────────────────────────────────────────────
-_cache: Dict[str, Any] = {}
+_cache: dict[str, Any] = {}
 
 def _cache_get(key: str, ttl: int = 300) -> Any:
     entry = _cache.get(key)
@@ -154,14 +167,14 @@ def create_token(email: str, role: str) -> str:
     return jwt.encode(payload, JWT_SECRET, algorithm=JWT_ALGORITHM)
 
 
-def decode_token(token: str) -> Optional[Dict[str, Any]]:
+def decode_token(token: str) -> dict[str, Any] | None:
     try:
         return jwt.decode(token, JWT_SECRET, algorithms=[JWT_ALGORITHM])
     except Exception:
         return None
 
 
-async def get_current_user(authorization: Optional[str] = Header(None)) -> Dict[str, Any]:
+async def get_current_user(authorization: str | None = Header(None)) -> dict[str, Any]:
     if not authorization or not authorization.startswith("Bearer "):
         raise HTTPException(status_code=401, detail="Missing or invalid authorization header")
     token = authorization.split(" ", 1)[1]
@@ -171,31 +184,31 @@ async def get_current_user(authorization: Optional[str] = Header(None)) -> Dict[
     return {"email": payload["email"], "role": payload.get("role", "candidate")}
 
 
-async def require_candidate(user: Dict[str, Any] = Depends(get_current_user)) -> Dict[str, Any]:
+async def require_candidate(user: dict[str, Any] = Depends(get_current_user)) -> dict[str, Any]:
     if user["role"] not in ("candidate", "recruiter", "admin"):
         raise HTTPException(status_code=403, detail="Candidate access required")
     return user
 
 
-async def require_recruiter(user: Dict[str, Any] = Depends(get_current_user)) -> Dict[str, Any]:
+async def require_recruiter(user: dict[str, Any] = Depends(get_current_user)) -> dict[str, Any]:
     if user["role"] not in ("recruiter", "admin"):
         raise HTTPException(status_code=403, detail="Recruiter or admin access required")
     return user
 
 
-async def require_admin(user: Dict[str, Any] = Depends(get_current_user)) -> Dict[str, Any]:
+async def require_admin(user: dict[str, Any] = Depends(get_current_user)) -> dict[str, Any]:
     if user["role"] != "admin":
         raise HTTPException(status_code=403, detail="Admin access required")
     return user
 
 
 def load_json(name: str) -> Any:
-    with open(SHARED_DIR / name, "r", encoding="utf-8") as f:
+    with open(SHARED_DIR / name, encoding="utf-8") as f:
         return json.load(f)
 
 
 def load_questions_json(name: str) -> Any:
-    with open(FRONTEND_QUESTIONS_DIR / name, "r", encoding="utf-8") as f:
+    with open(FRONTEND_QUESTIONS_DIR / name, encoding="utf-8") as f:
         return json.load(f)
 
 
@@ -210,18 +223,18 @@ OTP_RATE_LIMIT = settings.otp_rate_limit
 OTP_RATE_WINDOW = settings.otp_rate_window
 
 
-def default_scores() -> Dict[str, int]:
+def default_scores() -> dict[str, int]:
     return {"aptitude": 80, "coding": 75, "technical": 70, "hr": 85}
 
 
-def hash_password(password: str, salt: Optional[str] = None) -> Dict[str, str]:
+def hash_password(password: str, salt: str | None = None) -> dict[str, str]:
     if salt is None:
         salt = secrets.token_hex(16)
     key = hashlib.pbkdf2_hmac("sha256", password.encode("utf-8"), salt.encode("utf-8"), 120000)
     return {"salt": salt, "hash": key.hex()}
 
 
-def verify_password(password: str, stored: Dict[str, str]) -> bool:
+def verify_password(password: str, stored: dict[str, str]) -> bool:
     hashed = hash_password(password, stored.get("salt"))
     return hmac.compare_digest(hashed["hash"], stored.get("hash", ""))
 
@@ -234,7 +247,7 @@ def has_strong_password(password: str) -> bool:
     return len(password) >= 8 and bool(re.search(r"[^A-Za-z0-9]", password))
 
 
-def score_open_round(answers: List[Dict[str, Any]], round_key: str) -> int:
+def score_open_round(answers: list[dict[str, Any]], round_key: str) -> int:
     if not answers:
         return 0
 
@@ -274,7 +287,7 @@ def score_open_round(answers: List[Dict[str, Any]], round_key: str) -> int:
     return round(total_score / len(answers))
 
 
-def make_report(state: Dict[str, Any]) -> Dict[str, Any]:
+def make_report(state: dict[str, Any]) -> dict[str, Any]:
     scores = state.get("scores") or default_scores()
     aptitude_scores = state.get("aptitudeScore") or {}
     if aptitude_scores:
@@ -315,17 +328,17 @@ def make_report(state: Dict[str, Any]) -> Dict[str, Any]:
     }
 
 
-def company_rounds(company: str) -> List[Dict[str, str]]:
+def company_rounds(company: str) -> list[dict[str, str]]:
     return COMPANY_PROFILES[company]["rounds"]
 
 
-def all_round_keys(company: str) -> List[str]:
+def all_round_keys(company: str) -> list[str]:
     return [r["key"] for r in company_rounds(company)]
 
 
 class CompanySelection(BaseModel):
     session_id: str
-    companies: List[str]
+    companies: list[str]
 
 
 class StartRoundRequest(BaseModel):
@@ -339,9 +352,9 @@ class SubmitAnswerRequest(BaseModel):
     round_key: str
     question_index: int
     answer: str
-    aptitude_category: Optional[str] = None
-    aptitude_quiz_id: Optional[str] = None
-    question_id: Optional[str] = None
+    aptitude_category: str | None = None
+    aptitude_quiz_id: str | None = None
+    question_id: str | None = None
 
 
 class SubmitCodeRequest(BaseModel):
@@ -456,7 +469,7 @@ def send_otp(payload: SendOtpRequest, request: Request):
 
 
 @app.get("/health/smtp")
-def check_smtp_status(user: Dict[str, Any] = Depends(require_admin)):
+def check_smtp_status(user: dict[str, Any] = Depends(require_admin)):
     return {
         "smtp_host": settings.smtp_host or "NOT SET",
         "smtp_port": settings.smtp_port,
@@ -575,7 +588,7 @@ def get_companies():
     return COMPANY_PROFILES
 
 @app.post("/upload-resume")
-async def upload_resume(file: UploadFile = File(...), user: Dict[str, Any] = Depends(require_candidate)):
+async def upload_resume(file: UploadFile = File(...), user: dict[str, Any] = Depends(require_candidate)):
     content = await file.read()
     if len(content) > MAX_UPLOAD_BYTES:
         raise HTTPException(status_code=413, detail=f"File too large. Maximum size is {MAX_UPLOAD_BYTES // (1024*1024)} MB.")
@@ -740,7 +753,7 @@ def get_questions(round_type: str):
 
 
 
-async def simulate_code_run(question_id: int, language: str, code: str) -> Dict[str, Any]:
+async def simulate_code_run(question_id: int, language: str, code: str) -> dict[str, Any]:
     question = next((q for q in CODING_QUESTIONS if q.get("id") == question_id), None)
     if not question:
         return {"ok": False, "error": "Coding question not found."}
@@ -768,19 +781,7 @@ async def simulate_code_run(question_id: int, language: str, code: str) -> Dict[
             output = ""
             status = "failed"
 
-            if question_id == 1 and "reverse" in heuristic:
-                output = expected
-                status = "passed"
-            elif question_id == 2 and "twosum" in heuristic:
-                output = expected
-                status = "passed"
-            elif question_id == 3 and ("isvalid" in heuristic or "paren" in heuristic):
-                output = expected
-                status = "passed"
-            elif question_id == 4 and "fib" in heuristic:
-                output = expected
-                status = "passed"
-            elif question_id == 5 and ("merge" in heuristic or "merge_sorted" in heuristic):
+            if question_id == 1 and "reverse" in heuristic or question_id == 2 and "twosum" in heuristic or question_id == 3 and ("isvalid" in heuristic or "paren" in heuristic) or question_id == 4 and "fib" in heuristic or question_id == 5 and ("merge" in heuristic or "merge_sorted" in heuristic):
                 output = expected
                 status = "passed"
             else:
@@ -865,14 +866,14 @@ async def simulate_code_run(question_id: int, language: str, code: str) -> Dict[
 
 
 @app.post("/run-code")
-async def run_code(payload: RunCodeRequest, user: Dict[str, Any] = Depends(require_candidate), request: Request = None):
+async def run_code(payload: RunCodeRequest, user: dict[str, Any] = Depends(require_candidate), request: Request = None):
     if not _check_rate_limit(f"code:{user['email']}", settings.code_rate_limit, settings.code_rate_window):
         raise HTTPException(status_code=429, detail="Too many code execution requests. Please wait.")
     return await simulate_code_run(payload.question_id, payload.language, payload.code)
 
 
 @app.get("/report")
-def get_report(session_id: Optional[str] = None, user: Dict[str, Any] = Depends(get_current_user)):
+def get_report(session_id: str | None = None, user: dict[str, Any] = Depends(get_current_user)):
     if not session_id:
         raise HTTPException(status_code=400, detail="session_id is required")
     state = load_session(session_id)
@@ -884,17 +885,17 @@ def get_report(session_id: Optional[str] = None, user: Dict[str, Any] = Depends(
 
 class ProctoringViolationRequest(BaseModel):
     session_id: str
-    violation: Dict[str, Any]
+    violation: dict[str, Any]
     warnings: int
     integrity_score: int
     assessment_status: str
 
 class ProctoringSnapshotRequest(BaseModel):
     session_id: str
-    snapshot: Dict[str, Any]
+    snapshot: dict[str, Any]
 
 @app.post("/proctoring/violation")
-def add_proctoring_violation(payload: ProctoringViolationRequest, user: Dict[str, Any] = Depends(get_current_user)):
+def add_proctoring_violation(payload: ProctoringViolationRequest, user: dict[str, Any] = Depends(get_current_user)):
     state = load_session(payload.session_id)
     if not state:
         raise HTTPException(status_code=404, detail="Session not found")
@@ -912,7 +913,7 @@ def add_proctoring_violation(payload: ProctoringViolationRequest, user: Dict[str
     return {"ok": True}
 
 @app.post("/proctoring/snapshot")
-def add_proctoring_snapshot(payload: ProctoringSnapshotRequest, user: Dict[str, Any] = Depends(get_current_user)):
+def add_proctoring_snapshot(payload: ProctoringSnapshotRequest, user: dict[str, Any] = Depends(get_current_user)):
     state = load_session(payload.session_id)
     if not state:
         raise HTTPException(status_code=404, detail="Session not found")
@@ -927,7 +928,7 @@ def add_proctoring_snapshot(payload: ProctoringSnapshotRequest, user: Dict[str, 
     return {"ok": True}
 
 @app.get("/proctoring/report")
-def get_proctoring_report(session_id: str, user: Dict[str, Any] = Depends(get_current_user)):
+def get_proctoring_report(session_id: str, user: dict[str, Any] = Depends(get_current_user)):
     state = load_session(session_id)
     if not state:
         raise HTTPException(status_code=404, detail="Session not found")
@@ -948,7 +949,7 @@ class AIFeedbackRequest(BaseModel):
     session_id: str
 
 @app.post("/ai/questions")
-async def generate_ai_questions(payload: AIQuestionsRequest, user: Dict[str, Any] = Depends(require_candidate), request: Request = None):
+async def generate_ai_questions(payload: AIQuestionsRequest, user: dict[str, Any] = Depends(require_candidate), request: Request = None):
     if not _check_rate_limit(f"ai:{user['email']}", settings.ai_rate_limit, settings.ai_rate_window):
         raise HTTPException(status_code=429, detail="Too many AI requests. Please wait.")
     state = load_session(payload.session_id)
@@ -984,7 +985,7 @@ async def generate_ai_questions(payload: AIQuestionsRequest, user: Dict[str, Any
 
 
 @app.post("/ai/feedback")
-async def generate_ai_feedback(payload: AIFeedbackRequest, user: Dict[str, Any] = Depends(require_candidate), request: Request = None):
+async def generate_ai_feedback(payload: AIFeedbackRequest, user: dict[str, Any] = Depends(require_candidate), request: Request = None):
     if not _check_rate_limit(f"ai:{user['email']}", settings.ai_rate_limit, settings.ai_rate_window):
         raise HTTPException(status_code=429, detail="Too many AI requests. Please wait.")
     state = load_session(payload.session_id)
@@ -1023,7 +1024,7 @@ async def generate_ai_feedback(payload: AIFeedbackRequest, user: Dict[str, Any] 
 # Candidate Dashboard Endpoints
 # ──────────────────────────────────────────────────────────────────────────────
 
-def _session_summary(state: Dict[str, Any]) -> Dict[str, Any]:
+def _session_summary(state: dict[str, Any]) -> dict[str, Any]:
     scores = state.get("scores", {})
     overall = round(sum(scores.values()) / len(scores)) if scores else 0
     answers = state.get("answers", {})
@@ -1040,13 +1041,13 @@ def _session_summary(state: Dict[str, Any]) -> Dict[str, Any]:
 
 
 @app.get("/user/sessions")
-def user_sessions(user: Dict[str, Any] = Depends(require_candidate)):
+def user_sessions(user: dict[str, Any] = Depends(require_candidate)):
     sessions = get_sessions_by_user(user["email"])
     return {"sessions": [_session_summary(s) for s in sessions]}
 
 
 @app.get("/user/sessions/{session_id}")
-def user_session_detail(session_id: str, user: Dict[str, Any] = Depends(require_candidate)):
+def user_session_detail(session_id: str, user: dict[str, Any] = Depends(require_candidate)):
     state = load_session(session_id)
     if not state:
         raise HTTPException(status_code=404, detail="Session not found")
@@ -1058,7 +1059,7 @@ def user_session_detail(session_id: str, user: Dict[str, Any] = Depends(require_
 
 
 @app.get("/user/stats")
-def user_stats(user: Dict[str, Any] = Depends(require_candidate)):
+def user_stats(user: dict[str, Any] = Depends(require_candidate)):
     sessions = get_sessions_by_user(user["email"])
     if not sessions:
         return {
@@ -1085,7 +1086,7 @@ def user_stats(user: Dict[str, Any] = Depends(require_candidate)):
             **scores,
         })
 
-    avg_by_round: Dict[str, float] = {}
+    avg_by_round: dict[str, float] = {}
     for s in sessions:
         for k, v in s.get("scores", {}).items():
             avg_by_round.setdefault(k, []).append(v)
@@ -1107,10 +1108,10 @@ def user_stats(user: Dict[str, Any] = Depends(require_candidate)):
 # ──────────────────────────────────────────────────────────────────────────────
 
 @app.get("/admin/candidates")
-def admin_candidates(user: Dict[str, Any] = Depends(require_recruiter)):
+def admin_candidates(user: dict[str, Any] = Depends(require_recruiter)):
     users = get_all_users()
     sessions = get_all_sessions()
-    by_user: Dict[str, List] = {}
+    by_user: dict[str, list] = {}
     for s in sessions:
         uid = s.get("user_id", "")
         if uid:
@@ -1138,7 +1139,7 @@ def admin_candidates(user: Dict[str, Any] = Depends(require_recruiter)):
 
 
 @app.get("/admin/candidates/{candidate_email}")
-def admin_candidate_detail(candidate_email: str, user: Dict[str, Any] = Depends(require_recruiter)):
+def admin_candidate_detail(candidate_email: str, user: dict[str, Any] = Depends(require_recruiter)):
     account = load_user(candidate_email)
     if not account:
         raise HTTPException(status_code=404, detail="Candidate not found")
@@ -1150,13 +1151,13 @@ def admin_candidate_detail(candidate_email: str, user: Dict[str, Any] = Depends(
 
 
 @app.get("/admin/sessions")
-def admin_sessions(user: Dict[str, Any] = Depends(require_recruiter)):
+def admin_sessions(user: dict[str, Any] = Depends(require_recruiter)):
     sessions = get_all_sessions()
     return {"sessions": [_session_summary(s) for s in sessions]}
 
 
 @app.get("/admin/sessions/{session_id}")
-def admin_session_detail(session_id: str, user: Dict[str, Any] = Depends(require_recruiter)):
+def admin_session_detail(session_id: str, user: dict[str, Any] = Depends(require_recruiter)):
     state = load_session(session_id)
     if not state:
         raise HTTPException(status_code=404, detail="Session not found")
@@ -1166,7 +1167,7 @@ def admin_session_detail(session_id: str, user: Dict[str, Any] = Depends(require
 
 
 @app.get("/admin/sessions/{session_id}/proctoring")
-def admin_session_proctoring(session_id: str, user: Dict[str, Any] = Depends(require_recruiter)):
+def admin_session_proctoring(session_id: str, user: dict[str, Any] = Depends(require_recruiter)):
     logs = load_proctoring(session_id)
     if not logs:
         return {"error": "No proctoring logs found"}
@@ -1174,7 +1175,7 @@ def admin_session_proctoring(session_id: str, user: Dict[str, Any] = Depends(req
 
 
 @app.get("/admin/stats")
-def admin_stats(user: Dict[str, Any] = Depends(require_recruiter)):
+def admin_stats(user: dict[str, Any] = Depends(require_recruiter)):
     users = get_all_users()
     sessions = get_all_sessions()
     candidates = [u for u in users if u["role"] == "candidate"]
@@ -1197,7 +1198,7 @@ class UpdateRoleRequest(BaseModel):
 
 
 @app.post("/admin/update-role")
-def admin_update_role(payload: UpdateRoleRequest, user: Dict[str, Any] = Depends(require_admin), request: Request = None):
+def admin_update_role(payload: UpdateRoleRequest, user: dict[str, Any] = Depends(require_admin), request: Request = None):
     if not _check_rate_limit(f"admin:{user['email']}", settings.admin_rate_limit, settings.admin_rate_window):
         raise HTTPException(status_code=429, detail="Too many requests. Please wait.")
     if payload.role not in ("candidate", "recruiter", "admin"):
@@ -1214,15 +1215,15 @@ def admin_update_role(payload: UpdateRoleRequest, user: Dict[str, Any] = Depends
 # ──────────────────────────────────────────────────────────────────────────────
 
 class CompareRequest(BaseModel):
-    session_ids: List[str]
+    session_ids: list[str]
 
 class UploadQuestionsRequest(BaseModel):
     round_type: str
-    questions: List[Dict[str, Any]]
+    questions: list[dict[str, Any]]
 
 
 @app.post("/admin/compare")
-def admin_compare(payload: CompareRequest, user: Dict[str, Any] = Depends(require_recruiter)):
+def admin_compare(payload: CompareRequest, user: dict[str, Any] = Depends(require_recruiter)):
     if len(payload.session_ids) < 2:
         raise HTTPException(status_code=400, detail="At least 2 sessions required")
     if len(payload.session_ids) > 5:
@@ -1248,7 +1249,7 @@ def admin_compare(payload: CompareRequest, user: Dict[str, Any] = Depends(requir
 
 
 @app.get("/admin/sessions/{session_id}/timeline")
-def admin_session_timeline(session_id: str, user: Dict[str, Any] = Depends(require_recruiter)):
+def admin_session_timeline(session_id: str, user: dict[str, Any] = Depends(require_recruiter)):
     state = load_session(session_id)
     if not state:
         raise HTTPException(status_code=404, detail="Session not found")
@@ -1281,7 +1282,7 @@ def admin_session_timeline(session_id: str, user: Dict[str, Any] = Depends(requi
 CUSTOM_QUESTIONS_DIR = BASE_DIR / "shared" / "custom_questions"
 
 @app.post("/admin/upload-questions")
-async def admin_upload_questions(file: UploadFile = File(...), user: Dict[str, Any] = Depends(require_admin)):
+async def admin_upload_questions(file: UploadFile = File(...), user: dict[str, Any] = Depends(require_admin)):
     CUSTOM_QUESTIONS_DIR.mkdir(parents=True, exist_ok=True)
     content = await file.read()
     try:
@@ -1300,13 +1301,13 @@ async def admin_upload_questions(file: UploadFile = File(...), user: Dict[str, A
 
 
 @app.get("/admin/custom-questions")
-def admin_list_custom_questions(user: Dict[str, Any] = Depends(require_admin)):
+def admin_list_custom_questions(user: dict[str, Any] = Depends(require_admin)):
     CUSTOM_QUESTIONS_DIR.mkdir(parents=True, exist_ok=True)
     files = list(CUSTOM_QUESTIONS_DIR.glob("*_custom.json"))
     result = []
     for fp in files:
         try:
-            with open(fp, "r", encoding="utf-8") as f:
+            with open(fp, encoding="utf-8") as f:
                 questions = json.load(f)
             result.append({"round_type": fp.stem.replace("_custom", ""), "count": len(questions), "filename": fp.name})
         except Exception:

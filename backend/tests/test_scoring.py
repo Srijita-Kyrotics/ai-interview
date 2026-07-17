@@ -1,6 +1,7 @@
 """Tests for scoring logic, admin endpoints, and proctoring."""
 import time
-from app.db import save_user, save_session, save_otp, save_proctoring
+
+from app.db import save_proctoring, save_user
 from app.main import hash_password
 
 
@@ -27,13 +28,12 @@ class TestDefaultScores:
 
 class TestPasswordHashing:
     def test_hash_and_verify(self, client):
-        from app.main import hash_password, verify_password
+        from app.main import verify_password
         stored = hash_password("MyP@ssw0rd")
         assert verify_password("MyP@ssw0rd", stored) is True
         assert verify_password("WrongP@ss", stored) is False
 
     def test_different_salts(self, client):
-        from app.main import hash_password
         h1 = hash_password("same_password")
         h2 = hash_password("same_password")
         assert h1["salt"] != h2["salt"]

@@ -32,8 +32,9 @@ services:
       db:
         condition: service_healthy
     volumes:
-      - shared_data:/app/shared
-      - custom_questions:/app/shared/custom_questions
+      - ./shared:/shared
+      - custom_questions:/shared/custom_questions
+      - ./frontend:/frontend
 
   frontend:
     image: nginx:alpine
@@ -42,7 +43,7 @@ services:
       - "80:80"
     volumes:
       - ./nginx.conf:/etc/nginx/conf.d/default.conf:ro
-      - frontend_dist:/usr/share/nginx/html
+      - ./frontend/dist:/usr/share/nginx/html
     depends_on:
       - backend
 

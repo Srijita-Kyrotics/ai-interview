@@ -1,6 +1,4 @@
 """Tests for session management endpoints."""
-import uuid
-from app.db import save_session
 
 
 class TestUploadResume:

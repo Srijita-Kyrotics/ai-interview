@@ -6,11 +6,11 @@ and outputs to frontend/public/questions/aptitude.json format.
 
 from __future__ import annotations
 
+import hashlib
 import json
 import os
 import re
 import time
-import hashlib
 from html import unescape
 from pathlib import Path
 from urllib.parse import urljoin, urlparse
@@ -128,15 +128,9 @@ def convert_math_notation(element) -> None:
         tag_name = tag.name
         inner = tag.get_text()
         if tag_name == 'sup':
-            if re.match(r'^[\d.+\-]+$', inner):
-                repl = ''.join(SUP_MAP.get(c, c) for c in inner)
-            else:
-                repl = f'^({inner})'
+            repl = ''.join(SUP_MAP.get(c, c) for c in inner) if re.match(r'^[\d.+\-]+$', inner) else f'^({inner})'
         else:
-            if re.match(r'^\d+$', inner):
-                repl = ''.join(SUB_MAP.get(c, c) for c in inner)
-            else:
-                repl = f'_({inner})'
+            repl = ''.join(SUB_MAP.get(c, c) for c in inner) if re.match(r'^\d+$', inner) else f'_({inner})'
         tag.replace_with(repl)
 
 
@@ -451,7 +445,7 @@ def scrape_indiabix() -> dict[str, list[dict]]:
         print(f"{'='*60}")
         topics = get_indiabix_topic_links(cat_url)
         if not topics:
-            print(f"  No topics found. Trying direct page scrape...")
+            print("  No topics found. Trying direct page scrape...")
             # Some category pages have questions directly
             qs = parse_indiabix_topic_page(cat_url, section, topic=cat_url)
             all_questions[section].extend(qs)
@@ -589,7 +583,7 @@ def main() -> None:
     for section in ["quantitative", "logical", "verbal"]:
         new_questions.extend(all_questions.get(section, []))
 
-    total = flatten_and_save(all_questions, "final")
+    flatten_and_save(all_questions, "final")
 
     # Stats
     with_image = [q for q in json.loads(OUTPUT_JSON.read_text(encoding='utf-8')).get('questions', []) if "image" in q or "images" in q]

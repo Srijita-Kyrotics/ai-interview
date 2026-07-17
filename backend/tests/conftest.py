@@ -1,8 +1,7 @@
 import sys
-import time
-import secrets
-import pytest
 from pathlib import Path
+
+import pytest
 from fastapi.testclient import TestClient
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
@@ -13,10 +12,18 @@ from app.config import settings
 settings.database_url = settings.database_url.replace("/ai_interview", "/ai_interview_test")
 
 import app.db as _db
+
 _db._pool = None  # Reset pool so it picks up test URL
 
+from app.db import (
+    close_pool,
+    get_connection,
+    init_db,
+    release_connection,
+    save_session,
+    save_user,
+)
 from app.main import app, create_token, hash_password
-from app.db import init_db, save_user, save_session, save_otp, save_captcha, get_connection, release_connection, close_pool
 
 
 @pytest.fixture(scope="session", autouse=True)

@@ -1,8 +1,7 @@
 """Comprehensive API integration tests for the full application flow."""
 import time
-import uuid
-from app.db import save_otp, save_captcha, save_proctoring, save_user, save_session
-from app.main import hash_password
+
+from app.db import save_otp, save_user
 
 
 def _make_captcha(client):
@@ -247,7 +246,7 @@ class TestSecurityHeaders:
             "Access-Control-Request-Method": "GET",
         })
         assert resp.status_code == 200
-        assert "access-control-allow-origin" in {k.lower() for k in resp.headers.keys()}
+        assert "access-control-allow-origin" in {k.lower() for k in resp.headers}
 
 
 class TestProctoring:
@@ -257,7 +256,6 @@ class TestProctoring:
         return {"Authorization": f"Bearer {token}"}
 
     def test_violation_and_snapshot(self, client, seed_session):
-        seed_user = save_user
         save_user("proctest@test.com", "Proc Test", "salt", "hash", "candidate")
         sid = seed_session(user_id="proctest@test.com")
         headers = self._user_headers()

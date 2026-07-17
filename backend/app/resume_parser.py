@@ -1,6 +1,7 @@
 import re
+from typing import Any
+
 import fitz  # PyMuPDF
-from typing import Any, Dict, List, Optional
 
 
 def extract_text_from_pdf_content(content: bytes) -> str:
@@ -163,7 +164,7 @@ SECTION_KEYWORDS = {
 }
 
 
-def parse_section_header(line: str) -> tuple[Optional[str], str]:
+def parse_section_header(line: str) -> tuple[str | None, str]:
     normalized_line = re.sub(r'[^a-zA-Z0-9\s&]', ' ', line).strip().lower()
     normalized_line = re.sub(r'\s+', ' ', normalized_line)
 
@@ -271,7 +272,7 @@ def extract_summary(lines: list[str], name: str) -> str:
     return "A motivated candidate with practical experience in building scalable interview-ready applications."
 
 
-def parse_education_line(entry: str) -> Dict[str, str]:
+def parse_education_line(entry: str) -> dict[str, str]:
     raw = entry
     duration_match = re.search(r'\b(20\d{2}|19\d{2})(?:\s*[-–—]\s*(20\d{2}|19\d{2}|present|ongoing|current))?\b', entry, re.I)
     duration = duration_match.group(0) if duration_match else ""
@@ -284,9 +285,7 @@ def parse_education_line(entry: str) -> Dict[str, str]:
             continue
         if re.search(r'\b(bachelor|master|b\.tech|btech|m\.tech|mtech|msc|phd|diploma|degree|certificate|mba|mca|b\.sc|bsc|m\.sc|msc|ph\.d)\b', part, re.I):
             degree = part
-        elif re.search(r'\b(university|institute|college|school|academy|centre|center|faculty)\b', part, re.I):
-            institution = part
-        elif not institution:
+        elif re.search(r'\b(university|institute|college|school|academy|centre|center|faculty)\b', part, re.I) or not institution:
             institution = part
         else:
             description = f"{description} {part}".strip()
@@ -306,7 +305,7 @@ def parse_education_line(entry: str) -> Dict[str, str]:
     }
 
 
-def parse_experience_line(entry: str) -> Dict[str, str]:
+def parse_experience_line(entry: str) -> dict[str, str]:
     raw = entry
     duration_match = re.search(r'\b(20\d{2}|19\d{2})(?:\s*[-–—]\s*(20\d{2}|19\d{2}|present|ongoing|current))?\b', entry, re.I)
     duration = duration_match.group(0) if duration_match else ""
@@ -348,7 +347,7 @@ def parse_experience_line(entry: str) -> Dict[str, str]:
     }
 
 
-def parse_project_line(entry: str) -> Dict[str, str]:
+def parse_project_line(entry: str) -> dict[str, str]:
     raw = entry
     parts = [part.strip() for part in re.split(r'\s*[:]\s*|\s+[-–—]\s+', entry, maxsplit=2) if part.strip()]
     if len(parts) >= 2:
@@ -356,7 +355,7 @@ def parse_project_line(entry: str) -> Dict[str, str]:
     return {"name": entry, "description": "", "raw": raw}
 
 
-def parse_certification_line(entry: str) -> Dict[str, str]:
+def parse_certification_line(entry: str) -> dict[str, str]:
     raw = entry
     parts = [part.strip() for part in re.split(r'[\|–—-]', entry) if part.strip()]
     name = parts[0] if parts else entry
@@ -393,7 +392,7 @@ def parse_section_entries(entries: list[str], parser) -> list[dict]:
     return parsed
 
 
-def parse_resume_text(text: str, filename: str = "") -> Dict[str, Any]:
+def parse_resume_text(text: str, filename: str = "") -> dict[str, Any]:
     text_camel_separated = re.sub(r'([a-z])([A-Z])', r'\1 \2', text)
 
     lines = [clean_line(line) for line in text.splitlines()]

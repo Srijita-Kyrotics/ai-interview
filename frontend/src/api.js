@@ -8,7 +8,8 @@ function getAuthToken() {
       return user?.token || ''
     }
   } catch (_e) {
-  return ''
+    return ''
+  }
 }
 
 const api = {

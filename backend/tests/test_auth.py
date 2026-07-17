@@ -1,6 +1,7 @@
 """Tests for authentication endpoints."""
 import time
-from app.db import save_otp, save_captcha
+
+from app.db import save_otp
 
 
 def _make_captcha(client):
@@ -120,7 +121,7 @@ class TestRegister:
 
 class TestLogin:
     def test_login_valid_credentials(self, client, seed_user):
-        user = seed_user(email="login@test.com", password="MyP@ss123")
+        seed_user(email="login@test.com", password="MyP@ss123")
         save_otp("login@test.com", {
             "otp": "111111",
             "expiresAt": time.time() + 300,
