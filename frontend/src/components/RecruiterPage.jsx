@@ -2,6 +2,8 @@ import React, { useEffect, useState } from 'react'
 import { LayoutDashboard, Users, BarChart2, Search } from 'lucide-react'
 import { api } from '../api'
 import { AdminSessionModal } from './AdminSessionModal'
+import { CompareModal } from './CompareModal'
+import { SessionReplay } from './SessionReplay'
 import { scoreClass } from '../utils/score'
 
 function RecruiterPage({ user }) {
@@ -14,6 +16,10 @@ function RecruiterPage({ user }) {
   const [modalType, setModalType] = useState('report')
   const [loading, setLoading] = useState(true)
   const [searchQuery, setSearchQuery] = useState('')
+  const [selectedSessionIds, setSelectedSessionIds] = useState([])
+  const [showCompare, setShowCompare] = useState(false)
+  const [replaySessionId, setReplaySessionId] = useState(null)
+  const [replaySessionName, setReplaySessionName] = useState('')
 
   const fetchData = () => {
     setLoading(true)
@@ -56,6 +62,16 @@ function RecruiterPage({ user }) {
   const openModal = (sessionId, type) => {
     setSelectedSession(sessionId)
     setModalType(type)
+  }
+
+  const toggleSessionSelect = (sessionId) => {
+    setSelectedSessionIds(prev =>
+      prev.includes(sessionId) ? prev.filter(id => id !== sessionId) : [...prev, sessionId]
+    )
+  }
+
+  if (replaySessionId) {
+    return <SessionReplay sessionId={replaySessionId} sessionName={replaySessionName} onBack={() => { setReplaySessionId(null); setReplaySessionName('') }} />
   }
 
   if (loading) {
@@ -185,6 +201,14 @@ function RecruiterPage({ user }) {
 
       {tab === 'sessions' && (
         <div className="panel-card">
+          {selectedSessionIds.length >= 2 && (
+            <div style={{ marginBottom: '1rem' }}>
+              <button className="btn primary" onClick={() => setShowCompare(true)}>
+                Compare {selectedSessionIds.length} Sessions
+              </button>
+              <button className="btn ghost" style={{ marginLeft: '0.5rem' }} onClick={() => setSelectedSessionIds([])}>Clear Selection</button>
+            </div>
+          )}
           {filteredSessions.length === 0 ? (
             <div className="empty-state">
               <BarChart2 size={40} />
@@ -195,7 +219,7 @@ function RecruiterPage({ user }) {
               <table className="data-table">
                 <thead>
                   <tr>
-                    {['Date', 'Company', 'Rounds', 'Score', 'Actions'].map(h => (
+                    {['', 'Date', 'Company', 'Rounds', 'Score', 'Actions'].map(h => (
                       <th key={h}>{h}</th>
                     ))}
                   </tr>
@@ -203,6 +227,14 @@ function RecruiterPage({ user }) {
                 <tbody>
                   {filteredSessions.map(s => (
                     <tr key={s.session_id}>
+                      <td>
+                        <input
+                          type="checkbox"
+                          checked={selectedSessionIds.includes(s.session_id)}
+                          onChange={() => toggleSessionSelect(s.session_id)}
+                          aria-label={`Select session ${s.session_id}`}
+                        />
+                      </td>
                       <td className="cell-muted">{new Date(s.date * 1000).toLocaleDateString()}</td>
                       <td className="cell-primary">{s.company || 'N/A'}</td>
                       <td>
@@ -216,6 +248,7 @@ function RecruiterPage({ user }) {
                       <td style={{ display: 'flex', gap: '0.5rem' }}>
                         <button className="btn ghost" style={{ fontSize: '0.75rem', padding: '4px 12px' }} onClick={() => openModal(s.session_id, 'report')}>Report</button>
                         <button className="btn ghost" style={{ fontSize: '0.75rem', padding: '4px 12px', color: 'var(--error)' }} onClick={() => openModal(s.session_id, 'proctoring')}>Proctoring</button>
+                        <button className="btn ghost" style={{ fontSize: '0.75rem', padding: '4px 12px', color: 'var(--primary)' }} onClick={() => { setReplaySessionId(s.session_id); setReplaySessionName(`${s.company || 'Session'} — ${new Date(s.date * 1000).toLocaleDateString()}`) }}>Replay</button>
                       </td>
                     </tr>
                   ))}
@@ -229,6 +262,11 @@ function RecruiterPage({ user }) {
       {/* Session Detail Modal */}
       {selectedSession && (
         <AdminSessionModal sessionId={selectedSession} modalType={modalType} onClose={() => setSelectedSession(null)} />
+      )}
+
+      {/* Compare Modal */}
+      {showCompare && (
+        <CompareModal sessionIds={selectedSessionIds} onClose={() => setShowCompare(false)} />
       )}
     </div>
   )

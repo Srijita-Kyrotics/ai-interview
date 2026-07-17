@@ -3,6 +3,7 @@ from __future__ import annotations
 import hashlib
 import hmac
 import json
+import logging
 import os
 import random
 import secrets
@@ -10,6 +11,7 @@ import smtplib
 import ssl
 import time
 import uuid
+from collections import defaultdict
 from email.message import EmailMessage
 from pathlib import Path
 from typing import Any, Dict, List, Optional
@@ -36,6 +38,8 @@ from contextlib import asynccontextmanager
 from dotenv import load_dotenv
 from pydantic import BaseModel
 
+logger = logging.getLogger("ai_interview")
+
 BASE_DIR = Path(__file__).resolve().parents[2]
 SHARED_DIR = BASE_DIR / "shared"
 FRONTEND_QUESTIONS_DIR = BASE_DIR / "frontend" / "public" / "questions"
@@ -43,13 +47,18 @@ FRONTEND_QUESTIONS_DIR = BASE_DIR / "frontend" / "public" / "questions"
 load_dotenv(BASE_DIR / "backend" / ".env")
 load_dotenv(BASE_DIR / ".env")
 
+logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(name)s] %(levelname)s: %(message)s")
+
 @asynccontextmanager
 async def lifespan(app):
+    logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(name)s] %(levelname)s: %(message)s")
     init_db()
     _accounts_file = BASE_DIR / "backend" / "accounts.json"
     migrate_accounts_json(_accounts_file)
     cleanup_stale_data()
+    logger.info("Application started")
     yield
+    logger.info("Application shutting down")
 
 app = FastAPI(title="AI Mock Recruitment Platform", lifespan=lifespan)
 
@@ -72,6 +81,42 @@ async def add_security_headers(request, call_next):
     response.headers["Content-Security-Policy"] = "default-src 'self'; script-src 'self' 'unsafe-inline' 'unsafe-eval'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; connect-src 'self'"
     response.headers["Strict-Transport-Security"] = "max-age=31536000; includeSubDomains"
     return response
+
+
+# ─── Rate Limiting ───────────────────────────────────────────────────────────
+_rate_limits: Dict[str, List[float]] = defaultdict(list)
+
+def _check_rate_limit(key: str, limit: int, window: int) -> bool:
+    now = time.time()
+    _rate_limits[key] = [t for t in _rate_limits[key] if now - t < window]
+    if len(_rate_limits[key]) >= limit:
+        return False
+    _rate_limits[key].append(now)
+    return True
+
+def _client_ip(request: Request) -> str:
+    forwarded = request.headers.get("x-forwarded-for")
+    return forwarded.split(",")[0].strip() if forwarded else request.client.host if request.client else "unknown"
+
+
+# ─── Response Caching ────────────────────────────────────────────────────────
+_cache: Dict[str, Any] = {}
+
+def _cache_get(key: str, ttl: int = 300) -> Any:
+    entry = _cache.get(key)
+    if entry and time.time() - entry["ts"] < ttl:
+        return entry["data"]
+    return None
+
+def _cache_set(key: str, data: Any) -> None:
+    _cache[key] = {"data": data, "ts": time.time()}
+
+
+# ─── Input Sanitization ──────────────────────────────────────────────────────
+def _sanitize_for_ai(text: str, max_length: int = 5000) -> str:
+    text = text[:max_length]
+    text = re.sub(r'[\x00-\x08\x0b\x0c\x0e-\x1f\x7f]', '', text)
+    return text.strip()
 
 JWT_SECRET_FILE = BASE_DIR / "backend" / ".jwt_secret"
 JWT_ALGORITHM = "HS256"
@@ -157,7 +202,6 @@ OTP_TTL_SECONDS = 300
 CAPTCHA_TTL_SECONDS = 300
 OTP_RATE_LIMIT = 5  # max requests per email
 OTP_RATE_WINDOW = 600  # 10 minutes in seconds
-_otp_rate_tracker: Dict[str, List[float]] = {}
 
 
 def default_scores() -> Dict[str, int]:
@@ -348,13 +392,13 @@ def send_email_otp(email: str, otp: str) -> bool:
     smtp_from = os.getenv("SMTP_FROM", smtp_user or "")
 
     if not smtp_host or not smtp_user or not smtp_password or not smtp_from:
-        print(f"[OTP] Missing SMTP config - HOST: {bool(smtp_host)}, USER: {bool(smtp_user)}, PASSWORD: {bool(smtp_password)}, FROM: {bool(smtp_from)}")
+        logger.warning("Missing SMTP config - HOST: %s, USER: %s, PASSWORD: %s, FROM: %s", bool(smtp_host), bool(smtp_user), bool(smtp_password), bool(smtp_from))
         return False
 
     try:
         smtp_port = int(smtp_port_str)
     except ValueError:
-        print(f"[OTP] Invalid SMTP_PORT: {smtp_port_str}")
+        logger.warning("Invalid SMTP_PORT: %s", smtp_port_str)
         return False
 
     message = EmailMessage()
@@ -371,10 +415,10 @@ def send_email_otp(email: str, otp: str) -> bool:
             server.starttls(context=context)
             server.login(smtp_user, smtp_password)
             server.send_message(message)
-        print(f"[OTP] Email sent successfully to {email}")
+        logger.info("OTP email sent successfully to %s", email)
         return True
     except Exception as e:
-        print(f"[OTP] SMTP Error: {type(e).__name__}: {str(e)}")
+        logger.error("SMTP Error: %s: %s", type(e).__name__, str(e))
         return False
 
 
@@ -391,18 +435,16 @@ def get_captcha():
 
 
 @app.post("/auth/send-otp")
-def send_otp(payload: SendOtpRequest):
+def send_otp(payload: SendOtpRequest, request: Request):
     email = payload.email.strip().lower()
     if not email or "@" not in email:
         return {"ok": False, "error": "Enter a valid email address."}
 
-    now = time.time()
-    if email not in _otp_rate_tracker:
-        _otp_rate_tracker[email] = []
-    _otp_rate_tracker[email] = [t for t in _otp_rate_tracker[email] if now - t < OTP_RATE_WINDOW]
-    if len(_otp_rate_tracker[email]) >= OTP_RATE_LIMIT:
+    ip = _client_ip(request)
+    if not _check_rate_limit(f"otp:{email}", OTP_RATE_LIMIT, OTP_RATE_WINDOW):
         return {"ok": False, "error": "Too many requests. Please wait a few minutes."}
-    _otp_rate_tracker[email].append(now)
+    if not _check_rate_limit(f"otp_ip:{ip}", 20, OTP_RATE_WINDOW):
+        return {"ok": False, "error": "Too many requests from this IP. Please wait."}
 
     otp = f"{secrets.randbelow(900000) + 100000}"
     save_otp(email, {
@@ -539,6 +581,10 @@ def check_email(payload: EmailCheckRequest):
 
 @app.get("/companies")
 def get_companies():
+    cached = _cache_get("companies")
+    if cached is not None:
+        return cached
+    _cache_set("companies", COMPANY_PROFILES)
     return COMPANY_PROFILES
 
 @app.post("/upload-resume")
@@ -690,6 +736,9 @@ def get_rounds(company: str):
 
 @app.get("/questions/{round_type}")
 def get_questions(round_type: str):
+    cached = _cache_get(f"questions:{round_type}")
+    if cached is not None:
+        return cached
     datasets = {
         "aptitude": APTITUDE_QUESTIONS,
         "coding": CODING_QUESTIONS,
@@ -698,6 +747,7 @@ def get_questions(round_type: str):
     }
     if round_type not in datasets:
         raise HTTPException(status_code=404, detail=f"Round type '{round_type}' not found")
+    _cache_set(f"questions:{round_type}", datasets[round_type])
     return datasets[round_type]
 
 
@@ -828,7 +878,10 @@ async def simulate_code_run(question_id: int, language: str, code: str) -> Dict[
 
 
 @app.post("/run-code")
-async def run_code(payload: RunCodeRequest, user: Dict[str, Any] = Depends(require_candidate)):
+async def run_code(payload: RunCodeRequest, user: Dict[str, Any] = Depends(require_candidate), request: Request = None):
+    ip = _client_ip(request) if request else "unknown"
+    if not _check_rate_limit(f"code:{user['email']}", 20, 600):
+        raise HTTPException(status_code=429, detail="Too many code execution requests. Please wait.")
     return await simulate_code_run(payload.question_id, payload.language, payload.code)
 
 
@@ -909,7 +962,10 @@ class AIFeedbackRequest(BaseModel):
     session_id: str
 
 @app.post("/ai/questions")
-async def generate_ai_questions(payload: AIQuestionsRequest, user: Dict[str, Any] = Depends(require_candidate)):
+async def generate_ai_questions(payload: AIQuestionsRequest, user: Dict[str, Any] = Depends(require_candidate), request: Request = None):
+    ip = _client_ip(request) if request else "unknown"
+    if not _check_rate_limit(f"ai:{user['email']}", 10, 600):
+        raise HTTPException(status_code=429, detail="Too many AI requests. Please wait.")
     state = load_session(payload.session_id)
     if not state:
         return {"error": "No active session"}
@@ -924,8 +980,8 @@ async def generate_ai_questions(payload: AIQuestionsRequest, user: Dict[str, Any
     model = genai.GenerativeModel("gemini-1.5-flash")
     
     resume = state.get("resume", {})
-    skills = ", ".join(resume.get("skills", []))
-    company = state.get("selectedCompany", "Unknown")
+    skills = _sanitize_for_ai(", ".join(resume.get("skills", [])))
+    company = _sanitize_for_ai(state.get("selectedCompany", "Unknown"))
 
     prompt = f"Generate {payload.count} {payload.round_type} interview questions for a candidate applying to {company} with skills in {skills}. Respond with a JSON array of objects, each containing a 'question' string and an 'id' integer."
     
@@ -943,7 +999,10 @@ async def generate_ai_questions(payload: AIQuestionsRequest, user: Dict[str, Any
 
 
 @app.post("/ai/feedback")
-async def generate_ai_feedback(payload: AIFeedbackRequest, user: Dict[str, Any] = Depends(require_candidate)):
+async def generate_ai_feedback(payload: AIFeedbackRequest, user: Dict[str, Any] = Depends(require_candidate), request: Request = None):
+    ip = _client_ip(request) if request else "unknown"
+    if not _check_rate_limit(f"ai:{user['email']}", 10, 600):
+        raise HTTPException(status_code=429, detail="Too many AI requests. Please wait.")
     state = load_session(payload.session_id)
     if not state:
         return {"error": "No active session"}
@@ -958,7 +1017,8 @@ async def generate_ai_feedback(payload: AIFeedbackRequest, user: Dict[str, Any] 
     model = genai.GenerativeModel("gemini-1.5-flash")
     
     answers = state.get("answers", {})
-    prompt = f"Review the following interview answers and provide personalised feedback. Answers: {json.dumps(answers)}. Provide strengths, weaknesses, and 3 concrete recommendations in JSON format: {{ 'strengths': ['...'], 'weaknesses': ['...'], 'recommendations': ['...'], 'feedback': {{'technical': '...', 'hr': '...'}} }}"
+    sanitized_answers = {k: _sanitize_for_ai(json.dumps(v)) for k, v in answers.items()}
+    prompt = f"Review the following interview answers and provide personalised feedback. Answers: {json.dumps(sanitized_answers)}. Provide strengths, weaknesses, and 3 concrete recommendations in JSON format: {{ 'strengths': ['...'], 'weaknesses': ['...'], 'recommendations': ['...'], 'feedback': {{'technical': '...', 'hr': '...'}} }}"
 
     try:
         response = model.generate_content(prompt)
@@ -1153,7 +1213,10 @@ class UpdateRoleRequest(BaseModel):
 
 
 @app.post("/admin/update-role")
-def admin_update_role(payload: UpdateRoleRequest, user: Dict[str, Any] = Depends(require_admin)):
+def admin_update_role(payload: UpdateRoleRequest, user: Dict[str, Any] = Depends(require_admin), request: Request = None):
+    ip = _client_ip(request) if request else "unknown"
+    if not _check_rate_limit(f"admin:{user['email']}", 30, 600):
+        raise HTTPException(status_code=429, detail="Too many requests. Please wait.")
     if payload.role not in ("candidate", "recruiter", "admin"):
         raise HTTPException(status_code=400, detail="Role must be candidate, recruiter, or admin")
     account = load_user(payload.email)
@@ -1161,3 +1224,108 @@ def admin_update_role(payload: UpdateRoleRequest, user: Dict[str, Any] = Depends
         raise HTTPException(status_code=404, detail="User not found")
     update_user_role(payload.email, payload.role)
     return {"ok": True, "message": f"Role updated to {payload.role}"}
+
+
+# ──────────────────────────────────────────────────────────────────────────────
+# Recruiter Comparison & Session Replay
+# ──────────────────────────────────────────────────────────────────────────────
+
+class CompareRequest(BaseModel):
+    session_ids: List[str]
+
+class UploadQuestionsRequest(BaseModel):
+    round_type: str
+    questions: List[Dict[str, Any]]
+
+
+@app.post("/admin/compare")
+def admin_compare(payload: CompareRequest, user: Dict[str, Any] = Depends(require_recruiter)):
+    if len(payload.session_ids) < 2:
+        raise HTTPException(status_code=400, detail="At least 2 sessions required")
+    if len(payload.session_ids) > 5:
+        raise HTTPException(status_code=400, detail="Maximum 5 sessions for comparison")
+    results = []
+    for sid in payload.session_ids[:5]:
+        state = load_session(sid)
+        if not state:
+            results.append({"session_id": sid, "error": "Not found"})
+            continue
+        report = make_report(state)
+        proctoring = load_proctoring(sid)
+        results.append({
+            "session_id": sid,
+            "candidate_name": report.get("candidateName", ""),
+            "company": report.get("selectedCompany", ""),
+            "scores": report.get("scores", {}),
+            "overall_score": report.get("overallScore", 0),
+            "proctoring_score": proctoring.get("integrity_score", 100) if proctoring else 100,
+            "proctoring_status": proctoring.get("assessment_status", "N/A") if proctoring else "N/A",
+        })
+    return {"comparisons": results}
+
+
+@app.get("/admin/sessions/{session_id}/timeline")
+def admin_session_timeline(session_id: str, user: Dict[str, Any] = Depends(require_recruiter)):
+    state = load_session(session_id)
+    if not state:
+        raise HTTPException(status_code=404, detail="Session not found")
+    answers = state.get("answers", {})
+    proctoring = load_proctoring(session_id)
+    timeline = []
+    for round_key, round_answers in answers.items():
+        for i, ans in enumerate(round_answers):
+            timeline.append({
+                "type": "answer",
+                "round": round_key,
+                "question_index": ans.get("questionIndex", i),
+                "answer": ans.get("answer", ""),
+                "order": i,
+            })
+    if proctoring:
+        for v in proctoring.get("violations", []):
+            timeline.append({
+                "type": "violation",
+                "round": v.get("round", ""),
+                "event": v.get("reason", v.get("kind", "Unknown")),
+                "order": -1,
+            })
+    timeline.sort(key=lambda x: x["order"])
+    for i, entry in enumerate(timeline):
+        entry["step"] = i + 1
+    return {"timeline": timeline, "total_steps": len(timeline)}
+
+
+CUSTOM_QUESTIONS_DIR = BASE_DIR / "shared" / "custom_questions"
+
+@app.post("/admin/upload-questions")
+async def admin_upload_questions(file: UploadFile = File(...), user: Dict[str, Any] = Depends(require_admin)):
+    CUSTOM_QUESTIONS_DIR.mkdir(parents=True, exist_ok=True)
+    content = await file.read()
+    try:
+        data = json.loads(content.decode("utf-8"))
+    except (json.JSONDecodeError, UnicodeDecodeError):
+        raise HTTPException(status_code=400, detail="Invalid JSON file")
+    round_type = data.get("round_type", "")
+    questions = data.get("questions", [])
+    if not round_type or not questions:
+        raise HTTPException(status_code=400, detail="Must include round_type and questions array")
+    filepath = CUSTOM_QUESTIONS_DIR / f"{round_type}_custom.json"
+    with open(filepath, "w", encoding="utf-8") as f:
+        json.dump(questions, f, indent=2)
+    logger.info("Custom questions uploaded: %s (%d questions)", round_type, len(questions))
+    return {"ok": True, "count": len(questions), "round_type": round_type}
+
+
+@app.get("/admin/custom-questions")
+def admin_list_custom_questions(user: Dict[str, Any] = Depends(require_admin)):
+    CUSTOM_QUESTIONS_DIR.mkdir(parents=True, exist_ok=True)
+    files = list(CUSTOM_QUESTIONS_DIR.glob("*_custom.json"))
+    result = []
+    for fp in files:
+        try:
+            with open(fp, "r", encoding="utf-8") as f:
+                questions = json.load(f)
+            result.append({"round_type": fp.stem.replace("_custom", ""), "count": len(questions), "filename": fp.name})
+        except Exception:
+            continue
+    return {"questions": result}

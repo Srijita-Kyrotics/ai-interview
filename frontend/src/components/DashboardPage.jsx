@@ -5,6 +5,7 @@ import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContai
 import { api } from '../api'
 import { SessionDetailModal } from './SessionDetailModal'
 import { scoreClass } from '../utils/score'
+import { Skeleton, SkeletonCard, SkeletonTable } from './Skeleton'
 
 function DashboardPage({ user }) {
   const navigate = useNavigate()
@@ -46,9 +47,26 @@ function DashboardPage({ user }) {
 
   if (loading) {
     return (
-      <div className="dashboard-page" style={{ textAlign: 'center', padding: '3rem' }}>
-        <div className="loading-spinner" />
-        <p className="muted" style={{ marginTop: '1rem' }}>Loading your dashboard...</p>
+      <div className="dashboard-page">
+        <div className="page-header">
+          <div>
+            <h2>Your Dashboard</h2>
+            <p className="muted" style={{ fontSize: '0.85rem', margin: '0.25rem 0 0' }}>Track your interview performance over time</p>
+          </div>
+        </div>
+        <div className="stat-cards-grid">
+          {Array.from({ length: 4 }).map((_, i) => (
+            <SkeletonCard key={i} />
+          ))}
+        </div>
+        <div className="panel-card" style={{ marginBottom: '1.5rem' }}>
+          <Skeleton variant="text" width={160} height={20} style={{ marginBottom: 16 }} />
+          <Skeleton variant="rect" width="100%" height={300} />
+        </div>
+        <div className="panel-card">
+          <Skeleton variant="text" width={160} height={20} style={{ marginBottom: 16 }} />
+          <SkeletonTable rows={4} cols={5} />
+        </div>
       </div>
     )
   }

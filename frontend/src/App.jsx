@@ -9,6 +9,7 @@ import { Home } from './components/Home'
 import { ResumePage } from './components/ResumePage'
 import { CompanyPage } from './components/CompanyPage'
 import { TerminatedPage } from './components/TerminatedPage'
+import { ToastProvider } from './utils/ToastContext'
 
 const RoundPage = React.lazy(() => import('./components/RoundPage').then(m => ({ default: m.RoundPage })))
 const ChatInterview = React.lazy(() => import('./components/ChatInterview').then(m => ({ default: m.ChatInterview })))
@@ -168,22 +169,24 @@ export default function App() {
   }
 
   return (
-    <Shell state={state} user={user} onLogout={logout} proctoring={proctoring}>
-      <Suspense fallback={<PageLoader />}>
-        <Routes>
-          <Route path="/" element={<Home />} />
-          <Route path="/resume" element={<ResumePage state={state} setState={setState} setProctoring={setProctoring} />} />
-          <Route path="/company" element={<CompanyPage state={state} setState={setState} />} />
-          <Route path="/aptitude" element={<RoundPage key="aptitude" title="Aptitude Round" items={aptitudeItems} type="aptitude" state={state} setState={setState} proctoring={proctoring} setProctoring={setProctoring} />} />
-          <Route path="/coding" element={<RoundPage key="coding" title="Coding Round" items={codingItems} type="coding" state={state} setState={setState} proctoring={proctoring} setProctoring={setProctoring} />} />
-          <Route path="/technical" element={<ChatInterview key="technical" title="Technical Interview" questions={technicalItems} state={state} setState={setState} proctoring={proctoring} setProctoring={setProctoring} />} />
-          <Route path="/hr" element={<ChatInterview key="hr" title="HR Interview" questions={hrItems} state={state} setState={setState} proctoring={proctoring} setProctoring={setProctoring} />} />
-          <Route path="/report" element={<ReportPage state={state} proctoring={proctoring} />} />
-          <Route path="/dashboard" element={<DashboardPage user={user} />} />
-          <Route path="/recruiter" element={user?.role === 'recruiter' || user?.role === 'admin' ? <RecruiterPage user={user} /> : <Navigate to="/dashboard" replace />} />
-          <Route path="*" element={<Navigate to="/" replace />} />
-        </Routes>
-      </Suspense>
-    </Shell>
+    <ToastProvider>
+      <Shell state={state} user={user} onLogout={logout} proctoring={proctoring}>
+        <Suspense fallback={<PageLoader />}>
+          <Routes>
+            <Route path="/" element={<Home />} />
+            <Route path="/resume" element={<ResumePage state={state} setState={setState} setProctoring={setProctoring} />} />
+            <Route path="/company" element={<CompanyPage state={state} setState={setState} />} />
+            <Route path="/aptitude" element={<RoundPage key="aptitude" title="Aptitude Round" items={aptitudeItems} type="aptitude" state={state} setState={setState} proctoring={proctoring} setProctoring={setProctoring} />} />
+            <Route path="/coding" element={<RoundPage key="coding" title="Coding Round" items={codingItems} type="coding" state={state} setState={setState} proctoring={proctoring} setProctoring={setProctoring} />} />
+            <Route path="/technical" element={<ChatInterview key="technical" title="Technical Interview" questions={technicalItems} state={state} setState={setState} proctoring={proctoring} setProctoring={setProctoring} />} />
+            <Route path="/hr" element={<ChatInterview key="hr" title="HR Interview" questions={hrItems} state={state} setState={setState} proctoring={proctoring} setProctoring={setProctoring} />} />
+            <Route path="/report" element={<ReportPage state={state} proctoring={proctoring} />} />
+            <Route path="/dashboard" element={<DashboardPage user={user} />} />
+            <Route path="/recruiter" element={user?.role === 'recruiter' || user?.role === 'admin' ? <RecruiterPage user={user} /> : <Navigate to="/dashboard" replace />} />
+            <Route path="*" element={<Navigate to="/" replace />} />
+          </Routes>
+        </Suspense>
+      </Shell>
+    </ToastProvider>
   )
 }
