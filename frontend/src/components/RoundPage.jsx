@@ -1,5 +1,6 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react'
 import { Navigate, useNavigate } from 'react-router-dom'
+import { Mic, Square, Play, RotateCcw } from 'lucide-react'
 import { api } from '../api'
 import { roundDurations } from '../constants'
 import { ProctoringModal } from '../proctoring/ProctoringUI'
@@ -274,6 +275,7 @@ function RoundPage({ title, items, type, state, setState, proctoring, setProctor
   const [isRunning, setIsRunning] = useState(false)
   const [isRecording, setIsRecording] = useState(false)
   const [audioBlob, setAudioBlob] = useState(null)
+  const [audioUrl, setAudioUrl] = useState(null)
   const [recordingTime, setRecordingTime] = useState(0)
   const videoRef = useRef(null)
   const screenRef = useRef(null)
@@ -308,6 +310,13 @@ function RoundPage({ title, items, type, state, setState, proctoring, setProctor
     setTimeLeft(duration)
     submittingRef.current = false
   }, [duration, idx])
+
+  useEffect(() => {
+    if (!audioBlob) { setAudioUrl(null); return }
+    const url = URL.createObjectURL(audioBlob)
+    setAudioUrl(url)
+    return () => URL.revokeObjectURL(url)
+  }, [audioBlob])
 
   useEffect(() => {
     if (type === 'coding' && current?.starter) {
@@ -718,11 +727,11 @@ function RoundPage({ title, items, type, state, setState, proctoring, setProctor
                     <div className="speech-controls">
                       {!isRecording ? (
                         <button className="btn primary record-btn" type="button" onClick={startRecording}>
-                          🎤 Start Recording
+                          <Mic size={16} style={{ verticalAlign: 'middle', marginRight: '6px' }} /> Start Recording
                         </button>
                       ) : (
                         <button className="btn danger record-btn" type="button" onClick={stopRecording}>
-                          ⏹️ Stop Recording
+                          <Square size={16} style={{ verticalAlign: 'middle', marginRight: '6px' }} /> Stop Recording
                         </button>
                       )}
                     </div>
@@ -734,10 +743,10 @@ function RoundPage({ title, items, type, state, setState, proctoring, setProctor
                     </div>
                     <div className="playback-controls">
                       <button className="btn ghost" type="button" onClick={() => audioRef.current?.play()}>
-                        ▶️ Play
+                        <Play size={16} style={{ verticalAlign: 'middle', marginRight: '6px' }} /> Play
                       </button>
                       <button className="btn ghost" type="button" onClick={reRecord}>
-                        🔄 Re-record
+                        <RotateCcw size={16} style={{ verticalAlign: 'middle', marginRight: '6px' }} /> Re-record
                       </button>
                     </div>
                     <audio ref={audioRef} src={audioUrl || ''} style={{ marginTop: '16px', width: '100%' }} />

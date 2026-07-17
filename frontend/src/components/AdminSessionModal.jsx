@@ -1,6 +1,12 @@
 import React, { useEffect, useState } from 'react'
-import { Shield } from 'lucide-react'
+import { Shield, X } from 'lucide-react'
 import { api } from '../api'
+
+function scoreClass(score) {
+  if (score >= 70) return 'score-good'
+  if (score >= 50) return 'score-mid'
+  return 'score-low'
+}
 
 function AdminSessionModal({ sessionId, modalType = 'report', onClose }) {
   const [detail, setDetail] = useState(null)
@@ -10,7 +16,15 @@ function AdminSessionModal({ sessionId, modalType = 'report', onClose }) {
     api.get(`/admin/sessions/${sessionId}`).then(r => { setDetail(r); setLoading(false) }).catch(() => setLoading(false))
   }, [sessionId])
 
-  if (loading) return <div className="modal-overlay" onClick={onClose}><div className="modal-content" onClick={e => e.stopPropagation()} style={{ padding: '2rem', textAlign: 'center' }}><div className="loading-spinner" /></div></div>
+  if (loading) {
+    return (
+      <div className="modal-overlay" onClick={onClose}>
+        <div className="modal-content" onClick={e => e.stopPropagation()} style={{ padding: '2rem', textAlign: 'center' }}>
+          <div className="loading-spinner" />
+        </div>
+      </div>
+    )
+  }
   if (!detail?.session) return null
 
   const report = detail.session
@@ -18,43 +32,45 @@ function AdminSessionModal({ sessionId, modalType = 'report', onClose }) {
   const proctoring = detail.proctoring
 
   return (
-    <div className="modal-overlay" onClick={onClose} style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.6)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000 }}>
-      <div className="modal-content" onClick={e => e.stopPropagation()} style={{ background: '#1e293b', borderRadius: 16, padding: '2rem', maxWidth: 650, width: '90%', maxHeight: '85vh', overflow: 'auto', border: '1px solid rgba(255,255,255,0.08)' }}>
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.5rem' }}>
-          <h3 style={{ fontSize: '1.25rem', fontWeight: 700, color: '#f1f5f9' }}>
+    <div className="modal-overlay" onClick={onClose}>
+      <div className="modal-content" onClick={e => e.stopPropagation()}>
+        <div className="modal-header">
+          <h3>
             {modalType === 'proctoring' ? 'Proctoring Details' : 'Session Report'} — {report.candidateName || 'Candidate'}
           </h3>
-          <button onClick={onClose} style={{ background: 'none', border: 'none', color: '#94a3b8', fontSize: '1.25rem', cursor: 'pointer' }}>&times;</button>
+          <button className="modal-close-btn" onClick={onClose} aria-label="Close">
+            <X size={20} />
+          </button>
         </div>
 
         {/* Report View */}
         {modalType === 'report' && (
           <>
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: '0.75rem', marginBottom: '1.5rem' }}>
+            <div className="score-grid">
               {Object.entries(scores).map(([key, val]) => (
-                <div key={key} style={{ background: 'rgba(255,255,255,0.04)', borderRadius: 10, padding: '0.75rem 1rem' }}>
-                  <div style={{ fontSize: '0.75rem', color: '#94a3b8', textTransform: 'capitalize' }}>{key}</div>
-                  <div style={{ fontSize: '1.25rem', fontWeight: 700, color: val >= 70 ? '#34d399' : val >= 50 ? '#fbbf24' : '#f87171' }}>{val}%</div>
+                <div key={key} className="score-grid-item">
+                  <div className="score-grid-label">{key}</div>
+                  <div className={`score-grid-value ${scoreClass(val)}`}>{val}%</div>
                 </div>
               ))}
             </div>
 
-            <div style={{ background: 'rgba(255,255,255,0.04)', borderRadius: 10, padding: '1rem', marginBottom: '1rem' }}>
-              <div style={{ fontSize: '0.75rem', color: '#94a3b8', marginBottom: '0.25rem' }}>Overall Score</div>
-              <div style={{ fontSize: '2rem', fontWeight: 700, color: '#818cf8' }}>{report.overallScore}%</div>
+            <div className="overall-score-card">
+              <div className="overall-label">Overall Score</div>
+              <div className="overall-value">{report.overallScore}%</div>
             </div>
 
             {report.feedback && (
-              <div style={{ marginBottom: '1rem' }}>
-                <div style={{ fontSize: '0.8rem', fontWeight: 600, color: '#94a3b8', marginBottom: '0.5rem' }}>AI Feedback</div>
-                <p style={{ fontSize: '0.8rem', color: '#cbd5e1', lineHeight: 1.5 }}>{typeof report.feedback === 'string' ? report.feedback : report.feedback.summary || ''}</p>
+              <div className="feedback-section">
+                <div className="feedback-title" style={{ color: 'var(--text-muted)' }}>AI Feedback</div>
+                <p className="feedback-item" style={{ lineHeight: 1.6 }}>{typeof report.feedback === 'string' ? report.feedback : report.feedback.summary || ''}</p>
               </div>
             )}
 
             {report.recommendations?.length > 0 && (
-              <div style={{ marginBottom: '1rem' }}>
-                <div style={{ fontSize: '0.8rem', fontWeight: 600, color: '#38bdf8', marginBottom: '0.5rem' }}>Recommendations</div>
-                {report.recommendations.map((r, i) => <div key={i} style={{ fontSize: '0.8rem', color: '#cbd5e1', padding: '2px 0' }}>+ {r}</div>)}
+              <div className="feedback-section">
+                <div className="feedback-title" style={{ color: 'var(--primary)' }}>Recommendations</div>
+                {report.recommendations.map((r, i) => <div key={i} className="feedback-item">+ {r}</div>)}
               </div>
             )}
           </>
@@ -64,32 +80,34 @@ function AdminSessionModal({ sessionId, modalType = 'report', onClose }) {
         {modalType === 'proctoring' && (
           <>
             {!proctoring ? (
-              <div style={{ textAlign: 'center', padding: '2rem', color: '#64748b' }}>
-                <Shield size={40} style={{ margin: '0 auto 1rem', opacity: 0.5 }} />
+              <div className="empty-state">
+                <Shield size={40} />
                 <p>No proctoring data available for this session</p>
               </div>
             ) : (
               <>
-                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.75rem', marginBottom: '1.5rem' }}>
-                  <div style={{ background: 'rgba(255,255,255,0.04)', borderRadius: 10, padding: '1rem' }}>
-                    <div style={{ fontSize: '0.75rem', color: '#94a3b8', marginBottom: '0.25rem' }}>Integrity Score</div>
-                    <div style={{ fontSize: '1.75rem', fontWeight: 700, color: (proctoring.integrity_score || 100) >= 80 ? '#34d399' : '#f87171' }}>
+                <div className="proctoring-detail-grid">
+                  <div className="proctoring-detail-item">
+                    <div className="detail-label">Integrity Score</div>
+                    <div className={`detail-value ${scoreClass(proctoring.integrity_score || 100)}`}>
                       {proctoring.integrity_score || 100}%
                     </div>
                   </div>
-                  <div style={{ background: 'rgba(255,255,255,0.04)', borderRadius: 10, padding: '1rem' }}>
-                    <div style={{ fontSize: '0.75rem', color: '#94a3b8', marginBottom: '0.25rem' }}>Status</div>
-                    <div style={{ fontSize: '1rem', fontWeight: 600, color: '#f1f5f9' }}>{proctoring.assessment_status || 'N/A'}</div>
+                  <div className="proctoring-detail-item">
+                    <div className="detail-label">Status</div>
+                    <div className="detail-value" style={{ fontSize: '1rem', fontWeight: 600, color: 'var(--text-primary)' }}>
+                      {proctoring.assessment_status || 'N/A'}
+                    </div>
                   </div>
                 </div>
 
                 {proctoring.violations?.length > 0 && (
-                  <div style={{ marginBottom: '1rem' }}>
-                    <div style={{ fontSize: '0.8rem', fontWeight: 600, color: '#f87171', marginBottom: '0.5rem' }}>Violations ({proctoring.violations.length})</div>
+                  <div className="feedback-section">
+                    <div className="feedback-title" style={{ color: 'var(--error)' }}>Violations ({proctoring.violations.length})</div>
                     {proctoring.violations.map((v, i) => (
-                      <div key={i} style={{ fontSize: '0.8rem', color: '#fbbf24', padding: '4px 0', borderBottom: '1px solid rgba(255,255,255,0.04)' }}>
+                      <div key={i} className="violation-item">
                         {v.type || v.message || JSON.stringify(v)}
-                        {v.timestamp && <span style={{ color: '#64748b', marginLeft: '0.5rem' }}>{new Date(v.timestamp * 1000).toLocaleTimeString()}</span>}
+                        {v.timestamp && <span className="violation-time">{new Date(v.timestamp * 1000).toLocaleTimeString()}</span>}
                       </div>
                     ))}
                   </div>
@@ -97,11 +115,11 @@ function AdminSessionModal({ sessionId, modalType = 'report', onClose }) {
 
                 {proctoring.snapshots?.length > 0 && (
                   <div>
-                    <div style={{ fontSize: '0.8rem', fontWeight: 600, color: '#94a3b8', marginBottom: '0.5rem' }}>Snapshots ({proctoring.snapshots.length})</div>
-                    <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap' }}>
+                    <div className="feedback-title" style={{ color: 'var(--text-muted)', marginBottom: '0.5rem' }}>Snapshots ({proctoring.snapshots.length})</div>
+                    <div className="snapshot-grid">
                       {proctoring.snapshots.map((snap, i) => (
-                        <div key={i} style={{ width: 80, height: 60, borderRadius: 8, background: 'rgba(255,255,255,0.06)', overflow: 'hidden' }}>
-                          {snap.image ? <img src={snap.image} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} /> : <div style={{ width: '100%', height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#64748b', fontSize: '0.6rem' }}>No img</div>}
+                        <div key={i} className="snapshot-thumb">
+                          {snap.image ? <img src={snap.image} alt="" /> : <div className="snapshot-placeholder">No img</div>}
                         </div>
                       ))}
                     </div>

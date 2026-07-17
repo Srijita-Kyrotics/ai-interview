@@ -1,4 +1,5 @@
 import React, { useEffect, useState } from 'react'
+import { Lock, Target, Zap, Eye, EyeOff } from 'lucide-react'
 import { api } from '../api'
 
 function AuthPage({ onAuth }) {
@@ -91,21 +92,17 @@ function AuthPage({ onAuth }) {
     setFieldErrors(newErrors)
 
     if (emailError) {
-      window.alert('The email id is invalid.')
       setError('Enter a valid email address before requesting OTP.')
       return
     }
 
     if (nameError) {
-      window.alert(nameError)
       setError(nameError)
       return
     }
 
     if (passwordError || confirmError) {
-      const errorMessage = passwordError || confirmError || 'Fix your password before requesting OTP.'
-      window.alert(errorMessage)
-      setError(errorMessage)
+      setError(passwordError || confirmError || 'Fix your password before requesting OTP.')
       return
     }
 
@@ -116,7 +113,6 @@ function AuthPage({ onAuth }) {
       if (!isCreate) {
         const emailCheck = await api.post('/auth/check-email', { email })
         if (!emailCheck.ok || !emailCheck.exists) {
-          window.alert('Email not found. Please register with this email first.')
           setError('Email not found. Please register with this email first.')
           return
         }
@@ -124,21 +120,18 @@ function AuthPage({ onAuth }) {
       if (isCreate) {
         const emailCheck = await api.post('/auth/check-email', { email })
         if (emailCheck.ok && emailCheck.exists) {
-          window.alert('An account already exists for this email. Please login instead.')
           setError('An account already exists for this email. Please login instead.')
           return
         }
       }
       const res = await api.post('/auth/send-otp', { email })
       if (!res.ok) {
-        window.alert(res.error || 'Could not send OTP.')
         setError(res.error || 'Could not send OTP.')
         return
       }
       setOtpRequested(true)
       setOtpStatus(res.dev_otp ? `${res.message} Development OTP: ${res.dev_otp}` : res.message)
     } catch {
-      window.alert('Could not contact the OTP service.')
       setError('Could not contact the OTP service.')
     } finally {
       setIsSendingOtp(false)
@@ -171,13 +164,11 @@ function AuthPage({ onAuth }) {
     setFieldErrors(newErrors)
 
     if (emailError || passwordError || confirmError || nameError || otpError || captchaError) {
-      window.alert('Please correct the highlighted fields before continuing.')
       setError('Please correct the highlighted fields before continuing.')
       return
     }
 
     if (!otpRequested) {
-      window.alert('Request OTP first, then confirm it with the captcha.')
       setError('Request your OTP first, then confirm it with the captcha.')
       return
     }
@@ -197,7 +188,6 @@ function AuthPage({ onAuth }) {
 
       const res = await api.post(endpoint, payload)
       if (!res.ok) {
-        window.alert(res.error || 'Verification failed.')
         setError(res.error || 'Verification failed.')
         await loadCaptcha()
         return
@@ -212,7 +202,6 @@ function AuthPage({ onAuth }) {
       localStorage.setItem('mockRecruitmentUser', JSON.stringify(user))
       onAuth(user)
     } catch {
-      window.alert('Could not verify credentials.')
       setError('Could not verify credentials.')
     } finally {
       setIsSubmitting(false)
@@ -234,15 +223,15 @@ function AuthPage({ onAuth }) {
         </div>
         <div className="feature-list" aria-hidden="true">
           <div className="feature-card">
-            <span>🔐 Secure access</span>
+            <span><Lock size={16} style={{ verticalAlign: 'middle', marginRight: '6px' }} /> Secure access</span>
             <p>Email + OTP + captcha verification keeps your session protected end-to-end.</p>
           </div>
           <div className="feature-card">
-            <span>🎯 Practice workflow</span>
+            <span><Target size={16} style={{ verticalAlign: 'middle', marginRight: '6px' }} /> Practice workflow</span>
             <p>Upload a resume, choose a target company or the role based on your profile, and simulate real interview rounds.</p>
           </div>
           <div className="feature-card">
-            <span>⚡ Instant feedback</span>
+            <span><Zap size={16} style={{ verticalAlign: 'middle', marginRight: '6px' }} /> Instant feedback</span>
             <p>Get AI-driven performance analytics and readiness scores after every round.</p>
           </div>
         </div>
@@ -301,7 +290,7 @@ function AuthPage({ onAuth }) {
                       onClick={() => setShowPassword((current) => !current)}
                       aria-label={showPassword ? 'Hide password' : 'Show password'}
                     >
-                      {showPassword ? '👁️' : '👁'}
+                      {showPassword ? <EyeOff size={18} /> : <Eye size={18} />}
                     </button>
                   </div>
                   {fieldErrors.password ? <div className="field-error">{fieldErrors.password}</div> : null}
@@ -323,7 +312,7 @@ function AuthPage({ onAuth }) {
                         onClick={() => setShowConfirmPassword((current) => !current)}
                         aria-label={showConfirmPassword ? 'Hide confirm password' : 'Show confirm password'}
                       >
-                        {showConfirmPassword ? '👁️' : '👁'}
+                        {showConfirmPassword ? <EyeOff size={18} /> : <Eye size={18} />}
                       </button>
                     </div>
                     {fieldErrors.confirmPassword ? <div className="field-error">{fieldErrors.confirmPassword}</div> : null}
@@ -348,7 +337,7 @@ function AuthPage({ onAuth }) {
               <label>
                 One-time code
                 <button className="btn ghost" type="button" disabled={isSendingOtp || !canRequestOtp} onClick={sendOtp}>
-                  {isSendingOtp ? 'Sending…' : otpRequested ? 'Resend OTP' : 'Send OTP'}
+                  {isSendingOtp ? 'Sending\u2026' : otpRequested ? 'Resend OTP' : 'Send OTP'}
                 </button>
                 <input
                   className={`input ${fieldErrors.otp ? 'invalid' : ''}`}
@@ -382,7 +371,7 @@ function AuthPage({ onAuth }) {
 
           {error ? <div className="notice danger">{error}</div> : null}
           <button className="btn primary" type="submit" disabled={isSubmitting}>
-            {isSubmitting ? 'Verifying…' : isCreate ? 'Create account' : 'Login'}
+            {isSubmitting ? 'Verifying\u2026' : isCreate ? 'Create account' : 'Login'}
           </button>
         </form>
 
