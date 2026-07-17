@@ -3952,15 +3952,30 @@ label {
 .dashboard-page,
 .recruiter-page {
   padding: 1.5rem;
+}
+
+.dashboard-page > *:not(.page-header),
+.recruiter-page > *:not(.page-header) {
   max-width: 1200px;
-  margin: 0 auto;
+  margin-left: auto;
+  margin-right: auto;
 }
 
 .page-header {
   display: flex;
   justify-content: space-between;
   align-items: center;
+  gap: 1rem;
   margin-bottom: 1.5rem;
+}
+
+.page-header > div {
+  min-width: 0;
+}
+
+.page-header .btn {
+  flex-shrink: 0;
+  white-space: nowrap;
 }
 
 .page-header h2 {

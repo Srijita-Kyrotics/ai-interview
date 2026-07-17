@@ -7,7 +7,7 @@ function getAuthToken() {
       const user = JSON.parse(stored)
       return user?.token || ''
     }
-  } catch {}
+  } catch (_e) {
   return ''
 }
 

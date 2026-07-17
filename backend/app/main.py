@@ -4,7 +4,6 @@ import hashlib
 import hmac
 import json
 import logging
-import os
 import random
 import secrets
 import smtplib
@@ -18,8 +17,9 @@ from typing import Any, Dict, List, Optional
 import re
 import jwt
 import google.generativeai as genai
+from app.config import settings, BASE_DIR
 from app.db import (
-    init_db, migrate_accounts_json, cleanup_stale_data,
+    init_db, migrate_accounts_json, cleanup_stale_data, close_pool, check_db_health,
     save_session, load_session, get_first_session_id, get_sessions_by_user, get_all_sessions,
     save_user, load_user, user_exists, get_all_users, update_user_role,
     save_otp, load_otp, delete_otp,
@@ -34,38 +34,43 @@ from app.resume_parser import parse_resume_text, extract_text_from_pdf_content
 
 from fastapi import FastAPI, File, UploadFile, Header, HTTPException, Depends, Request
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse
 from contextlib import asynccontextmanager
-from dotenv import load_dotenv
 from pydantic import BaseModel
+from pythonjsonlogger import json as json_logger
 
 logger = logging.getLogger("ai_interview")
 
-BASE_DIR = Path(__file__).resolve().parents[2]
 SHARED_DIR = BASE_DIR / "shared"
 FRONTEND_QUESTIONS_DIR = BASE_DIR / "frontend" / "public" / "questions"
 
-load_dotenv(BASE_DIR / "backend" / ".env")
-load_dotenv(BASE_DIR / ".env")
-
-logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(name)s] %(levelname)s: %(message)s")
+if settings.log_format == "json":
+    handler = logging.StreamHandler()
+    handler.setFormatter(json_logger.JsonFormatter("%(asctime)s %(name)s %(levelname)s %(message)s"))
+    logging.basicConfig(level=getattr(logging, settings.log_level.upper(), logging.INFO), handlers=[handler])
+else:
+    logging.basicConfig(level=getattr(logging, settings.log_level.upper(), logging.INFO), format="%(asctime)s [%(name)s] %(levelname)s: %(message)s")
 
 @asynccontextmanager
 async def lifespan(app):
-    logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(name)s] %(levelname)s: %(message)s")
     init_db()
     _accounts_file = BASE_DIR / "backend" / "accounts.json"
     migrate_accounts_json(_accounts_file)
-    cleanup_stale_data()
-    logger.info("Application started")
+    cleanup_stale_data(
+        otp_ttl=settings.otp_ttl_seconds,
+        captcha_ttl=settings.captcha_ttl_seconds,
+        session_retention_days=settings.session_retention_days,
+    )
+    logger.info("Application started", extra={"environment": settings.environment})
     yield
+    close_pool()
     logger.info("Application shutting down")
 
 app = FastAPI(title="AI Mock Recruitment Platform", lifespan=lifespan)
 
-ALLOWED_ORIGINS = os.getenv("ALLOWED_ORIGINS", "http://localhost:5173,http://127.0.0.1:5173").split(",")
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=ALLOWED_ORIGINS,
+    allow_origins=settings.cors_origins,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -81,6 +86,21 @@ async def add_security_headers(request, call_next):
     response.headers["Content-Security-Policy"] = "default-src 'self'; script-src 'self' 'unsafe-inline' 'unsafe-eval'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; connect-src 'self'"
     response.headers["Strict-Transport-Security"] = "max-age=31536000; includeSubDomains"
     return response
+
+
+@app.get("/health")
+def health_check():
+    db_ok = check_db_health()
+    status = "healthy" if db_ok else "degraded"
+    code = 200 if db_ok else 503
+    return JSONResponse(
+        status_code=code,
+        content={
+            "status": status,
+            "database": "ok" if db_ok else "unreachable",
+            "environment": settings.environment,
+        },
+    )
 
 
 # ─── Rate Limiting ───────────────────────────────────────────────────────────
@@ -118,24 +138,10 @@ def _sanitize_for_ai(text: str, max_length: int = 5000) -> str:
     text = re.sub(r'[\x00-\x08\x0b\x0c\x0e-\x1f\x7f]', '', text)
     return text.strip()
 
-JWT_SECRET_FILE = BASE_DIR / "backend" / ".jwt_secret"
-JWT_ALGORITHM = "HS256"
-JWT_EXPIRY_HOURS = 24
-MAX_UPLOAD_BYTES = 10 * 1024 * 1024  # 10 MB
-
-
-def _load_or_create_jwt_secret() -> str:
-    if os.getenv("JWT_SECRET"):
-        return os.getenv("JWT_SECRET")
-    if JWT_SECRET_FILE.exists():
-        return JWT_SECRET_FILE.read_text(encoding="utf-8").strip()
-    secret = secrets.token_hex(32)
-    JWT_SECRET_FILE.parent.mkdir(parents=True, exist_ok=True)
-    JWT_SECRET_FILE.write_text(secret, encoding="utf-8")
-    return secret
-
-
-JWT_SECRET = _load_or_create_jwt_secret()
+JWT_SECRET = settings.resolved_jwt_secret
+JWT_ALGORITHM = settings.jwt_algorithm
+JWT_EXPIRY_HOURS = settings.jwt_expiry_hours
+MAX_UPLOAD_BYTES = settings.max_upload_bytes
 
 
 def create_token(email: str, role: str) -> str:
@@ -198,10 +204,10 @@ APTITUDE_QUESTIONS = load_questions_json("aptitude.json")
 CODING_QUESTIONS = load_json("coding_questions.json")
 TECHNICAL_QUESTIONS = load_json("technical_questions.json")
 HR_QUESTIONS = load_json("hr_questions.json")
-OTP_TTL_SECONDS = 300
-CAPTCHA_TTL_SECONDS = 300
-OTP_RATE_LIMIT = 5  # max requests per email
-OTP_RATE_WINDOW = 600  # 10 minutes in seconds
+OTP_TTL_SECONDS = settings.otp_ttl_seconds
+CAPTCHA_TTL_SECONDS = settings.captcha_ttl_seconds
+OTP_RATE_LIMIT = settings.otp_rate_limit
+OTP_RATE_WINDOW = settings.otp_rate_window
 
 
 def default_scores() -> Dict[str, int]:
@@ -232,7 +238,7 @@ def score_open_round(answers: List[Dict[str, Any]], round_key: str) -> int:
     if not answers:
         return 0
 
-    gemini_key = os.getenv("GEMINI_API_KEY")
+    gemini_key = settings.gemini_api_key
     if gemini_key:
         try:
             genai.configure(api_key=gemini_key)
@@ -264,7 +270,7 @@ def score_open_round(answers: List[Dict[str, Any]], round_key: str) -> int:
         else:
             words = len(text.split())
             total_score += min(100, words * 2 + 20)
-    
+
     return round(total_score / len(answers))
 
 
@@ -385,25 +391,13 @@ class RunCodeRequest(BaseModel):
 
 
 def send_email_otp(email: str, otp: str) -> bool:
-    smtp_host = os.getenv("SMTP_HOST")
-    smtp_port_str = os.getenv("SMTP_PORT", "587")
-    smtp_user = os.getenv("SMTP_USER")
-    smtp_password = os.getenv("SMTP_PASSWORD")
-    smtp_from = os.getenv("SMTP_FROM", smtp_user or "")
-
-    if not smtp_host or not smtp_user or not smtp_password or not smtp_from:
-        logger.warning("Missing SMTP config - HOST: %s, USER: %s, PASSWORD: %s, FROM: %s", bool(smtp_host), bool(smtp_user), bool(smtp_password), bool(smtp_from))
-        return False
-
-    try:
-        smtp_port = int(smtp_port_str)
-    except ValueError:
-        logger.warning("Invalid SMTP_PORT: %s", smtp_port_str)
+    if not settings.smtp_configured:
+        logger.warning("SMTP not configured")
         return False
 
     message = EmailMessage()
     message["Subject"] = "Mock Recruitment Platform OTP"
-    message["From"] = smtp_from
+    message["From"] = settings.smtp_from
     message["To"] = email
     message.set_content(
         f"Your Mock Recruitment Platform OTP is {otp}. It expires in 5 minutes."
@@ -411,14 +405,14 @@ def send_email_otp(email: str, otp: str) -> bool:
 
     try:
         context = ssl.create_default_context()
-        with smtplib.SMTP(smtp_host, smtp_port) as server:
+        with smtplib.SMTP(settings.smtp_host, settings.smtp_port) as server:
             server.starttls(context=context)
-            server.login(smtp_user, smtp_password)
+            server.login(settings.smtp_user, settings.smtp_password)
             server.send_message(message)
-        logger.info("OTP email sent successfully to %s", email)
+        logger.info("OTP email sent successfully", extra={"email": email})
         return True
     except Exception as e:
-        logger.error("SMTP Error: %s: %s", type(e).__name__, str(e))
+        logger.error("SMTP Error", extra={"error_type": type(e).__name__, "error": str(e)})
         return False
 
 
@@ -441,9 +435,9 @@ def send_otp(payload: SendOtpRequest, request: Request):
         return {"ok": False, "error": "Enter a valid email address."}
 
     ip = _client_ip(request)
-    if not _check_rate_limit(f"otp:{email}", OTP_RATE_LIMIT, OTP_RATE_WINDOW):
+    if not _check_rate_limit(f"otp:{email}", settings.otp_rate_limit, settings.otp_rate_window):
         return {"ok": False, "error": "Too many requests. Please wait a few minutes."}
-    if not _check_rate_limit(f"otp_ip:{ip}", 20, OTP_RATE_WINDOW):
+    if not _check_rate_limit(f"otp_ip:{ip}", 20, settings.otp_rate_window):
         return {"ok": False, "error": "Too many requests from this IP. Please wait."}
 
     otp = f"{secrets.randbelow(900000) + 100000}"
@@ -456,27 +450,20 @@ def send_otp(payload: SendOtpRequest, request: Request):
     response = {"ok": True, "sent": sent, "message": "OTP sent to your email."}
     if not sent:
         response["message"] = "SMTP is not configured. Showing development OTP."
-        if os.getenv("ENVIRONMENT", "development") == "development":
+        if settings.environment == "development":
             response["dev_otp"] = otp
     return response
 
 
 @app.get("/health/smtp")
 def check_smtp_status(user: Dict[str, Any] = Depends(require_admin)):
-    """Diagnostic endpoint to check SMTP configuration (admin only)."""
-    smtp_host = os.getenv("SMTP_HOST")
-    smtp_port = os.getenv("SMTP_PORT")
-    smtp_user = os.getenv("SMTP_USER")
-    smtp_password = os.getenv("SMTP_PASSWORD")
-    smtp_from = os.getenv("SMTP_FROM")
-    
     return {
-        "smtp_host": smtp_host or "NOT SET",
-        "smtp_port": smtp_port or "NOT SET",
-        "smtp_user": smtp_user or "NOT SET",
-        "smtp_from": smtp_from or "NOT SET",
-        "smtp_password_set": bool(smtp_password),
-        "all_configured": bool(smtp_host and smtp_user and smtp_password and smtp_from)
+        "smtp_host": settings.smtp_host or "NOT SET",
+        "smtp_port": settings.smtp_port,
+        "smtp_user": settings.smtp_user or "NOT SET",
+        "smtp_from": settings.smtp_from or "NOT SET",
+        "smtp_password_set": bool(settings.smtp_password),
+        "all_configured": settings.smtp_configured,
     }
 
 
@@ -761,10 +748,10 @@ async def simulate_code_run(question_id: int, language: str, code: str) -> Dict[
     test_cases = question.get("testCases", [])
     results = []
     passed = 0
-    
-    judge0_key = os.getenv("JUDGE0_API_KEY")
-    judge0_host = os.getenv("JUDGE0_HOST", "judge0-ce.p.rapidapi.com")
-    
+
+    judge0_key = settings.judge0_api_key
+    judge0_host = settings.judge0_host
+
     language_ids = {
         "python": 71,
         "javascript": 63,
@@ -772,7 +759,7 @@ async def simulate_code_run(question_id: int, language: str, code: str) -> Dict[
         "c": 50,
         "csharp": 51
     }
-    
+
     if not judge0_key or language not in language_ids:
         # Fallback to heuristic
         heuristic = code.lower()
@@ -780,7 +767,7 @@ async def simulate_code_run(question_id: int, language: str, code: str) -> Dict[
             expected = case.get("expected", "")
             output = ""
             status = "failed"
-    
+
             if question_id == 1 and "reverse" in heuristic:
                 output = expected
                 status = "passed"
@@ -798,7 +785,7 @@ async def simulate_code_run(question_id: int, language: str, code: str) -> Dict[
                 status = "passed"
             else:
                 output = "Runtime output did not match expected result."
-    
+
             if status == "passed":
                 passed += 1
             results.append({"input": case.get("input"), "expected": expected, "output": output, "status": status})
@@ -810,7 +797,7 @@ async def simulate_code_run(question_id: int, language: str, code: str) -> Dict[
                 "x-rapidapi-host": judge0_host,
                 "Content-Type": "application/json"
             }
-            
+
             for case in test_cases:
                 expected = case.get("expected", "")
                 payload = {
@@ -819,7 +806,7 @@ async def simulate_code_run(question_id: int, language: str, code: str) -> Dict[
                     "stdin": str(case.get("input", "")),
                     "expected_output": expected
                 }
-                
+
                 try:
                     response = await client.post(
                         f"https://{judge0_host}/submissions?base64_encoded=false&wait=true",
@@ -827,22 +814,22 @@ async def simulate_code_run(question_id: int, language: str, code: str) -> Dict[
                         headers=headers,
                         timeout=10.0
                     )
-                    
+
                     if response.status_code == 200:
                         data = response.json()
                         stdout = data.get("stdout") or ""
                         stderr = data.get("stderr") or ""
                         compile_output = data.get("compile_output") or ""
-                        
+
                         actual_output = stdout.strip() if stdout else (stderr or compile_output).strip()
-                        
+
                         status_id = data.get("status", {}).get("id")
                         if status_id == 3: # Accepted
                             status = "passed"
                             passed += 1
                         else:
                             status = "failed"
-                            
+
                         results.append({
                             "input": case.get("input"),
                             "expected": expected,
@@ -879,8 +866,7 @@ async def simulate_code_run(question_id: int, language: str, code: str) -> Dict[
 
 @app.post("/run-code")
 async def run_code(payload: RunCodeRequest, user: Dict[str, Any] = Depends(require_candidate), request: Request = None):
-    ip = _client_ip(request) if request else "unknown"
-    if not _check_rate_limit(f"code:{user['email']}", 20, 600):
+    if not _check_rate_limit(f"code:{user['email']}", settings.code_rate_limit, settings.code_rate_window):
         raise HTTPException(status_code=429, detail="Too many code execution requests. Please wait.")
     return await simulate_code_run(payload.question_id, payload.language, payload.code)
 
@@ -917,7 +903,7 @@ def add_proctoring_violation(payload: ProctoringViolationRequest, user: Dict[str
     logs = load_proctoring(payload.session_id)
     if not logs:
         logs = {"violations": [], "snapshots": [], "warnings": 0, "integrity_score": 100, "assessment_status": "Passed Proctoring"}
-    
+
     logs["violations"].append(payload.violation)
     logs["warnings"] = payload.warnings
     logs["integrity_score"] = payload.integrity_score
@@ -935,7 +921,7 @@ def add_proctoring_snapshot(payload: ProctoringSnapshotRequest, user: Dict[str, 
     logs = load_proctoring(payload.session_id)
     if not logs:
         logs = {"violations": [], "snapshots": [], "warnings": 0, "integrity_score": 100, "assessment_status": "Passed Proctoring"}
-        
+
     logs["snapshots"].append(payload.snapshot)
     save_proctoring(payload.session_id, logs)
     return {"ok": True}
@@ -963,8 +949,7 @@ class AIFeedbackRequest(BaseModel):
 
 @app.post("/ai/questions")
 async def generate_ai_questions(payload: AIQuestionsRequest, user: Dict[str, Any] = Depends(require_candidate), request: Request = None):
-    ip = _client_ip(request) if request else "unknown"
-    if not _check_rate_limit(f"ai:{user['email']}", 10, 600):
+    if not _check_rate_limit(f"ai:{user['email']}", settings.ai_rate_limit, settings.ai_rate_window):
         raise HTTPException(status_code=429, detail="Too many AI requests. Please wait.")
     state = load_session(payload.session_id)
     if not state:
@@ -972,19 +957,19 @@ async def generate_ai_questions(payload: AIQuestionsRequest, user: Dict[str, Any
     if state.get("user_id") and state.get("user_id") != user["email"]:
         raise HTTPException(status_code=403, detail="Not your session")
 
-    gemini_key = os.getenv("GEMINI_API_KEY")
+    gemini_key = settings.gemini_api_key
     if not gemini_key:
         return {"error": "Gemini API key not configured"}
 
     genai.configure(api_key=gemini_key)
     model = genai.GenerativeModel("gemini-1.5-flash")
-    
+
     resume = state.get("resume", {})
     skills = _sanitize_for_ai(", ".join(resume.get("skills", [])))
     company = _sanitize_for_ai(state.get("selectedCompany", "Unknown"))
 
     prompt = f"Generate {payload.count} {payload.round_type} interview questions for a candidate applying to {company} with skills in {skills}. Respond with a JSON array of objects, each containing a 'question' string and an 'id' integer."
-    
+
     try:
         response = model.generate_content(prompt)
         text = response.text
@@ -1000,8 +985,7 @@ async def generate_ai_questions(payload: AIQuestionsRequest, user: Dict[str, Any
 
 @app.post("/ai/feedback")
 async def generate_ai_feedback(payload: AIFeedbackRequest, user: Dict[str, Any] = Depends(require_candidate), request: Request = None):
-    ip = _client_ip(request) if request else "unknown"
-    if not _check_rate_limit(f"ai:{user['email']}", 10, 600):
+    if not _check_rate_limit(f"ai:{user['email']}", settings.ai_rate_limit, settings.ai_rate_window):
         raise HTTPException(status_code=429, detail="Too many AI requests. Please wait.")
     state = load_session(payload.session_id)
     if not state:
@@ -1009,13 +993,13 @@ async def generate_ai_feedback(payload: AIFeedbackRequest, user: Dict[str, Any] 
     if state.get("user_id") and state.get("user_id") != user["email"]:
         raise HTTPException(status_code=403, detail="Not your session")
 
-    gemini_key = os.getenv("GEMINI_API_KEY")
+    gemini_key = settings.gemini_api_key
     if not gemini_key:
         return {"error": "Gemini API key not configured"}
 
     genai.configure(api_key=gemini_key)
     model = genai.GenerativeModel("gemini-1.5-flash")
-    
+
     answers = state.get("answers", {})
     sanitized_answers = {k: _sanitize_for_ai(json.dumps(v)) for k, v in answers.items()}
     prompt = f"Review the following interview answers and provide personalised feedback. Answers: {json.dumps(sanitized_answers)}. Provide strengths, weaknesses, and 3 concrete recommendations in JSON format: {{ 'strengths': ['...'], 'weaknesses': ['...'], 'recommendations': ['...'], 'feedback': {{'technical': '...', 'hr': '...'}} }}"
@@ -1214,8 +1198,7 @@ class UpdateRoleRequest(BaseModel):
 
 @app.post("/admin/update-role")
 def admin_update_role(payload: UpdateRoleRequest, user: Dict[str, Any] = Depends(require_admin), request: Request = None):
-    ip = _client_ip(request) if request else "unknown"
-    if not _check_rate_limit(f"admin:{user['email']}", 30, 600):
+    if not _check_rate_limit(f"admin:{user['email']}", settings.admin_rate_limit, settings.admin_rate_window):
         raise HTTPException(status_code=429, detail="Too many requests. Please wait.")
     if payload.role not in ("candidate", "recruiter", "admin"):
         raise HTTPException(status_code=400, detail="Role must be candidate, recruiter, or admin")
@@ -1303,8 +1286,8 @@ async def admin_upload_questions(file: UploadFile = File(...), user: Dict[str, A
     content = await file.read()
     try:
         data = json.loads(content.decode("utf-8"))
-    except (json.JSONDecodeError, UnicodeDecodeError):
-        raise HTTPException(status_code=400, detail="Invalid JSON file")
+    except (json.JSONDecodeError, UnicodeDecodeError) as exc:
+        raise HTTPException(status_code=400, detail="Invalid JSON file") from exc
     round_type = data.get("round_type", "")
     questions = data.get("questions", [])
     if not round_type or not questions:

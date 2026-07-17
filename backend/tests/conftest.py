@@ -1,49 +1,64 @@
-import os
 import sys
 import time
-import tempfile
 import secrets
 import pytest
 from pathlib import Path
 from fastapi.testclient import TestClient
 
-# Ensure the backend app package is importable
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
-# Override DB_FILE before importing app modules
-_tmp_db = tempfile.NamedTemporaryFile(suffix=".db", delete=False)
-_tmp_db_path = _tmp_db.name
-_tmp_db.close()
+from app.config import settings
+
+# Force test database
+settings.database_url = settings.database_url.replace("/ai_interview", "/ai_interview_test")
 
 import app.db as _db
-_db.DB_FILE = Path(_tmp_db_path)
+_db._pool = None  # Reset pool so it picks up test URL
 
 from app.main import app, create_token, hash_password
-from app.db import init_db, save_user, save_session, save_otp, save_captcha
+from app.db import init_db, save_user, save_session, save_otp, save_captcha, get_connection, release_connection, close_pool
+
+
+@pytest.fixture(scope="session", autouse=True)
+def _init_test_db():
+    """Initialize test database once for entire session."""
+    import psycopg2
+    # Connect to default postgres DB to create test DB if needed
+    admin_url = settings.database_url.rsplit("/", 1)[0] + "/postgres"
+    conn = psycopg2.connect(admin_url)
+    conn.autocommit = True
+    cur = conn.cursor()
+    cur.execute("SELECT 1 FROM pg_database WHERE datname = 'ai_interview_test'")
+    if not cur.fetchone():
+        cur.execute("CREATE DATABASE ai_interview_test")
+    cur.close()
+    conn.close()
+
+    init_db()
+    yield
+    close_pool()
 
 
 @pytest.fixture(autouse=True)
-def _setup_db():
-    """Fresh DB for every test."""
-    init_db()
+def _cleanup_db():
+    """Truncate all tables between tests."""
     yield
-    # Cleanup
-    for f in [_tmp_db_path, _tmp_db_path + "-wal", _tmp_db_path + "-shm"]:
-        try:
-            os.unlink(f)
-        except OSError:
-            pass
+    conn = get_connection()
+    try:
+        c = conn.cursor()
+        c.execute("TRUNCATE TABLE proctoring_logs, captcha_state, otp_state, sessions, users RESTART IDENTITY CASCADE")
+        conn.commit()
+    finally:
+        release_connection(conn)
 
 
 @pytest.fixture()
 def client():
-    """FastAPI TestClient."""
     return TestClient(app)
 
 
 @pytest.fixture()
 def seed_user():
-    """Register a test user and return credentials."""
     def _seed(email="test@example.com", password="Str0ng!Pass", name="Test User", role="candidate"):
         hashed = hash_password(password)
         save_user(email, name, hashed["salt"], hashed["hash"], role)
@@ -53,7 +68,6 @@ def seed_user():
 
 @pytest.fixture()
 def auth_header():
-    """Return an Authorization header for a given email+role."""
     def _header(email="test@example.com", role="candidate"):
         token = create_token(email, role)
         return {"Authorization": f"Bearer {token}"}
@@ -62,7 +76,6 @@ def auth_header():
 
 @pytest.fixture()
 def seed_session():
-    """Create a session and return its ID."""
     import uuid
 
     def _seed(user_id="test@example.com", data=None):
