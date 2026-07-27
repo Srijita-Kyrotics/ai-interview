@@ -120,7 +120,7 @@ function AdminSessionModal({ sessionId, modalType = 'report', onClose }) {
                     {proctoring.violations.map((v, i) => (
                       <div key={i} className="violation-item">
                         {v.type || v.message || JSON.stringify(v)}
-                        {v.timestamp && <span className="violation-time">{new Date(v.timestamp * 1000).toLocaleTimeString()}</span>}
+                        {v.timestamp && <span className="violation-time">{new Date(v.timestamp).toLocaleTimeString()}</span>}
                       </div>
                     ))}
                   </div>

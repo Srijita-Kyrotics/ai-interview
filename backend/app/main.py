@@ -11,7 +11,6 @@ import smtplib
 import ssl
 import time
 import uuid
-from collections import defaultdict
 from contextlib import asynccontextmanager
 from email.message import EmailMessage
 from typing import Any
@@ -27,7 +26,11 @@ from pythonjsonlogger import json as json_logger
 
 from app.config import BASE_DIR, settings
 from app.db import (
+    cache_get,
+    cache_set,
     check_db_health,
+    check_rate_limit,
+    cleanup_expired_cache,
     cleanup_stale_data,
     close_pool,
     delete_captcha,
@@ -54,8 +57,8 @@ from app.resume_parser import extract_text_from_pdf_content, parse_resume_text
 
 logger = logging.getLogger("ai_interview")
 
-SHARED_DIR = BASE_DIR / "shared"
-FRONTEND_QUESTIONS_DIR = BASE_DIR / "frontend" / "public" / "questions"
+SHARED_DIR = settings.shared_dir_path
+FRONTEND_QUESTIONS_DIR = settings.frontend_questions_dir_path
 
 if settings.log_format == "json":
     handler = logging.StreamHandler()
@@ -74,6 +77,7 @@ async def lifespan(app):
         captcha_ttl=settings.captcha_ttl_seconds,
         session_retention_days=settings.session_retention_days,
     )
+    cleanup_expired_cache()
     logger.info("Application started", extra={"environment": settings.environment})
     yield
     close_pool()
@@ -96,7 +100,14 @@ async def add_security_headers(request, call_next):
     response.headers["X-Frame-Options"] = "DENY"
     response.headers["Referrer-Policy"] = "strict-origin-when-cross-origin"
     response.headers["Permissions-Policy"] = "camera=(), microphone=(), geolocation=()"
-    response.headers["Content-Security-Policy"] = "default-src 'self'; script-src 'self' 'unsafe-inline' 'unsafe-eval'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; connect-src 'self'"
+    response.headers["Content-Security-Policy"] = (
+        "default-src 'self'; "
+        "script-src 'self'; "
+        "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; "
+        "font-src 'self' https://fonts.gstatic.com data:; "
+        "img-src 'self' data: blob:; "
+        f"connect-src {settings.csp_connect_sources}"
+    )
     response.headers["Strict-Transport-Security"] = "max-age=31536000; includeSubDomains"
     return response
 
@@ -116,33 +127,23 @@ def health_check():
     )
 
 
-# ─── Rate Limiting ───────────────────────────────────────────────────────────
-_rate_limits: dict[str, list[float]] = defaultdict(list)
+# ─── Rate Limiting (DB-backed, works across workers) ──────────────────────────
 
 def _check_rate_limit(key: str, limit: int, window: int) -> bool:
-    now = time.time()
-    _rate_limits[key] = [t for t in _rate_limits[key] if now - t < window]
-    if len(_rate_limits[key]) >= limit:
-        return False
-    _rate_limits[key].append(now)
-    return True
+    return check_rate_limit(key, limit, window)
 
 def _client_ip(request: Request) -> str:
     forwarded = request.headers.get("x-forwarded-for")
     return forwarded.split(",")[0].strip() if forwarded else request.client.host if request.client else "unknown"
 
 
-# ─── Response Caching ────────────────────────────────────────────────────────
-_cache: dict[str, Any] = {}
+# ─── Response Caching (DB-backed, works across workers) ──────────────────────
 
 def _cache_get(key: str, ttl: int = 300) -> Any:
-    entry = _cache.get(key)
-    if entry and time.time() - entry["ts"] < ttl:
-        return entry["data"]
-    return None
+    return cache_get(key, ttl)
 
-def _cache_set(key: str, data: Any) -> None:
-    _cache[key] = {"data": data, "ts": time.time()}
+def _cache_set(key: str, data: Any, ttl: int = 300) -> None:
+    cache_set(key, data, ttl)
 
 
 # ─── Input Sanitization ──────────────────────────────────────────────────────
@@ -203,12 +204,18 @@ async def require_admin(user: dict[str, Any] = Depends(get_current_user)) -> dic
 
 
 def load_json(name: str) -> Any:
-    with open(SHARED_DIR / name, encoding="utf-8") as f:
+    path = SHARED_DIR / name
+    if not path.exists():
+        raise RuntimeError(f"Required data file not found: {path}")
+    with open(path, encoding="utf-8") as f:
         return json.load(f)
 
 
 def load_questions_json(name: str) -> Any:
-    with open(FRONTEND_QUESTIONS_DIR / name, encoding="utf-8") as f:
+    path = FRONTEND_QUESTIONS_DIR / name
+    if not path.exists():
+        raise RuntimeError(f"Required questions file not found: {path}")
+    with open(path, encoding="utf-8") as f:
         return json.load(f)
 
 
@@ -224,13 +231,13 @@ OTP_RATE_WINDOW = settings.otp_rate_window
 
 
 def default_scores() -> dict[str, int]:
-    return {"aptitude": 80, "coding": 75, "technical": 70, "hr": 85}
+    return dict(settings.default_scores)
 
 
 def hash_password(password: str, salt: str | None = None) -> dict[str, str]:
     if salt is None:
         salt = secrets.token_hex(16)
-    key = hashlib.pbkdf2_hmac("sha256", password.encode("utf-8"), salt.encode("utf-8"), 120000)
+    key = hashlib.pbkdf2_hmac("sha256", password.encode("utf-8"), salt.encode("utf-8"), settings.pbkdf2_iterations)
     return {"salt": salt, "hash": key.hex()}
 
 
@@ -244,7 +251,11 @@ def validate_email_format(email: str) -> bool:
 
 
 def has_strong_password(password: str) -> bool:
-    return len(password) >= 8 and bool(re.search(r"[^A-Za-z0-9]", password))
+    return (
+        len(password) >= settings.min_password_length
+        and bool(re.search(r"[A-Z]", password))
+        and bool(re.search(r"[0-9]", password))
+    )
 
 
 def score_open_round(answers: list[dict[str, Any]], round_key: str) -> int:
@@ -255,7 +266,7 @@ def score_open_round(answers: list[dict[str, Any]], round_key: str) -> int:
     if gemini_key:
         try:
             genai.configure(api_key=gemini_key)
-            model = genai.GenerativeModel("gemini-1.5-flash")
+            model = genai.GenerativeModel(settings.gemini_model)
             prompt = f"Score the following {round_key} interview answers out of 100 based on quality, clarity, and depth. Answers: {json.dumps(answers)}. Only return the integer score from 0 to 100."
             response = model.generate_content(prompt)
             match = re.search(r'\b(100|\d{1,2})\b', response.text)
@@ -303,8 +314,16 @@ def make_report(state: dict[str, Any]) -> dict[str, Any]:
         scores["hr"] = score_open_round(answers["hr"], "hr")
 
     overall = round(sum(scores.values()) / len(scores))
+
+    account_name = ""
+    user_id = state.get("user_id", "")
+    if user_id:
+        account = load_user(user_id)
+        if account:
+            account_name = account.get("name", "")
+
     return {
-        "candidateName": state.get("resume", {}).get("name", "Candidate"),
+        "candidateName": account_name or state.get("resume", {}).get("name", "Candidate"),
         "selectedCompany": state.get("selectedCompany", ""),
         "selectedCompanies": state.get("selectedCompanies", []),
         "scores": scores,
@@ -371,26 +390,17 @@ class SendOtpRequest(BaseModel):
 
 class VerifyAuthRequest(BaseModel):
     email: str
-    otp: str
-    captcha_token: str
-    captcha_answer: str
 
 
 class RegisterRequest(BaseModel):
     email: str
     password: str
     name: str
-    otp: str
-    captcha_token: str
-    captcha_answer: str
 
 
 class LoginRequest(BaseModel):
     email: str
     password: str
-    otp: str
-    captcha_token: str
-    captcha_answer: str
 
 
 class EmailCheckRequest(BaseModel):
@@ -409,7 +419,7 @@ def send_email_otp(email: str, otp: str) -> bool:
         return False
 
     message = EmailMessage()
-    message["Subject"] = "Mock Recruitment Platform OTP"
+    message["Subject"] = settings.email_subject
     message["From"] = settings.smtp_from
     message["To"] = email
     message.set_content(
@@ -450,7 +460,7 @@ def send_otp(payload: SendOtpRequest, request: Request):
     ip = _client_ip(request)
     if not _check_rate_limit(f"otp:{email}", settings.otp_rate_limit, settings.otp_rate_window):
         return {"ok": False, "error": "Too many requests. Please wait a few minutes."}
-    if not _check_rate_limit(f"otp_ip:{ip}", 20, settings.otp_rate_window):
+    if not _check_rate_limit(f"otp_ip:{ip}", settings.otp_ip_rate_limit, settings.otp_rate_window):
         return {"ok": False, "error": "Too many requests from this IP. Please wait."}
 
     otp = f"{secrets.randbelow(900000) + 100000}"
@@ -493,7 +503,7 @@ def validate_otp_and_captcha(email: str, otp: str, captcha_token: str, captcha_a
 
     if not otp_state or otp_state["expiresAt"] < now:
         return False, "OTP expired. Please request a new OTP."
-    if otp_state["attempts"] >= 5:
+    if otp_state["attempts"] >= settings.max_otp_attempts:
         return False, "Too many OTP attempts. Please request a new OTP."
     if otp_state["otp"] != otp.strip():
         otp_state["attempts"] += 1
@@ -530,16 +540,10 @@ def register(payload: RegisterRequest):
         return {"ok": False, "error": "Full name is required."}
 
     if not has_strong_password(payload.password):
-        return {"ok": False, "error": "Password must be at least 8 characters and include a special character."}
-
-    is_valid, error_message = validate_otp_and_captcha(email, payload.otp, payload.captcha_token, payload.captcha_answer)
-    if not is_valid:
-        return {"ok": False, "error": error_message}
+        return {"ok": False, "error": "Password must be at least 8 characters and include an uppercase letter and a digit."}
 
     if user_exists(email):
         return {"ok": False, "error": "An account already exists for this email."}
-
-    consume_otp_and_captcha(email, payload.captcha_token)
 
     password_data = hash_password(payload.password)
     role = "admin" if not get_all_users() else "candidate"
@@ -554,15 +558,9 @@ def login(payload: LoginRequest):
     if not validate_email_format(email):
         return {"ok": False, "error": "Enter a valid email address."}
 
-    is_valid, error_message = validate_otp_and_captcha(email, payload.otp, payload.captcha_token, payload.captcha_answer)
-    if not is_valid:
-        return {"ok": False, "error": error_message}
-
     account = load_user(email)
     if not account or not verify_password(payload.password, account):
         return {"ok": False, "error": "Email or password is incorrect."}
-
-    consume_otp_and_captcha(email, payload.captcha_token)
 
     role = account.get("role", "candidate")
     token = create_token(email, role)
@@ -577,6 +575,72 @@ def check_email(payload: EmailCheckRequest):
 
     exists = user_exists(email)
     return {"ok": True, "exists": exists}
+
+
+class ForgotPasswordRequest(BaseModel):
+    email: str
+
+
+class ResetPasswordRequest(BaseModel):
+    email: str
+    token: str
+    new_password: str
+
+
+@app.post("/auth/forgot-password")
+def forgot_password(payload: ForgotPasswordRequest):
+    email = payload.email.strip().lower()
+    if not validate_email_format(email):
+        return {"ok": False, "error": "Enter a valid email address."}
+
+    if not user_exists(email):
+        return {"ok": False, "error": "No account found with this email."}
+
+    token = secrets.token_urlsafe(32)
+    save_otp(email, {
+        "otp": token,
+        "expiresAt": time.time() + OTP_TTL_SECONDS,
+        "attempts": 0,
+    })
+
+    sent = send_email_otp(email, token)
+    response = {"ok": True, "message": "Password reset token sent to your email."}
+    if not sent:
+        response["message"] = "SMTP is not configured. Use the development token below."
+        if settings.environment == "development":
+            response["dev_token"] = token
+    return response
+
+
+@app.post("/auth/reset-password")
+def reset_password(payload: ResetPasswordRequest):
+    email = payload.email.strip().lower()
+    if not validate_email_format(email):
+        return {"ok": False, "error": "Enter a valid email address."}
+
+    if not has_strong_password(payload.new_password):
+        return {"ok": False, "error": "Password must be at least 8 characters and include an uppercase letter and a digit."}
+
+    otp_state = load_otp(email)
+    now = time.time()
+
+    if not otp_state or otp_state["expiresAt"] < now:
+        return {"ok": False, "error": "Reset token expired. Please request a new one."}
+    if otp_state["otp"] != payload.token.strip():
+        otp_state["attempts"] += 1
+        save_otp(email, otp_state)
+        return {"ok": False, "error": "Invalid reset token."}
+
+    delete_otp(email)
+
+    account = load_user(email)
+    if not account:
+        return {"ok": False, "error": "Account not found."}
+
+    password_data = hash_password(payload.new_password)
+    save_user(email, account.get("name", email.split('@')[0]), password_data["salt"], password_data["hash"], account.get("role", "candidate"))
+
+    return {"ok": True, "message": "Password reset successful. You can now login."}
 
 
 @app.get("/companies")
@@ -596,15 +660,16 @@ async def upload_resume(file: UploadFile = File(...), user: dict[str, Any] = Dep
     filename = file.filename.lower()
 
     if filename.endswith(".pdf"):
-        text = extract_text_from_pdf_content(content)
+        try:
+            text = extract_text_from_pdf_content(content)
+        except ValueError as e:
+            raise HTTPException(status_code=400, detail=str(e)) from e
 
     elif filename.endswith(".txt"):
         text = content.decode("utf-8", errors="ignore")
 
     else:
-        return {
-            "error": "Only PDF and TXT files are supported"
-        }
+        raise HTTPException(status_code=400, detail="Only PDF and TXT files are supported")
 
     session_id = str(uuid.uuid4())
 
@@ -628,10 +693,12 @@ async def upload_resume(file: UploadFile = File(...), user: dict[str, Any] = Dep
 
 
 @app.post("/select-company")
-def select_company(payload: CompanySelection):
+def select_company(payload: CompanySelection, user: dict[str, Any] = Depends(require_candidate)):
     state = load_session(payload.session_id)
     if not state:
         return {"error": "No active session"}
+    if state.get("user_id") and state.get("user_id") != user["email"] and user["role"] not in ("recruiter", "admin"):
+        raise HTTPException(status_code=403, detail="Not your session")
 
     if not payload.companies:
         return {"error": "Please select at least one company"}
@@ -700,7 +767,8 @@ def submit_answer(payload: SubmitAnswerRequest):
                     question = item
                     break
             if question:
-                correct_answer = quiz.get("answers", {}).get(payload.question_id or "", "")
+                qid = payload.question_id
+                correct_answer = quiz.get("answers", {}).get(qid, quiz.get("answers", {}).get(str(qid), ""))
                 is_correct = payload.answer == correct_answer
                 state.setdefault("aptitudeScore", {}).setdefault(category, {"correct": 0, "total": 0})
                 state["aptitudeScore"][category]["total"] += 1
@@ -764,24 +832,18 @@ async def simulate_code_run(question_id: int, language: str, code: str) -> dict[
 
     judge0_key = settings.judge0_api_key
     judge0_host = settings.judge0_host
-
-    language_ids = {
-        "python": 71,
-        "javascript": 63,
-        "java": 62,
-        "c": 50,
-        "csharp": 51
-    }
+    language_ids = settings.judge0_language_ids
 
     if not judge0_key or language not in language_ids:
-        # Fallback to heuristic
+        # Fallback to heuristic: check if code references expected data structures
         heuristic = code.lower()
         for case in test_cases:
             expected = case.get("expected", "")
             output = ""
             status = "failed"
 
-            if question_id == 1 and "reverse" in heuristic or question_id == 2 and "twosum" in heuristic or question_id == 3 and ("isvalid" in heuristic or "paren" in heuristic) or question_id == 4 and "fib" in heuristic or question_id == 5 and ("merge" in heuristic or "merge_sorted" in heuristic):
+            keywords = case.get("pass_keywords", [])
+            if keywords and any(kw.lower() in heuristic for kw in keywords):
                 output = expected
                 status = "passed"
             else:
@@ -813,7 +875,7 @@ async def simulate_code_run(question_id: int, language: str, code: str) -> dict[
                         f"https://{judge0_host}/submissions?base64_encoded=false&wait=true",
                         json=payload,
                         headers=headers,
-                        timeout=10.0
+                        timeout=settings.judge0_timeout
                     )
 
                     if response.status_code == 200:
@@ -866,7 +928,7 @@ async def simulate_code_run(question_id: int, language: str, code: str) -> dict[
 
 
 @app.post("/run-code")
-async def run_code(payload: RunCodeRequest, user: dict[str, Any] = Depends(require_candidate), request: Request = None):
+async def run_code(payload: RunCodeRequest, user: dict[str, Any] = Depends(require_candidate)):
     if not _check_rate_limit(f"code:{user['email']}", settings.code_rate_limit, settings.code_rate_window):
         raise HTTPException(status_code=429, detail="Too many code execution requests. Please wait.")
     return await simulate_code_run(payload.question_id, payload.language, payload.code)
@@ -949,13 +1011,13 @@ class AIFeedbackRequest(BaseModel):
     session_id: str
 
 @app.post("/ai/questions")
-async def generate_ai_questions(payload: AIQuestionsRequest, user: dict[str, Any] = Depends(require_candidate), request: Request = None):
+def generate_ai_questions(payload: AIQuestionsRequest, user: dict[str, Any] = Depends(require_candidate)):
     if not _check_rate_limit(f"ai:{user['email']}", settings.ai_rate_limit, settings.ai_rate_window):
         raise HTTPException(status_code=429, detail="Too many AI requests. Please wait.")
     state = load_session(payload.session_id)
     if not state:
         return {"error": "No active session"}
-    if state.get("user_id") and state.get("user_id") != user["email"]:
+    if state.get("user_id", "") != user["email"] and user["role"] not in ("recruiter", "admin"):
         raise HTTPException(status_code=403, detail="Not your session")
 
     gemini_key = settings.gemini_api_key
@@ -963,7 +1025,7 @@ async def generate_ai_questions(payload: AIQuestionsRequest, user: dict[str, Any
         return {"error": "Gemini API key not configured"}
 
     genai.configure(api_key=gemini_key)
-    model = genai.GenerativeModel("gemini-1.5-flash")
+    model = genai.GenerativeModel(settings.gemini_model)
 
     resume = state.get("resume", {})
     skills = _sanitize_for_ai(", ".join(resume.get("skills", [])))
@@ -985,13 +1047,13 @@ async def generate_ai_questions(payload: AIQuestionsRequest, user: dict[str, Any
 
 
 @app.post("/ai/feedback")
-async def generate_ai_feedback(payload: AIFeedbackRequest, user: dict[str, Any] = Depends(require_candidate), request: Request = None):
+def generate_ai_feedback(payload: AIFeedbackRequest, user: dict[str, Any] = Depends(require_candidate)):
     if not _check_rate_limit(f"ai:{user['email']}", settings.ai_rate_limit, settings.ai_rate_window):
         raise HTTPException(status_code=429, detail="Too many AI requests. Please wait.")
     state = load_session(payload.session_id)
     if not state:
         return {"error": "No active session"}
-    if state.get("user_id") and state.get("user_id") != user["email"]:
+    if state.get("user_id", "") != user["email"] and user["role"] not in ("recruiter", "admin"):
         raise HTTPException(status_code=403, detail="Not your session")
 
     gemini_key = settings.gemini_api_key
@@ -999,7 +1061,7 @@ async def generate_ai_feedback(payload: AIFeedbackRequest, user: dict[str, Any] 
         return {"error": "Gemini API key not configured"}
 
     genai.configure(api_key=gemini_key)
-    model = genai.GenerativeModel("gemini-1.5-flash")
+    model = genai.GenerativeModel(settings.gemini_model)
 
     answers = state.get("answers", {})
     sanitized_answers = {k: _sanitize_for_ai(json.dumps(v)) for k, v in answers.items()}
@@ -1198,7 +1260,7 @@ class UpdateRoleRequest(BaseModel):
 
 
 @app.post("/admin/update-role")
-def admin_update_role(payload: UpdateRoleRequest, user: dict[str, Any] = Depends(require_admin), request: Request = None):
+def admin_update_role(payload: UpdateRoleRequest, user: dict[str, Any] = Depends(require_admin)):
     if not _check_rate_limit(f"admin:{user['email']}", settings.admin_rate_limit, settings.admin_rate_window):
         raise HTTPException(status_code=429, detail="Too many requests. Please wait.")
     if payload.role not in ("candidate", "recruiter", "admin"):
@@ -1226,10 +1288,10 @@ class UploadQuestionsRequest(BaseModel):
 def admin_compare(payload: CompareRequest, user: dict[str, Any] = Depends(require_recruiter)):
     if len(payload.session_ids) < 2:
         raise HTTPException(status_code=400, detail="At least 2 sessions required")
-    if len(payload.session_ids) > 5:
-        raise HTTPException(status_code=400, detail="Maximum 5 sessions for comparison")
+    if len(payload.session_ids) > settings.max_compare_sessions:
+        raise HTTPException(status_code=400, detail=f"Maximum {settings.max_compare_sessions} sessions for comparison")
     results = []
-    for sid in payload.session_ids[:5]:
+    for sid in payload.session_ids[:settings.max_compare_sessions]:
         state = load_session(sid)
         if not state:
             results.append({"session_id": sid, "error": "Not found"})
@@ -1293,7 +1355,10 @@ async def admin_upload_questions(file: UploadFile = File(...), user: dict[str, A
     questions = data.get("questions", [])
     if not round_type or not questions:
         raise HTTPException(status_code=400, detail="Must include round_type and questions array")
-    filepath = CUSTOM_QUESTIONS_DIR / f"{round_type}_custom.json"
+    safe_round_type = re.sub(r'[^a-zA-Z0-9_-]', '', round_type)
+    if not safe_round_type:
+        raise HTTPException(status_code=400, detail="Invalid round_type")
+    filepath = CUSTOM_QUESTIONS_DIR / f"{safe_round_type}_custom.json"
     with open(filepath, "w", encoding="utf-8") as f:
         json.dump(questions, f, indent=2)
     logger.info("Custom questions uploaded: %s (%d questions)", round_type, len(questions))

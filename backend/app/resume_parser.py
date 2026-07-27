@@ -3,15 +3,24 @@ from typing import Any
 
 import fitz  # PyMuPDF
 
+from app.config import settings
+
 
 def extract_text_from_pdf_content(content: bytes) -> str:
     """Extract text from PDF bytes using PyMuPDF."""
-    doc = fitz.open(stream=content, filetype="pdf")
-    text = ""
-    for page in doc:
-        text += page.get_text()
-    doc.close()
-    return text
+    try:
+        doc = fitz.open(stream=content, filetype="pdf")
+    except Exception as e:
+        raise ValueError(f"Invalid or corrupted PDF file: {e}") from e
+    try:
+        text = ""
+        for page in doc:
+            text += page.get_text()
+        if not text.strip():
+            raise ValueError("PDF appears to be empty or contains only images")
+        return text
+    finally:
+        doc.close()
 
 
 def normalize_skill_text(value: str) -> str:
@@ -170,12 +179,11 @@ def parse_section_header(line: str) -> tuple[str | None, str]:
 
     for section, keywords in SECTION_KEYWORDS.items():
         for keyword in keywords:
-            if re.search(rf'\b{re.escape(keyword)}\b', normalized_line):
-                if len(line.strip()) < 50 or ':' in line or '-' in line:
-                    parts = re.split(r'[:\-]', line, 1)
-                    if len(parts) > 1 and parts[1].strip():
-                        return section, parts[1].strip()
-                    return section, ""
+            if re.search(rf'\b{re.escape(keyword)}\b', normalized_line) and (len(line.strip()) < 50 or ':' in line or '-' in line):
+                parts = re.split(r'[:\-]', line, maxsplit=1)
+                if len(parts) > 1 and parts[1].strip():
+                    return section, parts[1].strip()
+                return section, ""
     return None, ""
 
 
@@ -213,7 +221,7 @@ def extract_skills(lines: list[str]) -> list[str]:
     for line in lines:
         if re.search(r'\b(skills?|technical skills|skillset|expertise)\b', line, re.I):
             if ':' in line or '-' in line:
-                parts = re.split(r'[:\-]', line, 1)
+                parts = re.split(r'[:\-]', line, maxsplit=1)
                 if len(parts) > 1:
                     skills.extend(split_values(parts[1]))
             else:
@@ -437,7 +445,7 @@ def parse_resume_text(text: str, filename: str = "") -> dict[str, Any]:
         else:
             header_lines.append(line)
             if re.search(r'\b(skills?|technical skills|skillset|expertise)\b', line, re.I):
-                values = re.split(r'[:\-]', line, 1)[1] if re.search(r'[:\-]', line) else line
+                values = re.split(r'[:\-]', line, maxsplit=1)[1] if re.search(r'[:\-]', line) else line
                 sections["skills"].extend(split_values(values))
 
     sections["skills"].extend(extract_skills(header_lines))
@@ -485,10 +493,10 @@ def parse_resume_text(text: str, filename: str = "") -> dict[str, Any]:
         "qualification": qualification,
         "education": education,
         "experience": experience,
-        "skills": skill_candidates if skill_candidates else ["Python", "React", "FastAPI"],
+        "skills": skill_candidates if skill_candidates else [],
         "projects": projects,
         "certifications": certifications,
-        "rawText": text[:2000],
+        "rawText": text[:settings.resume_raw_text_limit],
         "filename": filename,
     }
 

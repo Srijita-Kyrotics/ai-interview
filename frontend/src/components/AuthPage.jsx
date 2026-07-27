@@ -1,30 +1,23 @@
-import React, { useEffect, useState } from 'react'
+import React, { useState } from 'react'
 import { Lock, Target, Zap, Eye, EyeOff } from 'lucide-react'
 import { api } from '../api'
 
 function AuthPage({ onAuth }) {
   const [mode, setMode] = useState('login')
-  const [form, setForm] = useState({ name: '', email: '', password: '', confirmPassword: '', otp: '', captcha: '' })
+  const [form, setForm] = useState({ name: '', email: '', password: '', confirmPassword: '', resetToken: '', newPassword: '', confirmNewPassword: '' })
   const [error, setError] = useState('')
   const [fieldErrors, setFieldErrors] = useState({})
-  const [otpStatus, setOtpStatus] = useState('')
-  const [captcha, setCaptcha] = useState({ token: '', question: '' })
-  const [isSendingOtp, setIsSendingOtp] = useState(false)
   const [isSubmitting, setIsSubmitting] = useState(false)
-  const [otpRequested, setOtpRequested] = useState(false)
   const [showPassword, setShowPassword] = useState(false)
   const [showConfirmPassword, setShowConfirmPassword] = useState(false)
+  const [showNewPassword, setShowNewPassword] = useState(false)
+  const [showConfirmNewPassword, setShowConfirmNewPassword] = useState(false)
+  const [devToken, setDevToken] = useState('')
+  const [resetEmailSent, setResetEmailSent] = useState(false)
+  const [resetSuccess, setResetSuccess] = useState(false)
   const isCreate = mode === 'create'
-
-  const loadCaptcha = async () => {
-    const res = await api.get('/auth/captcha')
-    setCaptcha({ token: res.token, question: res.question })
-    setForm((current) => ({ ...current, captcha: '' }))
-  }
-
-  useEffect(() => {
-    loadCaptcha()
-  }, [])
+  const isForgot = mode === 'forgot'
+  const isReset = mode === 'reset'
 
   const updateField = (key, value) => {
     setForm((current) => ({ ...current, [key]: value }))
@@ -42,7 +35,8 @@ function AuthPage({ onAuth }) {
     const trimmed = value?.trim() || ''
     if (!trimmed) return 'Password is required.'
     if (trimmed.length < 8) return 'Password must be at least 8 characters long.'
-    if (!/[^A-Za-z0-9]/.test(trimmed)) return 'Password must include at least one special character.'
+    if (!/[A-Z]/.test(trimmed)) return 'Password must include at least one uppercase letter.'
+    if (!/[0-9]/.test(trimmed)) return 'Password must include at least one digit.'
     return ''
   }
 
@@ -51,151 +45,36 @@ function AuthPage({ onAuth }) {
     return ''
   }
 
-  const validateConfirmPassword = (value) => {
+  const validateConfirmPassword = (value, passwordField) => {
     const trimmedValue = value?.trim() || ''
-    const trimmedPassword = form.password?.trim() || ''
+    const trimmedPassword = (passwordField || form.password)?.trim() || ''
     if (!trimmedValue) return 'Please confirm your password.'
     if (trimmedValue !== trimmedPassword) return 'Passwords do not match.'
     return ''
   }
 
-  const validateOtp = (value) => {
-    if (!value) return 'Enter the one-time code sent to your email.'
-    return ''
-  }
-
-  const validateCaptcha = (value) => {
-    if (!value) return 'Enter the captcha answer.'
-    return ''
-  }
-
-  const isEmailValid = Boolean(form.email && !validateEmail(form.email))
-  const showCredentials = isEmailValid
-  const passwordValidationMessage = form.password ? validatePassword(form.password) : 'Create a strong password to continue.'
-  const confirmValidationMessage = isCreate ? (form.confirmPassword ? validateConfirmPassword(form.confirmPassword) : 'Confirm your password.') : ''
-  const canRequestOtp = showCredentials && !passwordValidationMessage && (!isCreate || !confirmValidationMessage) && (!isCreate || !!form.name.trim())
-
-  const sendOtp = async () => {
-    const email = form.email.trim().toLowerCase()
-    const password = form.password
-    const emailError = validateEmail(email)
-    const passwordError = validatePassword(password)
-    const confirmError = isCreate ? validateConfirmPassword(form.confirmPassword) : ''
-    const nameError = isCreate ? validateName(form.name) : ''
-
-    const newErrors = {
-      email: emailError,
-      password: passwordError,
-      confirmPassword: confirmError,
-      name: nameError
-    }
-    setFieldErrors(newErrors)
-
-    if (emailError) {
-      setError('Enter a valid email address before requesting OTP.')
-      return
-    }
-
-    if (nameError) {
-      setError(nameError)
-      return
-    }
-
-    if (passwordError || confirmError) {
-      setError(passwordError || confirmError || 'Fix your password before requesting OTP.')
-      return
-    }
-
-    setIsSendingOtp(true)
-    setError('')
-    setOtpStatus('')
-    try {
-      if (!isCreate) {
-        const emailCheck = await api.post('/auth/check-email', { email })
-        if (!emailCheck.ok || !emailCheck.exists) {
-          setError('Email not found. Please register with this email first.')
-          return
-        }
-      }
-      if (isCreate) {
-        const emailCheck = await api.post('/auth/check-email', { email })
-        if (emailCheck.ok && emailCheck.exists) {
-          setError('An account already exists for this email. Please login instead.')
-          return
-        }
-      }
-      const res = await api.post('/auth/send-otp', { email })
-      if (!res.ok) {
-        setError(res.error || 'Could not send OTP.')
-        return
-      }
-      setOtpRequested(true)
-      setOtpStatus(res.dev_otp ? `${res.message} Development OTP: ${res.dev_otp}` : res.message)
-    } catch {
-      setError('Could not contact the OTP service.')
-    } finally {
-      setIsSendingOtp(false)
-    }
-  }
-
-  const submit = async (e) => {
+  const submitLogin = async (e) => {
     e.preventDefault()
     const email = form.email.trim().toLowerCase()
     const password = form.password
-    const confirmPassword = form.confirmPassword
-    const otp = form.otp.trim()
-    const captchaAnswer = form.captcha.trim()
 
     const emailError = validateEmail(email)
     const passwordError = validatePassword(password)
-    const confirmError = isCreate ? validateConfirmPassword(confirmPassword) : ''
-    const nameError = isCreate ? validateName(form.name) : ''
-    const otpError = validateOtp(otp)
-    const captchaError = validateCaptcha(captchaAnswer)
 
-    const newErrors = {
-      email: emailError,
-      password: passwordError,
-      confirmPassword: confirmError,
-      name: nameError,
-      otp: otpRequested ? otpError : '',
-      captcha: otpRequested ? captchaError : ''
-    }
+    const newErrors = { email: emailError, password: passwordError }
     setFieldErrors(newErrors)
 
-    if (emailError || passwordError || confirmError || nameError || otpError || captchaError) {
+    if (emailError || passwordError) {
       setError('Please correct the highlighted fields before continuing.')
-      return
-    }
-
-    if (!otpRequested) {
-      setError('Request your OTP first, then confirm it with the captcha.')
       return
     }
 
     setIsSubmitting(true)
     setError('')
     try {
-      const endpoint = isCreate ? '/auth/register' : '/auth/login'
-      const payload = {
-        email,
-        password,
-        otp,
-        captcha_token: captcha.token,
-        captcha_answer: captchaAnswer
-      }
-      if (isCreate) payload.name = form.name.trim()
-
-      const res = await api.post(endpoint, payload)
+      const res = await api.post('/auth/login', { email, password })
       if (!res.ok) {
         setError(res.error || 'Verification failed.')
-        await loadCaptcha()
-        return
-      }
-      if (isCreate) {
-        const user = { name: res.user?.name || form.name.trim(), email, role: res.user?.role || 'candidate', token: res.token }
-        localStorage.setItem('mockRecruitmentUser', JSON.stringify(user))
-        onAuth(user)
         return
       }
       const user = { name: res.user?.name || res.name || email.split('@')[0], email, role: res.user?.role || 'candidate', token: res.token }
@@ -208,6 +87,132 @@ function AuthPage({ onAuth }) {
     }
   }
 
+  const submitCreate = async (e) => {
+    e.preventDefault()
+    const email = form.email.trim().toLowerCase()
+    const password = form.password
+    const confirmPassword = form.confirmPassword
+
+    const emailError = validateEmail(email)
+    const passwordError = validatePassword(password)
+    const confirmError = validateConfirmPassword(confirmPassword)
+    const nameError = validateName(form.name)
+
+    const newErrors = { email: emailError, password: passwordError, confirmPassword: confirmError, name: nameError }
+    setFieldErrors(newErrors)
+
+    if (emailError || passwordError || confirmError || nameError) {
+      setError('Please correct the highlighted fields before continuing.')
+      return
+    }
+
+    setIsSubmitting(true)
+    setError('')
+    try {
+      const res = await api.post('/auth/register', { email, password, name: form.name.trim() })
+      if (!res.ok) {
+        setError(res.error || 'Registration failed.')
+        return
+      }
+      const user = { name: res.user?.name || form.name.trim(), email, role: res.user?.role || 'candidate', token: res.token }
+      localStorage.setItem('mockRecruitmentUser', JSON.stringify(user))
+      onAuth(user)
+    } catch {
+      setError('Could not complete registration.')
+    } finally {
+      setIsSubmitting(false)
+    }
+  }
+
+  const submitForgot = async (e) => {
+    e.preventDefault()
+    const email = form.email.trim().toLowerCase()
+    const emailError = validateEmail(email)
+
+    setFieldErrors({ email: emailError })
+    if (emailError) {
+      setError(emailError)
+      return
+    }
+
+    setIsSubmitting(true)
+    setError('')
+    setDevToken('')
+    try {
+      const res = await api.post('/auth/forgot-password', { email })
+      if (!res.ok) {
+        setError(res.error || 'Could not send reset token.')
+        return
+      }
+      setResetEmailSent(true)
+      if (res.dev_token) setDevToken(res.dev_token)
+    } catch {
+      setError('Could not contact the server.')
+    } finally {
+      setIsSubmitting(false)
+    }
+  }
+
+  const submitReset = async (e) => {
+    e.preventDefault()
+    const email = form.email.trim().toLowerCase()
+    const token = form.resetToken.trim()
+    const newPassword = form.newPassword
+    const confirmNewPassword = form.confirmNewPassword
+
+    const emailError = validateEmail(email)
+    const passwordError = validatePassword(newPassword)
+    const confirmError = validateConfirmPassword(confirmNewPassword, newPassword)
+
+    const newErrors = { email: emailError, newPassword: passwordError, confirmNewPassword: confirmError }
+    setFieldErrors(newErrors)
+
+    if (emailError || passwordError || confirmError) {
+      setError('Please correct the highlighted fields before continuing.')
+      return
+    }
+
+    if (!token) {
+      setFieldErrors((current) => ({ ...current, resetToken: 'Reset token is required.' }))
+      setError('Enter the reset token you received.')
+      return
+    }
+
+    setIsSubmitting(true)
+    setError('')
+    try {
+      const res = await api.post('/auth/reset-password', { email, token, new_password: newPassword })
+      if (!res.ok) {
+        setError(res.error || 'Reset failed.')
+        return
+      }
+      setResetSuccess(true)
+    } catch {
+      setError('Could not complete password reset.')
+    } finally {
+      setIsSubmitting(false)
+    }
+  }
+
+  const resetAllAndSwitch = (newMode) => {
+    setError('')
+    setFieldErrors({})
+    setDevToken('')
+    setResetEmailSent(false)
+    setResetSuccess(false)
+    setForm({ name: '', email: '', password: '', confirmPassword: '', resetToken: '', newPassword: '', confirmNewPassword: '' })
+    setMode(newMode)
+  }
+
+  const panelTitle = isCreate ? 'Create your account' : isForgot ? 'Reset your password' : isReset ? 'Set new password' : 'Welcome back'
+  const panelSubtitle = isCreate
+    ? 'Sign up to start practicing mock interviews.'
+    : isForgot
+      ? 'Enter your email and we\'ll send you a reset token.'
+      : isReset
+        ? 'Enter the token from your email and your new password.'
+        : 'Sign in to access the interview simulator.'
+
   return (
     <div className="auth-screen">
       {/* Ambient orbs */}
@@ -219,12 +224,12 @@ function AuthPage({ onAuth }) {
         <div className="welcome-message">
           <div className="brand-badge">AI-Powered Mock  Recruitment Platform</div>
           <h1>AI Interview Coach</h1>
-          <p>Sign in with your email, request an OTP, and verify with captcha to access the interview simulator.</p>
+          <p>Sign in with your email and password to access the interview simulator.</p>
         </div>
         <div className="feature-list" aria-hidden="true">
           <div className="feature-card">
             <span><Lock size={16} style={{ verticalAlign: 'middle', marginRight: '6px' }} /> Secure access</span>
-            <p>Email + OTP + captcha verification keeps your session protected end-to-end.</p>
+            <p>Email and password verification keeps your session protected end-to-end.</p>
           </div>
           <div className="feature-card">
             <span><Target size={16} style={{ verticalAlign: 'middle', marginRight: '6px' }} /> Practice workflow</span>
@@ -241,158 +246,302 @@ function AuthPage({ onAuth }) {
         <div className="panel-header">
           <div>
             <p className="eyebrow">Candidate access</p>
-            <h2>{isCreate ? 'Create your account' : 'Welcome back'}</h2>
-            <p className="muted">Sign in first, then upload a resume and choose the company interview to practice.</p>
+            <h2>{panelTitle}</h2>
+            <p className="muted">{panelSubtitle}</p>
           </div>
         </div>
 
-        <form className="auth-form" onSubmit={submit}>
-          <div className="form-section">
-            <div className="section-title">Account details</div>
-            <label>
-              Email
-              <input
-                className={`input ${fieldErrors.email ? 'invalid' : ''}`}
-                type="email"
-                value={form.email}
-                onChange={(e) => updateField('email', e.target.value)}
-                placeholder="you@example.com"
-                aria-label="Email address"
-              />
-              {fieldErrors.email ? <div className="field-error">{fieldErrors.email}</div> : null}
-            </label>
-            {showCredentials ? (
-              <>
-                {isCreate && (
-                  <label>
-                    Full name
-                    <input
-                      className={`input ${fieldErrors.name ? 'invalid' : ''}`}
-                      value={form.name}
-                      onChange={(e) => updateField('name', e.target.value)}
-                      placeholder="Jane Doe"
-                      aria-label="Full name"
-                    />
-                    {fieldErrors.name ? <div className="field-error">{fieldErrors.name}</div> : null}
-                  </label>
-                )}
-                <label>
-                  {isCreate ? 'Create password' : 'Password'}
-                  <div className="password-field-wrapper">
-                    <input
-                      className={`input ${fieldErrors.password ? 'invalid' : ''}`}
-                      type={showPassword ? 'text' : 'password'}
-                      value={form.password}
-                      onChange={(e) => updateField('password', e.target.value)}
-                      placeholder="At least 8 characters and a special character"
-                      aria-label={isCreate ? 'Create password' : 'Password'}
-                    />
-                    <button
-                      className="eye-toggle"
-                      type="button"
-                      onClick={() => setShowPassword((current) => !current)}
-                      aria-label={showPassword ? 'Hide password' : 'Show password'}
-                    >
-                      {showPassword ? <EyeOff size={18} /> : <Eye size={18} />}
-                    </button>
-                  </div>
-                  {fieldErrors.password ? <div className="field-error">{fieldErrors.password}</div> : null}
-                </label>
-                {isCreate && (
-                  <label>
-                    Confirm password
-                    <div className="password-field-wrapper">
-                      <input
-                        className={`input ${fieldErrors.confirmPassword ? 'invalid' : ''}`}
-                        type={showConfirmPassword ? 'text' : 'password'}
-                        value={form.confirmPassword}
-                        onChange={(e) => updateField('confirmPassword', e.target.value)}
-                        placeholder="Repeat your password"
-                      />
-                      <button
-                        className="eye-toggle"
-                        type="button"
-                        onClick={() => setShowConfirmPassword((current) => !current)}
-                        aria-label={showConfirmPassword ? 'Hide confirm password' : 'Show confirm password'}
-                      >
-                        {showConfirmPassword ? <EyeOff size={18} /> : <Eye size={18} />}
-                      </button>
-                    </div>
-                    {fieldErrors.confirmPassword ? <div className="field-error">{fieldErrors.confirmPassword}</div> : null}
-                  </label>
-                )}
-                {!canRequestOtp && !otpRequested ? (
-                  <div className="notice info">
-                    {isCreate
-                      ? passwordValidationMessage || confirmValidationMessage || 'Fill the password fields correctly to send OTP.'
-                      : passwordValidationMessage || 'Enter your password correctly to send OTP.'}
-                  </div>
-                ) : null}
-              </>
-            ) : (
-              <div className="notice info">Enter a valid email to continue with account creation or login.</div>
-            )}
-          </div>
-
-          {(canRequestOtp || otpRequested) && (
+        {/* ── Login form ──────────────────────────────────────── */}
+        {mode === 'login' && (
+          <form className="auth-form" onSubmit={submitLogin}>
             <div className="form-section">
-              <div className="section-title">Secure access</div>
+              <div className="section-title">Account details</div>
               <label>
-                One-time code
-                <button className="btn ghost" type="button" disabled={isSendingOtp || !canRequestOtp} onClick={sendOtp}>
-                  {isSendingOtp ? 'Sending\u2026' : otpRequested ? 'Resend OTP' : 'Send OTP'}
-                </button>
+                Email
                 <input
-                  className={`input ${fieldErrors.otp ? 'invalid' : ''}`}
-                  inputMode="numeric"
-                  value={form.otp}
-                  onChange={(e) => updateField('otp', e.target.value)}
-                  placeholder="Enter OTP"
-                  disabled={!otpRequested}
+                  className={`input ${fieldErrors.email ? 'invalid' : ''}`}
+                  type="email"
+                  value={form.email}
+                  onChange={(e) => updateField('email', e.target.value)}
+                  placeholder="you@example.com"
+                  aria-label="Email address"
                 />
-                {fieldErrors.otp ? <div className="field-error">{fieldErrors.otp}</div> : null}
+                {fieldErrors.email ? <div className="field-error">{fieldErrors.email}</div> : null}
               </label>
-              {otpStatus ? <div className="secure-note">{otpStatus}</div> : null}
               <label>
-                Captcha verification
-                <div className="captcha-box">
-                  <div className="captcha-question">{captcha.question || 'Loading captcha...'}</div>
-                  <button className="btn ghost" type="button" onClick={loadCaptcha}>Refresh</button>
+                Password
+                <div className="password-field-wrapper">
+                  <input
+                    className={`input ${fieldErrors.password ? 'invalid' : ''}`}
+                    type={showPassword ? 'text' : 'password'}
+                    value={form.password}
+                    onChange={(e) => updateField('password', e.target.value)}
+                    placeholder="Enter your password"
+                    aria-label="Password"
+                  />
+                  <button
+                    className="eye-toggle"
+                    type="button"
+                    onClick={() => setShowPassword((current) => !current)}
+                    aria-label={showPassword ? 'Hide password' : 'Show password'}
+                  >
+                    {showPassword ? <EyeOff size={18} /> : <Eye size={18} />}
+                  </button>
                 </div>
-                <input
-                  className={`input ${fieldErrors.captcha ? 'invalid' : ''}`}
-                  inputMode="numeric"
-                  value={form.captcha}
-                  onChange={(e) => updateField('captcha', e.target.value)}
-                  placeholder="Answer the captcha"
-                  disabled={!otpRequested}
-                />
-                {fieldErrors.captcha ? <div className="field-error">{fieldErrors.captcha}</div> : null}
+                {fieldErrors.password ? <div className="field-error">{fieldErrors.password}</div> : null}
               </label>
             </div>
-          )}
 
-          {error ? <div className="notice danger">{error}</div> : null}
-          <button className="btn primary" type="submit" disabled={isSubmitting}>
-            {isSubmitting ? 'Verifying\u2026' : isCreate ? 'Create account' : 'Login'}
+            {error ? <div className="notice danger">{error}</div> : null}
+            <button className="btn primary" type="submit" disabled={isSubmitting}>
+              {isSubmitting ? 'Verifying\u2026' : 'Login'}
+            </button>
+          </form>
+        )}
+
+        {/* ── Create account form ─────────────────────────────── */}
+        {mode === 'create' && (
+          <form className="auth-form" onSubmit={submitCreate}>
+            <div className="form-section">
+              <div className="section-title">Account details</div>
+              <label>
+                Email
+                <input
+                  className={`input ${fieldErrors.email ? 'invalid' : ''}`}
+                  type="email"
+                  value={form.email}
+                  onChange={(e) => updateField('email', e.target.value)}
+                  placeholder="you@example.com"
+                  aria-label="Email address"
+                />
+                {fieldErrors.email ? <div className="field-error">{fieldErrors.email}</div> : null}
+              </label>
+              <label>
+                Full name
+                <input
+                  className={`input ${fieldErrors.name ? 'invalid' : ''}`}
+                  value={form.name}
+                  onChange={(e) => updateField('name', e.target.value)}
+                  placeholder="Jane Doe"
+                  aria-label="Full name"
+                />
+                {fieldErrors.name ? <div className="field-error">{fieldErrors.name}</div> : null}
+              </label>
+              <label>
+                Create password
+                <div className="password-field-wrapper">
+                  <input
+                    className={`input ${fieldErrors.password ? 'invalid' : ''}`}
+                    type={showPassword ? 'text' : 'password'}
+                    value={form.password}
+                    onChange={(e) => updateField('password', e.target.value)}
+                    placeholder="At least 8 characters, an uppercase letter, and a digit"
+                    aria-label="Create password"
+                  />
+                  <button
+                    className="eye-toggle"
+                    type="button"
+                    onClick={() => setShowPassword((current) => !current)}
+                    aria-label={showPassword ? 'Hide password' : 'Show password'}
+                  >
+                    {showPassword ? <EyeOff size={18} /> : <Eye size={18} />}
+                  </button>
+                </div>
+                {fieldErrors.password ? <div className="field-error">{fieldErrors.password}</div> : null}
+              </label>
+              <label>
+                Confirm password
+                <div className="password-field-wrapper">
+                  <input
+                    className={`input ${fieldErrors.confirmPassword ? 'invalid' : ''}`}
+                    type={showConfirmPassword ? 'text' : 'password'}
+                    value={form.confirmPassword}
+                    onChange={(e) => updateField('confirmPassword', e.target.value)}
+                    placeholder="Repeat your password"
+                  />
+                  <button
+                    className="eye-toggle"
+                    type="button"
+                    onClick={() => setShowConfirmPassword((current) => !current)}
+                    aria-label={showConfirmPassword ? 'Hide confirm password' : 'Show confirm password'}
+                  >
+                    {showConfirmPassword ? <EyeOff size={18} /> : <Eye size={18} />}
+                  </button>
+                </div>
+                {fieldErrors.confirmPassword ? <div className="field-error">{fieldErrors.confirmPassword}</div> : null}
+              </label>
+            </div>
+
+            {error ? <div className="notice danger">{error}</div> : null}
+            <button className="btn primary" type="submit" disabled={isSubmitting}>
+              {isSubmitting ? 'Verifying\u2026' : 'Create account'}
+            </button>
+          </form>
+        )}
+
+        {/* ── Forgot password form (step 1: request token) ──── */}
+        {mode === 'forgot' && !resetEmailSent && (
+          <form className="auth-form" onSubmit={submitForgot}>
+            <div className="form-section">
+              <div className="section-title">Account lookup</div>
+              <label>
+                Email
+                <input
+                  className={`input ${fieldErrors.email ? 'invalid' : ''}`}
+                  type="email"
+                  value={form.email}
+                  onChange={(e) => updateField('email', e.target.value)}
+                  placeholder="you@example.com"
+                  aria-label="Email address"
+                />
+                {fieldErrors.email ? <div className="field-error">{fieldErrors.email}</div> : null}
+              </label>
+            </div>
+
+            {error ? <div className="notice danger">{error}</div> : null}
+            <button className="btn primary" type="submit" disabled={isSubmitting}>
+              {isSubmitting ? 'Sending\u2026' : 'Send reset token'}
+            </button>
+          </form>
+        )}
+
+        {/* ── Forgot password form (step 2: token sent) ──────── */}
+        {mode === 'forgot' && resetEmailSent && !resetSuccess && (
+          <form className="auth-form" onSubmit={(e) => { e.preventDefault(); resetAllAndSwitch('reset') }}>
+            <div className="notice success">Reset token sent. Check your email.</div>
+            {devToken && (
+              <div className="notice info" style={{ wordBreak: 'break-all' }}>
+                <strong>Development token:</strong> {devToken}
+              </div>
+            )}
+
+            {error ? <div className="notice danger">{error}</div> : null}
+            <button className="btn primary" type="submit">
+              Enter reset token
+            </button>
+          </form>
+        )}
+
+        {/* ── Reset password form (step 3: enter token + new password) */}
+        {mode === 'reset' && !resetSuccess && (
+          <form className="auth-form" onSubmit={submitReset}>
+            <div className="form-section">
+              <div className="section-title">Reset password</div>
+              <label>
+                Email
+                <input
+                  className={`input ${fieldErrors.email ? 'invalid' : ''}`}
+                  type="email"
+                  value={form.email}
+                  onChange={(e) => updateField('email', e.target.value)}
+                  placeholder="you@example.com"
+                  aria-label="Email address"
+                />
+                {fieldErrors.email ? <div className="field-error">{fieldErrors.email}</div> : null}
+              </label>
+              <label>
+                Reset token
+                <input
+                  className={`input ${fieldErrors.resetToken ? 'invalid' : ''}`}
+                  value={form.resetToken}
+                  onChange={(e) => updateField('resetToken', e.target.value)}
+                  placeholder="Paste the reset token"
+                  aria-label="Reset token"
+                />
+                {fieldErrors.resetToken ? <div className="field-error">{fieldErrors.resetToken}</div> : null}
+              </label>
+              <label>
+                New password
+                <div className="password-field-wrapper">
+                  <input
+                    className={`input ${fieldErrors.newPassword ? 'invalid' : ''}`}
+                    type={showNewPassword ? 'text' : 'password'}
+                    value={form.newPassword}
+                    onChange={(e) => updateField('newPassword', e.target.value)}
+                    placeholder="At least 8 characters, an uppercase letter, and a digit"
+                    aria-label="New password"
+                  />
+                  <button
+                    className="eye-toggle"
+                    type="button"
+                    onClick={() => setShowNewPassword((current) => !current)}
+                    aria-label={showNewPassword ? 'Hide password' : 'Show password'}
+                  >
+                    {showNewPassword ? <EyeOff size={18} /> : <Eye size={18} />}
+                  </button>
+                </div>
+                {fieldErrors.newPassword ? <div className="field-error">{fieldErrors.newPassword}</div> : null}
+              </label>
+              <label>
+                Confirm new password
+                <div className="password-field-wrapper">
+                  <input
+                    className={`input ${fieldErrors.confirmNewPassword ? 'invalid' : ''}`}
+                    type={showConfirmNewPassword ? 'text' : 'password'}
+                    value={form.confirmNewPassword}
+                    onChange={(e) => updateField('confirmNewPassword', e.target.value)}
+                    placeholder="Repeat your new password"
+                  />
+                  <button
+                    className="eye-toggle"
+                    type="button"
+                    onClick={() => setShowConfirmNewPassword((current) => !current)}
+                    aria-label={showConfirmNewPassword ? 'Hide confirm password' : 'Show confirm password'}
+                  >
+                    {showConfirmNewPassword ? <EyeOff size={18} /> : <Eye size={18} />}
+                  </button>
+                </div>
+                {fieldErrors.confirmNewPassword ? <div className="field-error">{fieldErrors.confirmNewPassword}</div> : null}
+              </label>
+            </div>
+
+            {error ? <div className="notice danger">{error}</div> : null}
+            <button className="btn primary" type="submit" disabled={isSubmitting}>
+              {isSubmitting ? 'Resetting\u2026' : 'Reset password'}
+            </button>
+          </form>
+        )}
+
+        {/* ── Reset success ──────────────────────────────────── */}
+        {resetSuccess && (
+          <div className="auth-form">
+            <div className="notice success">Password reset successful! You can now login with your new password.</div>
+            <button className="btn primary" type="button" onClick={() => resetAllAndSwitch('login')}>
+              Go to login
+            </button>
+          </div>
+        )}
+
+        {/* ── Footer links ───────────────────────────────────── */}
+        {mode === 'login' && (
+          <button
+            className="link-button"
+            type="button"
+            onClick={() => resetAllAndSwitch('forgot')}
+          >
+            Forgot password?
           </button>
-        </form>
+        )}
 
-        <button
-          className="link-button"
-          type="button"
-          onClick={() => {
-            setError('')
-            setFieldErrors({})
-            setOtpStatus('')
-            setOtpRequested(false)
-            setForm({ name: '', email: '', password: '', confirmPassword: '', otp: '', captcha: '' })
-            loadCaptcha()
-            setMode(isCreate ? 'login' : 'create')
-          }}
-        >
-          {isCreate ? 'Already have an account? Login' : 'New user? Create account'}
-        </button>
+        {(mode === 'login' || mode === 'create') && (
+          <button
+            className="link-button"
+            type="button"
+            onClick={() => resetAllAndSwitch(isCreate ? 'login' : 'create')}
+          >
+            {isCreate ? 'Already have an account? Login' : 'New user? Create account'}
+          </button>
+        )}
+
+        {(mode === 'forgot' || mode === 'reset') && (
+          <button
+            className="link-button"
+            type="button"
+            onClick={() => resetAllAndSwitch('login')}
+          >
+            Back to login
+          </button>
+        )}
       </section>
     </div>
   )

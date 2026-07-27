@@ -38,22 +38,49 @@ class Settings(BaseSettings):
 
     # ── External APIs ─────────────────────────────────────────────────────
     gemini_api_key: str = Field("", alias="GEMINI_API_KEY")
+    gemini_model: str = Field("gemini-1.5-flash", alias="GEMINI_MODEL")
     judge0_api_key: str = Field("", alias="JUDGE0_API_KEY")
     judge0_host: str = Field("judge0-ce.p.rapidapi.com", alias="JUDGE0_HOST")
+    judge0_timeout: float = Field(10.0, alias="JUDGE0_TIMEOUT")
+    judge0_language_ids: dict[str, int] = Field(
+        {"python": 71, "javascript": 63, "java": 62, "c": 50, "csharp": 51},
+        alias="JUDGE0_LANGUAGE_IDS",
+    )
 
     # ── CORS ──────────────────────────────────────────────────────────────
     allowed_origins: str = Field(
         "http://localhost:5173,http://127.0.0.1:5173", alias="ALLOWED_ORIGINS"
     )
 
+    # ── CSP ──────────────────────────────────────────────────────────────
+    csp_connect_sources: str = Field(
+        "'self' http://localhost:* ws://localhost:*", alias="CSP_CONNECT_SOURCES"
+    )
+
     # ── Uploads ───────────────────────────────────────────────────────────
     max_upload_bytes: int = Field(10 * 1024 * 1024, alias="MAX_UPLOAD_BYTES")
+
+    # ── Paths ────────────────────────────────────────────────────────────
+    shared_dir: str = Field("", alias="SHARED_DIR")
+    frontend_questions_dir: str = Field("", alias="FRONTEND_QUESTIONS_DIR")
+
+    # ── Password Policy ──────────────────────────────────────────────────
+    min_password_length: int = Field(8, alias="MIN_PASSWORD_LENGTH")
+    pbkdf2_iterations: int = Field(120000, alias="PBKDF2_ITERATIONS")
+
+    # ── Scoring ──────────────────────────────────────────────────────────
+    default_aptitude_score: int = Field(80, alias="DEFAULT_APTITUDE_SCORE")
+    default_coding_score: int = Field(75, alias="DEFAULT_CODING_SCORE")
+    default_technical_score: int = Field(70, alias="DEFAULT_TECHNICAL_SCORE")
+    default_hr_score: int = Field(85, alias="DEFAULT_HR_SCORE")
 
     # ── OTP / Captcha ────────────────────────────────────────────────────
     otp_ttl_seconds: int = Field(300, alias="OTP_TTL_SECONDS")
     captcha_ttl_seconds: int = Field(300, alias="CAPTCHA_TTL_SECONDS")
     otp_rate_limit: int = Field(5, alias="OTP_RATE_LIMIT")
     otp_rate_window: int = Field(600, alias="OTP_RATE_WINDOW")
+    otp_ip_rate_limit: int = Field(20, alias="OTP_IP_RATE_LIMIT")
+    max_otp_attempts: int = Field(5, alias="MAX_OTP_ATTEMPTS")
 
     # ── Rate Limits ───────────────────────────────────────────────────────
     code_rate_limit: int = Field(20, alias="CODE_RATE_LIMIT")
@@ -62,10 +89,17 @@ class Settings(BaseSettings):
     ai_rate_window: int = Field(600, alias="AI_RATE_WINDOW")
     admin_rate_limit: int = Field(30, alias="ADMIN_RATE_LIMIT")
     admin_rate_window: int = Field(600, alias="ADMIN_RATE_WINDOW")
+    max_compare_sessions: int = Field(5, alias="MAX_COMPARE_SESSIONS")
 
     # ── Logging ───────────────────────────────────────────────────────────
     log_level: str = Field("INFO", alias="LOG_LEVEL")
     log_format: str = Field("json", alias="LOG_FORMAT")  # "json" or "text"
+
+    # ── Email ────────────────────────────────────────────────────────────
+    email_subject: str = Field("AI Interview Platform OTP", alias="EMAIL_SUBJECT")
+
+    # ── Resume ───────────────────────────────────────────────────────────
+    resume_raw_text_limit: int = Field(2000, alias="RESUME_RAW_TEXT_LIMIT")
 
     # ── Session cleanup ───────────────────────────────────────────────────
     session_retention_days: int = Field(30, alias="SESSION_RETENTION_DAYS")
@@ -81,6 +115,27 @@ class Settings(BaseSettings):
     @property
     def cors_origins(self) -> list[str]:
         return [o.strip() for o in self.allowed_origins.split(",") if o.strip()]
+
+    @property
+    def shared_dir_path(self) -> Path:
+        if self.shared_dir:
+            return Path(self.shared_dir)
+        return BASE_DIR / "shared"
+
+    @property
+    def frontend_questions_dir_path(self) -> Path:
+        if self.frontend_questions_dir:
+            return Path(self.frontend_questions_dir)
+        return BASE_DIR / "frontend" / "public" / "questions"
+
+    @property
+    def default_scores(self) -> dict[str, int]:
+        return {
+            "aptitude": self.default_aptitude_score,
+            "coding": self.default_coding_score,
+            "technical": self.default_technical_score,
+            "hr": self.default_hr_score,
+        }
 
     @property
     def resolved_jwt_secret(self) -> str:

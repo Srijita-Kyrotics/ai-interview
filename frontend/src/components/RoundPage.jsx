@@ -6,23 +6,9 @@ import { roundDurations } from '../constants'
 import { ProctoringModal } from '../proctoring/ProctoringUI'
 import { useAssessmentProctoring } from '../proctoring/useAssessmentProctoring'
 import { formatQuestionText } from '../utils/questionFormat'
+import { formatTime } from '../utils/formatTime'
+import { audioBlobToDataUrl } from '../utils/audio'
 import { CodeEditor } from './CodeEditor'
-
-function formatTime(totalSeconds) {
-  const minutes = Math.floor(totalSeconds / 60).toString().padStart(2, '0')
-  const seconds = (totalSeconds % 60).toString().padStart(2, '0')
-  return `${minutes}:${seconds}`
-}
-
-function audioBlobToDataUrl(blob) {
-  if (!blob) return Promise.resolve('')
-  return new Promise((resolve, reject) => {
-    const reader = new FileReader()
-    reader.onloadend = () => resolve(reader.result || '')
-    reader.onerror = reject
-    reader.readAsDataURL(blob)
-  })
-}
 
 function findHighlighted(sentence, options, correct) {
   const words = sentence.split(/\s+/)
@@ -364,14 +350,6 @@ function RoundPage({ title, items, type, state, setState, proctoring, setProctor
       if (screenStream) screenStream.getTracks().forEach((t) => t.stop())
     }
   }, [userStream, screenStream])
-
-  useEffect(() => {
-
-    document.documentElement
-      .requestFullscreen()
-      .catch(() => { })
-
-  }, [])
 
   const startProctoring = async () => {
     try {

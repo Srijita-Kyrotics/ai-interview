@@ -1,8 +1,5 @@
 import React, { useEffect, useRef, useState } from 'react'
-
-function getSpeechRecognition() {
-  return window.SpeechRecognition || window.webkitSpeechRecognition
-}
+import { getSpeechRecognition } from '../utils/audio'
 
 function VoiceAnswerControls({ userStream, transcript, onTranscriptChange, onAudioChange }) {
   const [isRecording, setIsRecording] = useState(false)

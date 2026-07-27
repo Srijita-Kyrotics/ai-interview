@@ -66,7 +66,7 @@ function renderCompanyCard(company, selectedCompanies, toggleCompany) {
   )
 }
 
-function CompanyPage({ state, setState }) {
+function CompanyPage({ state, setState, user }) {
   const navigate = useNavigate()
   const [error, setError] = useState('')
   const [selectedCompanies, setSelectedCompanies] = useState([])
@@ -136,7 +136,7 @@ function CompanyPage({ state, setState }) {
           </p>
         </div>
         <div className="resume-chip">
-          <b>{state.resume?.name || 'Candidate'}</b>
+          <b>{user?.name || state.resume?.name || 'Candidate'}</b>
           <span>{(state.resume?.skills || []).slice(0, 3).join(' / ')}</span>
         </div>
       </div>

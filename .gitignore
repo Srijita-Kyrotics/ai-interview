@@ -13,3 +13,4 @@ alembic/versions/*.pyc
 .ruff_cache/
 htmlcov/
 .coverage
+backend/accounts.json

@@ -5,27 +5,9 @@ import { interviewQuestionDuration } from '../constants'
 import { ProctoringModal } from '../proctoring/ProctoringUI'
 import { useAssessmentProctoring } from '../proctoring/useAssessmentProctoring'
 import { formatQuestionText } from '../utils/questionFormat'
+import { formatTime } from '../utils/formatTime'
+import { audioBlobToDataUrl } from '../utils/audio'
 import { VoiceAnswerControls } from './VoiceAnswerControls'
-
-function audioBlobToDataUrl(blob) {
-  if (!blob) return Promise.resolve('')
-  return new Promise((resolve, reject) => {
-    const reader = new FileReader()
-    reader.onloadend = () => resolve(reader.result || '')
-    reader.onerror = reject
-    reader.readAsDataURL(blob)
-  })
-}
-
-function formatTime(totalSeconds) {
-  const minutes = Math.floor(totalSeconds / 60).toString().padStart(2, '0')
-  const seconds = (totalSeconds % 60).toString().padStart(2, '0')
-  return `${minutes}:${seconds}`
-}
-
-function getSpeechRecognition() {
-  return window.SpeechRecognition || window.webkitSpeechRecognition
-}
 
 function ChatInterview({ title, questions, state, setState, proctoring, setProctoring }) {
   const navigate = useNavigate()

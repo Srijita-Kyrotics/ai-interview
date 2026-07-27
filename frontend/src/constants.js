@@ -11,7 +11,7 @@ const steps = [
 ]
 
 const roundDurations = {
-  aptitude: 20,
+  aptitude: 20 * 60,
   coding: 10 * 60
 }
 

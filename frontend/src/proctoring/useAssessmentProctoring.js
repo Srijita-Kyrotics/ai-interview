@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { VIOLATION_PENALTIES } from './proctoringState'
 import * as faceapi from 'face-api.js'
-import { API } from '../api.js'
+import { API, getAuthToken } from '../api.js'
 
 const COOLDOWN_MS = 5000
 const NO_FACE_LIMIT_MS = 2000
@@ -27,9 +27,12 @@ function nowLabel(date = new Date()) {
 
 async function postQuietly(path, body) {
   try {
+    const token = getAuthToken()
+    const headers = { 'Content-Type': 'application/json' }
+    if (token) headers['Authorization'] = `Bearer ${token}`
     await fetch(`${API}${path}`, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers,
       body: JSON.stringify(body)
     })
   } catch {

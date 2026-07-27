@@ -86,6 +86,20 @@ def init_db():
                 updated_at DOUBLE PRECISION NOT NULL
             )
         """)
+        c.execute("""
+            CREATE TABLE IF NOT EXISTS rate_limits (
+                key TEXT PRIMARY KEY,
+                timestamps JSONB NOT NULL DEFAULT '[]'::jsonb,
+                updated_at DOUBLE PRECISION NOT NULL
+            )
+        """)
+        c.execute("""
+            CREATE TABLE IF NOT EXISTS response_cache (
+                key TEXT PRIMARY KEY,
+                data JSONB NOT NULL,
+                expires_at DOUBLE PRECISION NOT NULL
+            )
+        """)
         conn.commit()
         logger.info("Database tables initialized")
     finally:
@@ -425,3 +439,83 @@ def check_db_health() -> bool:
             release_connection(conn)
     except Exception:
         return False
+
+
+# ─── Rate Limiting (DB-backed) ───────────────────────────────────────────────
+
+def check_rate_limit(key: str, limit: int, window: int) -> bool:
+    """Check and record a rate limit hit. Returns True if allowed, False if exceeded."""
+    now = time.time()
+    conn = get_connection()
+    try:
+        c = conn.cursor()
+        c.execute("SELECT timestamps FROM rate_limits WHERE key=%s", (key,))
+        row = c.fetchone()
+        if row:
+            timestamps = row[0] if isinstance(row[0], list) else json.loads(row[0])
+            timestamps = [t for t in timestamps if now - t < window]
+        else:
+            timestamps = []
+
+        if len(timestamps) >= limit:
+            return False
+
+        timestamps.append(now)
+        c.execute(
+            "INSERT INTO rate_limits (key, timestamps, updated_at) VALUES (%s, %s::jsonb, %s) "
+            "ON CONFLICT (key) DO UPDATE SET timestamps=EXCLUDED.timestamps, updated_at=EXCLUDED.updated_at",
+            (key, json.dumps(timestamps), now),
+        )
+        conn.commit()
+        return True
+    finally:
+        release_connection(conn)
+
+
+# ─── Response Caching (DB-backed) ────────────────────────────────────────────
+
+def cache_get(key: str, ttl: int = 300) -> Any | None:
+    """Get a cached value if it exists and hasn't expired."""
+    now = time.time()
+    conn = get_connection()
+    try:
+        c = conn.cursor()
+        c.execute("SELECT data FROM response_cache WHERE key=%s AND expires_at > %s", (key, now))
+        row = c.fetchone()
+        if row:
+            data = row[0]
+            if isinstance(data, str):
+                return json.loads(data)
+            return data
+        return None
+    finally:
+        release_connection(conn)
+
+
+def cache_set(key: str, data: Any, ttl: int = 300) -> None:
+    """Set a cached value with a TTL in seconds."""
+    now = time.time()
+    conn = get_connection()
+    try:
+        c = conn.cursor()
+        c.execute(
+            "INSERT INTO response_cache (key, data, expires_at) VALUES (%s, %s::jsonb, %s) "
+            "ON CONFLICT (key) DO UPDATE SET data=EXCLUDED.data, expires_at=EXCLUDED.expires_at",
+            (key, json.dumps(data), now + ttl),
+        )
+        conn.commit()
+    finally:
+        release_connection(conn)
+
+
+def cleanup_expired_cache() -> int:
+    """Remove expired cache entries. Returns number of deleted rows."""
+    conn = get_connection()
+    try:
+        c = conn.cursor()
+        c.execute("DELETE FROM response_cache WHERE expires_at < %s", (time.time(),))
+        deleted = c.rowcount
+        conn.commit()
+        return deleted
+    finally:
+        release_connection(conn)

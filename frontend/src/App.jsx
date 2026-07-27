@@ -175,7 +175,7 @@ export default function App() {
           <Routes>
             <Route path="/" element={<Home />} />
             <Route path="/resume" element={<ResumePage state={state} setState={setState} setProctoring={setProctoring} />} />
-            <Route path="/company" element={<CompanyPage state={state} setState={setState} />} />
+            <Route path="/company" element={<CompanyPage state={state} setState={setState} user={user} />} />
             <Route path="/aptitude" element={<RoundPage key="aptitude" title="Aptitude Round" items={aptitudeItems} type="aptitude" state={state} setState={setState} proctoring={proctoring} setProctoring={setProctoring} />} />
             <Route path="/coding" element={<RoundPage key="coding" title="Coding Round" items={codingItems} type="coding" state={state} setState={setState} proctoring={proctoring} setProctoring={setProctoring} />} />
             <Route path="/technical" element={<ChatInterview key="technical" title="Technical Interview" questions={technicalItems} state={state} setState={setState} proctoring={proctoring} setProctoring={setProctoring} />} />

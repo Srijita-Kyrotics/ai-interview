@@ -74,7 +74,7 @@ function CompareModal({ sessionIds, onClose }) {
             ))}
             <tr>
               <td className="cell-muted">Proctoring Score</td>
-              {comparisons.map((c, i) => <td key={i}>{c.proctoring_score}%</td>)}
+              {comparisons.map((c, i) => <td key={i}>{c.proctoring_score ?? 100}%</td>)}
             </tr>
             <tr>
               <td className="cell-muted">Proctoring Status</td>

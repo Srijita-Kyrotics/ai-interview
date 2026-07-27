@@ -175,6 +175,8 @@ p { line-height: 1.65; margin: 0; }
   display: flex;
   align-items: flex-start;
   gap: 10px;
+  overflow: hidden;
+  word-wrap: break-word;
 }
 
 .notice.info {
@@ -187,6 +189,12 @@ p { line-height: 1.65; margin: 0; }
   color: #991B1B;
   background: var(--error-light);
   border: 1px solid var(--error-border);
+}
+
+.notice.success {
+  color: #166534;
+  background: #F0FDF4;
+  border: 1px solid #BBF7D0;
 }
 
 /* ═══════════════════════════════════════════════════════════
@@ -237,6 +245,7 @@ p { line-height: 1.65; margin: 0; }
   grid-template-columns: minmax(0, 1.1fr) minmax(420px, 0.9fr);
   z-index: 1;
   background: var(--bg-base);
+  overflow: hidden;
 }
 
 /* LEFT SIDE — Electric Blue Visual Panel */
@@ -286,6 +295,7 @@ p { line-height: 1.65; margin: 0; }
   position: relative;
   z-index: 1;
   max-width: 480px;
+  overflow: hidden;
 }
 
 .welcome-message .brand-badge {
@@ -396,7 +406,7 @@ p { line-height: 1.65; margin: 0; }
   justify-content: center;
   background: var(--white);
   position: relative;
-  overflow-y: auto;
+  overflow: hidden;
   box-shadow: -4px 0 24px rgba(0,0,0,0.06);
 }
 
@@ -404,6 +414,7 @@ p { line-height: 1.65; margin: 0; }
   display: grid;
   gap: 6px;
   margin-bottom: 8px;
+  overflow: hidden;
 }
 
 .panel-header .eyebrow {
@@ -429,6 +440,7 @@ p { line-height: 1.65; margin: 0; }
   margin-top: 28px;
   position: relative;
   z-index: 1;
+  overflow: hidden;
 }
 
 .form-section {
@@ -438,6 +450,7 @@ p { line-height: 1.65; margin: 0; }
   border-radius: var(--radius-lg);
   background: var(--gray-50);
   border: 1px solid var(--border);
+  overflow: hidden;
 }
 
 .section-title {
@@ -453,6 +466,7 @@ label {
   color: var(--text-secondary);
   font-size: 0.875rem;
   font-weight: 600;
+  overflow: hidden;
 }
 
 /* Input Fields */
@@ -466,6 +480,8 @@ label {
   outline: none;
   transition: border-color var(--transition-base), box-shadow var(--transition-base), background var(--transition-base);
   font-size: 0.9375rem;
+  box-sizing: border-box;
+  overflow: hidden;
 }
 
 .input:focus {
@@ -495,6 +511,7 @@ label {
 .password-field-wrapper {
   position: relative;
   display: grid;
+  overflow: hidden;
 }
 
 .password-field-wrapper .input { padding-right: 48px; }
@@ -653,6 +670,7 @@ label {
   display: block;
   text-align: center;
   padding: 8px;
+  overflow: hidden;
 }
 
 .link-button:hover { color: var(--primary); }
@@ -1549,8 +1567,8 @@ label {
   padding: 4px;
   margin-bottom: 28px;
   border: 1px solid var(--border);
-  width: max-content;
   gap: 2px;
+  overflow: hidden;
 }
 
 .mode-toggle button {
@@ -1563,6 +1581,11 @@ label {
   cursor: pointer;
   transition: all var(--transition-base);
   border: 0;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  min-width: 0;
+  flex: 1;
 }
 
 .mode-toggle button.active {
@@ -1673,6 +1696,8 @@ label {
   font-weight: 600;
   color: var(--text-primary);
   margin-bottom: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 /* Checkbox pill inside company card */
@@ -1854,6 +1879,8 @@ label {
   color: var(--text-primary);
   margin: 0;
   font-weight: 600;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .role-grid {
@@ -1895,6 +1922,8 @@ label {
   font-size: 1.05rem;
   font-weight: 700;
   margin: 4px 0 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .role-card-meta {
@@ -1946,6 +1975,9 @@ label {
   border-radius: var(--radius-full);
   font-size: 0.74rem;
   color: var(--primary-dark);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
   font-weight: 500;
   transition: background var(--transition-fast);
 }
@@ -4555,3 +4587,352 @@ label {
   line-height: 1.5;
   word-break: break-word;
 }
+
+
+/* ═══════════════════════════════════════════════════════════
+   RESPONSIVE — Tablet (≤1024px)
+═══════════════════════════════════════════════════════════ */
+@media (max-width: 1024px) {
+  /* Auth page: reduce left panel, allow wrapping */
+  .auth-screen {
+    grid-template-columns: 1fr 1fr;
+  }
+
+  .auth-visual {
+    padding: 40px 36px;
+  }
+
+  .auth-panel {
+    padding: 40px 36px;
+  }
+
+  .welcome-message h1 {
+    font-size: 2.2rem;
+  }
+
+  /* Sidebar: narrower */
+  :root {
+    --sidebar-w: 220px;
+  }
+
+  .company-grid {
+    grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+  }
+
+  .content-grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .insight-panel {
+    border-left: none;
+    border-top: 1px solid var(--border);
+  }
+
+  .pipeline-steps {
+    gap: 4px;
+  }
+
+  .mode-tab {
+    min-width: 180px;
+  }
+}
+
+
+/* ═══════════════════════════════════════════════════════════
+   RESPONSIVE — Mobile (≤768px)
+═══════════════════════════════════════════════════════════ */
+@media (max-width: 768px) {
+
+  /* ── Auth Page: stack vertically ── */
+  .auth-screen {
+    grid-template-columns: 1fr;
+    grid-template-rows: auto 1fr;
+  }
+
+  .auth-visual {
+    padding: 32px 24px;
+    gap: 24px;
+    min-height: unset;
+  }
+
+  .welcome-message h1 {
+    font-size: 1.8rem;
+  }
+
+  .feature-list {
+    display: none; /* hide feature cards on small screens to save space */
+  }
+
+  .auth-panel {
+    padding: 32px 24px;
+    box-shadow: none;
+    border-top: 1px solid var(--border);
+  }
+
+  /* ── App Shell: sidebar hidden by default, overlay on open ── */
+  .app-shell {
+    grid-template-columns: 1fr;
+  }
+
+  .sidebar {
+    position: fixed;
+    top: 0;
+    left: 0;
+    height: 100vh;
+    width: 280px;
+    z-index: 200;
+    transform: translateX(-100%);
+    transition: transform var(--transition-slow);
+    box-shadow: 4px 0 32px rgba(0,0,0,0.25);
+  }
+
+  .sidebar.open {
+    transform: translateX(0);
+  }
+
+  .sidebar-overlay {
+    display: block;
+    position: fixed;
+    inset: 0;
+    background: rgba(0,0,0,0.5);
+    z-index: 199;
+    backdrop-filter: blur(2px);
+    animation: fadeIn 0.2s ease both;
+  }
+
+  @keyframes fadeIn {
+    from { opacity: 0; }
+    to   { opacity: 1; }
+  }
+
+  .hamburger-btn {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 40px;
+    height: 40px;
+  }
+
+  /* ── Topbar ── */
+  .topbar {
+    padding: 0 16px;
+  }
+
+  .topbar h1 {
+    font-size: 1.1rem;
+  }
+
+  .status-pills {
+    display: none; /* hide status pills on mobile topbar */
+  }
+
+  /* ── Main Panel ── */
+  .main-panel {
+    padding: 20px 16px;
+  }
+
+  /* ── Company Grid ── */
+  .company-grid {
+    grid-template-columns: 1fr 1fr;
+    gap: 10px;
+  }
+
+  .company-card {
+    padding: 14px;
+  }
+
+  /* ── Mode Tabs ── */
+  .mode-toggle-row {
+    flex-direction: column;
+    gap: 8px;
+  }
+
+  .mode-tab {
+    min-width: unset;
+    width: 100%;
+  }
+
+  /* ── Pipeline ── */
+  .assessment-flow-pipeline {
+    padding: 16px;
+  }
+
+  .pipeline-steps {
+    flex-direction: column;
+    gap: 10px;
+  }
+
+  .pipeline-arrow {
+    transform: rotate(90deg);
+    padding: 4px 0;
+    align-self: center;
+  }
+
+  /* ── Detail grid ── */
+  .detail-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .detail-block.full-width {
+    grid-column: 1;
+  }
+
+  /* ── Content Grid ── */
+  .content-grid {
+    grid-template-columns: 1fr;
+  }
+
+  /* ── Section head ── */
+  .section-head {
+    flex-direction: column;
+    gap: 12px;
+    margin-bottom: 20px;
+  }
+
+  /* ── Topbar action row ── */
+  .action-row {
+    flex-wrap: wrap;
+    gap: 8px;
+  }
+
+  /* ── Modal ── */
+  .modal-overlay {
+    padding: 12px;
+    align-items: flex-end;
+  }
+
+  .modal-box {
+    max-width: 100%;
+    width: 100%;
+    border-radius: var(--radius-xl) var(--radius-xl) 0 0;
+    max-height: 90vh;
+    overflow-y: auto;
+  }
+
+  /* ── Round Page ── */
+  .round-layout {
+    flex-direction: column;
+  }
+
+  .question-panel {
+    flex: unset;
+    width: 100%;
+  }
+
+  .answer-panel {
+    width: 100%;
+  }
+
+  /* ── Report Page ── */
+  .report-scores-grid {
+    grid-template-columns: 1fr 1fr;
+  }
+
+  /* ── Dashboard ── */
+  .dashboard-stats {
+    grid-template-columns: 1fr 1fr;
+  }
+
+  /* ── Proctoring detail ── */
+  .proctoring-detail-grid {
+    grid-template-columns: 1fr;
+  }
+
+  /* ── Resume head ── */
+  .resume-head {
+    flex-direction: column;
+    gap: 12px;
+  }
+
+  /* ── Panel hover lift: disable on mobile (no hover) ── */
+  .panel:hover {
+    transform: none;
+  }
+
+  .resume-card:hover,
+  .company-card:hover,
+  .upload-zone:hover {
+    transform: none;
+  }
+}
+
+
+/* ═══════════════════════════════════════════════════════════
+   RESPONSIVE — Small Mobile (≤480px)
+═══════════════════════════════════════════════════════════ */
+@media (max-width: 480px) {
+
+  .auth-visual {
+    padding: 24px 16px;
+  }
+
+  .auth-panel {
+    padding: 24px 16px;
+  }
+
+  .panel-header h2 {
+    font-size: 1.4rem;
+  }
+
+  .form-section {
+    padding: 16px;
+  }
+
+  .company-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .report-scores-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .dashboard-stats {
+    grid-template-columns: 1fr;
+  }
+
+  .company-bulk-controls {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+
+  .captcha-box {
+    grid-template-columns: 1fr;
+    gap: 8px;
+  }
+
+  .captcha-box .btn {
+    width: 100%;
+  }
+
+  .btn.primary {
+    padding: 12px 16px;
+  }
+
+  .topbar h1 {
+    font-size: 1rem;
+  }
+
+  .brand-row {
+    padding-bottom: 14px;
+  }
+
+  /* Auth orbs: smaller on tiny screens */
+  .orb-1 {
+    width: 280px;
+    height: 280px;
+  }
+
+  .orb-2 {
+    width: 220px;
+    height: 220px;
+  }
+
+  /* Proctoring toast full-width */
+  .proctoring-toast {
+    min-width: unset;
+    width: calc(100vw - 24px);
+    left: 12px;
+    transform: none;
+  }
+}
+
