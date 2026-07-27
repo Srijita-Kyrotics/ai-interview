@@ -125,6 +125,12 @@ export function useInterviewWebSocket({ sessionId, roundKey, onMessage, onCodeRe
     }
   }, [])
 
+  const sendMetrics = useCallback((metrics) => {
+    if (wsRef.current?.readyState === WebSocket.OPEN) {
+      wsRef.current.send(JSON.stringify({ type: 'metrics', metrics }))
+    }
+  }, [])
+
   const disconnect = useCallback(() => {
     intentionalClose.current = true
     wsRef.current?.close()
@@ -139,6 +145,7 @@ export function useInterviewWebSocket({ sessionId, roundKey, onMessage, onCodeRe
     sendCodeUpdate,
     requestCodeReview,
     endInterview,
+    sendMetrics,
     disconnect,
     reconnect: connect,
   }

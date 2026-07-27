@@ -58,7 +58,8 @@ def _make_gemini_chat(session_state: dict[str, Any], role_key: str):
 
 
 def _save_conversation(session_id: str, conversation_log: list[dict[str, str]], round_key: str,
-                       latest_code: str, latest_language: str, code_review: str | None):
+                       latest_code: str, latest_language: str, code_review: str | None,
+                       interview_metrics: dict[str, Any] | None = None):
     """Save the full interview conversation, code, and review to the session."""
     state = load_session(session_id)
     if not state:
@@ -90,6 +91,11 @@ def _save_conversation(session_id: str, conversation_log: list[dict[str, str]], 
         "codeReview": code_review,
         "completedAt": time.time(),
     }
+
+    # Save interview metrics for scoring
+    if interview_metrics:
+        state.setdefault("interviewMetrics", {})
+        state["interviewMetrics"][round_key] = interview_metrics
 
     save_session(session_id, state)
 
@@ -138,6 +144,7 @@ async def interview_websocket(
     code_review_text: str | None = None
     question_count = 0
     max_questions = 7
+    interview_metrics: dict[str, Any] = {}
 
     # ── Send welcome + first question ──────────────────────────────────────
     await websocket.send_json({
@@ -184,6 +191,11 @@ async def interview_websocket(
             if msg_type == "code_update":
                 latest_code = msg.get("code", "")
                 latest_language = msg.get("language", "javascript")
+                continue
+
+            # ── Interview metrics from frontend ──────────────────────────
+            if msg_type == "metrics":
+                interview_metrics = msg.get("metrics", {})
                 continue
 
             # ── Student answer (text or voice transcript) ─────────────────
@@ -284,7 +296,8 @@ async def interview_websocket(
             # ── End interview ─────────────────────────────────────────────
             if msg_type == "end_interview":
                 _save_conversation(session_id, conversation_log, round_key,
-                                   latest_code, latest_language, code_review_text)
+                                   latest_code, latest_language, code_review_text,
+                                   interview_metrics)
                 await websocket.send_json({"type": "interview_ended", "timestamp": time.time()})
                 break
 
@@ -297,7 +310,8 @@ async def interview_websocket(
         if conversation_log:
             try:
                 _save_conversation(session_id, conversation_log, round_key,
-                                   latest_code, latest_language, code_review_text)
+                                   latest_code, latest_language, code_review_text,
+                                   interview_metrics)
             except Exception as e:
                 logger.error("Failed to save conversation on disconnect", extra={"error": str(e)})
 

@@ -1,12 +1,17 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react'
 import { Navigate, useNavigate } from 'react-router-dom'
-import { Mic, MicOff, Send, Code2, MessageSquare, Volume2, VolumeX, PhoneOff } from 'lucide-react'
+import { Mic, MicOff, Send, Code2, MessageSquare, Volume2, VolumeX, PhoneOff, Clock, AlertTriangle } from 'lucide-react'
 import { api } from '../api'
 import { useInterviewWebSocket } from '../hooks/useInterviewWebSocket'
 import { useAssessmentProctoring } from '../proctoring/useAssessmentProctoring'
-import { ProctoringModal } from '../proctoring/ProctoringUI'
+import { ProctoringModal, ProctoringPanel } from '../proctoring/ProctoringUI'
 import { speak, stopSpeaking, playChime } from '../utils/speak'
 import { CodeEditor } from './CodeEditor'
+
+const SPEECH_SUPPORTED = typeof window !== 'undefined' && (window.SpeechRecognition || window.webkitSpeechRecognition)
+const RESTART_DELAY_MS = 600
+const SILENCE_AUTO_SEND_MS = 4000
+const QUESTION_TIMEOUT_MS = 180000
 
 function LiveInterview({ title, questions, state, setState, proctoring, setProctoring }) {
   const navigate = useNavigate()
@@ -27,15 +32,23 @@ function LiveInterview({ title, questions, state, setState, proctoring, setProct
   const [isThinking, setIsThinking] = useState(false)
 
   // ── Voice state ───────────────────────────────────────────────────────
-  const [voiceMode, setVoiceMode] = useState(false) // continuous listening on/off
+  const [voiceMode, setVoiceMode] = useState(false)
   const [isListening, setIsListening] = useState(false)
   const [muted, setMuted] = useState(false)
+  const [speechError, setSpeechError] = useState('')
+  const [audioLevel, setAudioLevel] = useState(0)
 
   // ── Code ──────────────────────────────────────────────────────────────
   const [code, setCode] = useState('')
   const [language, setLanguage] = useState('javascript')
   const [activeTab, setActiveTab] = useState('chat')
   const [completed, setCompleted] = useState(false)
+
+  // ── Interview metrics ─────────────────────────────────────────────────
+  const questionStartTimeRef = useRef(Date.now())
+  const voiceActiveSinceRef = useRef(null)
+  const totalVoiceDurationRef = useRef(0)
+  const questionCountRef = useRef(0)
 
   // ── Refs ──────────────────────────────────────────────────────────────
   const scrollerRef = useRef(null)
@@ -49,6 +62,9 @@ function LiveInterview({ title, questions, state, setState, proctoring, setProct
   const languageRef = useRef('javascript')
   const autoRestartRef = useRef(false)
   const ttsRef = useRef(null)
+  const silenceTimerRef = useRef(null)
+  const restartTimeoutRef = useRef(null)
+  const audioLevelTimerRef = useRef(null)
 
   const roleKey = title.toLowerCase().includes('hr') ? 'hr' : 'technical'
 
@@ -74,35 +90,149 @@ function LiveInterview({ title, questions, state, setState, proctoring, setProct
     screenStream
   })
 
+  // ── Track voice activity duration ─────────────────────────────────────
+  const startVoiceTracking = useCallback(() => {
+    voiceActiveSinceRef.current = Date.now()
+  }, [])
+
+  const stopVoiceTracking = useCallback(() => {
+    if (voiceActiveSinceRef.current) {
+      const duration = (Date.now() - voiceActiveSinceRef.current) / 1000
+      totalVoiceDurationRef.current += Math.min(duration, 300)
+      voiceActiveSinceRef.current = null
+    }
+  }, [])
+
+  // ── Record question metric ────────────────────────────────────────────
+  const recordQuestionMetric = useCallback((answerText, hasVoice) => {
+    const timeSpent = Math.round((Date.now() - questionStartTimeRef.current) / 1000)
+    questionStartTimeRef.current = Date.now()
+    questionCountRef.current += 1
+
+    const voiceDuration = Math.round(totalVoiceDurationRef.current)
+    totalVoiceDurationRef.current = 0
+
+    setProctoring((prev) => ({
+      ...prev,
+      timeSpent: {
+        ...prev.timeSpent,
+        [roleKey]: (prev.timeSpent?.[roleKey] || 0) + timeSpent
+      },
+      interviewMetrics: {
+        ...prev.interviewMetrics,
+        [roleKey]: {
+          questionTimes: [...(prev.interviewMetrics?.[roleKey]?.questionTimes || []), timeSpent],
+          voiceDurations: [...(prev.interviewMetrics?.[roleKey]?.voiceDurations || []), voiceDuration],
+          submissions: [
+            ...(prev.interviewMetrics?.[roleKey]?.submissions || []),
+            {
+              questionIndex: questionCountRef.current,
+              submittedAt: new Date().toISOString(),
+              answerLength: answerText.length,
+              hasVoice
+            }
+          ]
+        }
+      }
+    }))
+  }, [roleKey, setProctoring])
+
+  // ── Clear silence auto-send timer ─────────────────────────────────────
+  const clearSilenceTimer = useCallback(() => {
+    if (silenceTimerRef.current) {
+      clearTimeout(silenceTimerRef.current)
+      silenceTimerRef.current = null
+    }
+  }, [])
+
+  // ── Audio level monitor ───────────────────────────────────────────────
+  const startAudioLevelMonitor = useCallback(() => {
+    if (audioLevelTimerRef.current) return
+    const stream = userStream
+    if (!stream) return
+
+    let audioCtx = null
+    let analyser = null
+    let source = null
+
+    try {
+      audioCtx = new (window.AudioContext || window.webkitAudioContext)()
+      source = audioCtx.createMediaStreamSource(stream)
+      analyser = audioCtx.createAnalyser()
+      analyser.fftSize = 256
+      source.connect(analyser)
+
+      const dataArray = new Uint8Array(analyser.frequencyBinCount)
+      const updateLevel = () => {
+        analyser.getByteFrequencyData(dataArray)
+        let sum = 0
+        for (let i = 0; i < dataArray.length; i++) sum += dataArray[i]
+        const avg = sum / dataArray.length
+        setAudioLevel(Math.min(100, Math.round(avg * 2)))
+      }
+
+      audioLevelTimerRef.current = { timer: setInterval(updateLevel, 150), audioCtx }
+    } catch {
+      // AudioContext not available
+    }
+  }, [userStream])
+
+  const stopAudioLevelMonitor = useCallback(() => {
+    if (audioLevelTimerRef.current) {
+      clearInterval(audioLevelTimerRef.current.timer)
+      try { audioLevelTimerRef.current.audioCtx?.close() } catch {}
+      audioLevelTimerRef.current = null
+    }
+    setAudioLevel(0)
+  }, [])
+
+  useEffect(() => {
+    if (isStarted && userStream) startAudioLevelMonitor()
+    return () => stopAudioLevelMonitor()
+  }, [isStarted, userStream, startAudioLevelMonitor, stopAudioLevelMonitor])
+
   // ── Speech recognition helpers ────────────────────────────────────────
   const stopListening = useCallback(() => {
     autoRestartRef.current = false
+    clearSilenceTimer()
+    if (restartTimeoutRef.current) {
+      clearTimeout(restartTimeoutRef.current)
+      restartTimeoutRef.current = null
+    }
     if (recognitionRef.current) {
       try { recognitionRef.current.stop() } catch {}
       recognitionRef.current = null
     }
+    stopVoiceTracking()
     setIsListening(false)
-  }, [])
+  }, [clearSilenceTimer, stopVoiceTracking])
 
   const startListening = useCallback(() => {
-    const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition
-    if (!SpeechRecognition) return
+    if (!SPEECH_SUPPORTED) {
+      setSpeechError('Speech recognition is not supported in this browser. Please use Chrome or Edge.')
+      return
+    }
 
-    // Don't start if already listening or if Obi is thinking
     if (recognitionRef.current || isThinkingRef.current) return
 
-    // If Obi is speaking, barge-in: cancel TTS
     if (isAiSpeakingRef.current) {
       ttsRef.current?.cancel()
       stopSpeaking()
       setIsAiSpeaking(false)
     }
 
-    const recognition = new SpeechRecognition()
+    setSpeechError('')
+
+    const recognition = new (window.SpeechRecognition || window.webkitSpeechRecognition)()
     recognition.continuous = true
     recognition.interimResults = true
     recognition.lang = 'en-US'
     recognition.maxAlternatives = 1
+
+    recognition.onstart = () => {
+      setIsListening(true)
+      startVoiceTracking()
+    }
 
     recognition.onresult = (event) => {
       let final = ''
@@ -115,92 +245,137 @@ function LiveInterview({ title, questions, state, setState, proctoring, setProct
           interim += transcript
         }
       }
-      // Show interim in input field
+
       if (interim) {
         setInputText(interim)
         inputTextRef.current = interim
+        clearSilenceTimer()
       }
+
       if (final) {
+        stopVoiceTracking()
+        startVoiceTracking()
         setInputText(prev => {
           const base = prev && !prev.endsWith(' ') ? prev + ' ' : prev || ''
           return base + final
         })
+        clearSilenceTimer()
+
+        if (autoRestartRef.current) {
+          silenceTimerRef.current = setTimeout(() => {
+            const text = inputTextRef.current.trim()
+            if (text && autoRestartRef.current && !isThinkingRef.current) {
+              autoRestartRef.current = false
+              setIsListening(false)
+              recognitionRef.current = null
+              stopVoiceTracking()
+              sendMessage(text)
+              setMessages(prev => [...prev, { role: 'candidate', text }])
+              recordQuestionMetric(text, true)
+              setInputText('')
+              inputTextRef.current = ''
+            }
+          }, SILENCE_AUTO_SEND_MS)
+        }
       }
     }
 
     recognition.onerror = (event) => {
-      // 'no-speech' and 'aborted' are normal — just keep going
       if (event.error === 'no-speech' || event.error === 'aborted') {
         if (autoRestartRef.current && !isThinkingRef.current) {
-          try { recognition.start() } catch {}
+          restartTimeoutRef.current = setTimeout(() => {
+            try { recognition.start() } catch {}
+          }, RESTART_DELAY_MS)
         }
         return
       }
-      // 'not-allowed' = mic permission revoked
+
       if (event.error === 'not-allowed') {
+        setIsListening(false)
+        autoRestartRef.current = false
+        setSpeechError('Microphone access denied. Please allow microphone access and try again.')
+        return
+      }
+
+      if (event.error === 'network') {
+        setSpeechError('Network error during speech recognition. Retrying...')
+        if (autoRestartRef.current && !isThinkingRef.current) {
+          restartTimeoutRef.current = setTimeout(() => {
+            try { recognition.start() } catch {}
+          }, 2000)
+        }
+        return
+      }
+
+      if (event.error === 'service-not-allowed') {
+        setSpeechError('Speech service not available. Please try a different browser.')
         setIsListening(false)
         autoRestartRef.current = false
         return
       }
-      // Other errors: try to restart if in voice mode
+
       if (autoRestartRef.current && !isThinkingRef.current) {
-        setTimeout(() => {
+        restartTimeoutRef.current = setTimeout(() => {
           try { recognition.start() } catch {}
-        }, 500)
+        }, RESTART_DELAY_MS)
       }
     }
 
     recognition.onend = () => {
-      // If we have text in the input and were doing continuous listening,
-      // the silence timeout means the student finished speaking — auto-send
       const text = inputTextRef.current.trim()
-      if (text && autoRestartRef.current && !isThinkingRef.current) {
-        // Student finished speaking — auto-send
+      if (text && autoRestartRef.current && !isThinkingRef.current && !silenceTimerRef.current) {
         autoRestartRef.current = false
         setIsListening(false)
         recognitionRef.current = null
-
-        // Send the message
+        stopVoiceTracking()
         sendMessage(text)
         setMessages(prev => [...prev, { role: 'candidate', text }])
+        recordQuestionMetric(text, true)
         setInputText('')
         inputTextRef.current = ''
         return
       }
-      // Otherwise restart if still in voice mode
+
       if (autoRestartRef.current && !isThinkingRef.current) {
-        try {
-          recognition.start()
-        } catch {
-          setIsListening(false)
-        }
+        restartTimeoutRef.current = setTimeout(() => {
+          try {
+            recognition.start()
+          } catch {
+            setIsListening(false)
+            recognitionRef.current = null
+          }
+        }, RESTART_DELAY_MS)
       } else {
         setIsListening(false)
         recognitionRef.current = null
+        stopVoiceTracking()
       }
     }
 
     recognitionRef.current = recognition
     try {
       recognition.start()
-      setIsListening(true)
     } catch {
       setIsListening(false)
       recognitionRef.current = null
+      setSpeechError('Failed to start speech recognition. Please try again.')
     }
-  }, [stopListening])
+  }, [stopListening, startVoiceTracking, stopVoiceTracking, sendMessage, recordQuestionMetric, clearSilenceTimer])
 
   // ── Voice mode toggle ─────────────────────────────────────────────────
   const toggleVoiceMode = useCallback(() => {
     if (voiceModeRef.current) {
-      // Turn off voice mode
       autoRestartRef.current = false
       stopListening()
       setVoiceMode(false)
     } else {
-      // Turn on voice mode
+      if (!SPEECH_SUPPORTED) {
+        setSpeechError('Speech recognition is not supported in this browser. Please use Chrome or Edge.')
+        return
+      }
       autoRestartRef.current = true
       setVoiceMode(true)
+      setSpeechError('')
       startListening()
     }
   }, [startListening, stopListening])
@@ -219,8 +394,8 @@ function LiveInterview({ title, questions, state, setState, proctoring, setProct
   const onMessage = useCallback((data) => {
     const msg = { role: 'interviewer', text: data.text, timestamp: data.timestamp }
     setMessages(prev => [...prev, msg])
+    questionStartTimeRef.current = Date.now()
 
-    // Play chime + speak
     if (!mutedRef.current) {
       playChime()
       setTimeout(() => {
@@ -228,18 +403,16 @@ function LiveInterview({ title, questions, state, setState, proctoring, setProct
         const ref = speak(data.text, {
           onEnd: () => {
             setIsAiSpeaking(false)
-            // Auto-restart listening in voice mode
             if (voiceModeRef.current && !isThinkingRef.current) {
-              setTimeout(() => startListening(), 300)
+              restartTimeoutRef.current = setTimeout(() => startListening(), 300)
             }
           }
         })
         ttsRef.current = ref
-      }, 400) // Wait for chime to finish
+      }, 400)
     } else {
-      // Even if muted, auto-restart in voice mode
       if (voiceModeRef.current && !isThinkingRef.current) {
-        setTimeout(() => startListening(), 300)
+        restartTimeoutRef.current = setTimeout(() => startListening(), 300)
       }
     }
   }, [startListening])
@@ -256,7 +429,7 @@ function LiveInterview({ title, questions, state, setState, proctoring, setProct
           onEnd: () => {
             setIsAiSpeaking(false)
             if (voiceModeRef.current && !isThinkingRef.current) {
-              setTimeout(() => startListening(), 300)
+              restartTimeoutRef.current = setTimeout(() => startListening(), 300)
             }
           }
         })
@@ -277,12 +450,12 @@ function LiveInterview({ title, questions, state, setState, proctoring, setProct
   const onThinkingChange = useCallback((thinking) => {
     setIsThinking(thinking)
     if (thinking) {
-      // Cancel any ongoing speech when thinking starts
       ttsRef.current?.cancel()
       stopSpeaking()
       setIsAiSpeaking(false)
+      clearSilenceTimer()
     }
-  }, [])
+  }, [clearSilenceTimer])
 
   const {
     status: wsStatus,
@@ -292,6 +465,7 @@ function LiveInterview({ title, questions, state, setState, proctoring, setProct
     requestCodeReview,
     endInterview,
     disconnect,
+    sendMetrics,
   } = useInterviewWebSocket({
     sessionId: state.sessionId,
     roundKey: roleKey,
@@ -317,8 +491,11 @@ function LiveInterview({ title, questions, state, setState, proctoring, setProct
       screenStream?.getTracks().forEach(t => t.stop())
       stopSpeaking()
       ttsRef.current?.cancel()
+      clearSilenceTimer()
+      stopAudioLevelMonitor()
+      if (restartTimeoutRef.current) clearTimeout(restartTimeoutRef.current)
     }
-  }, []) // eslint-disable-line react-hooks/exhaustive-deps
+  }, [])
 
   // ── Auto-scroll ───────────────────────────────────────────────────────
   useEffect(() => {
@@ -357,6 +534,7 @@ function LiveInterview({ title, questions, state, setState, proctoring, setProct
         setProctorError(res.error)
         return
       }
+      questionStartTimeRef.current = Date.now()
       setIsStarted(true)
     } catch {
       setProctorError('Failed to start the interview.')
@@ -370,12 +548,14 @@ function LiveInterview({ title, questions, state, setState, proctoring, setProct
     submittingRef.current = true
 
     stopListening()
+    stopVoiceTracking()
     sendMessage(text)
     setMessages(prev => [...prev, { role: 'candidate', text }])
+    recordQuestionMetric(text, false)
     setInputText('')
     inputTextRef.current = ''
     submittingRef.current = false
-  }, [sendMessage, stopListening])
+  }, [sendMessage, stopListening, stopVoiceTracking, recordQuestionMetric])
 
   // ── Code handlers ─────────────────────────────────────────────────────
   const handleCodeChange = useCallback((newCode) => {
@@ -406,6 +586,12 @@ function LiveInterview({ title, questions, state, setState, proctoring, setProct
   // ── End / skip ────────────────────────────────────────────────────────
   const handleEndInterview = useCallback(() => {
     stopListening()
+    stopVoiceTracking()
+    sendMetrics({
+      questionTimes: proctoring.interviewMetrics?.[roleKey]?.questionTimes || [],
+      voiceDurations: proctoring.interviewMetrics?.[roleKey]?.voiceDurations || [],
+      submissions: proctoring.interviewMetrics?.[roleKey]?.submissions || [],
+    })
     endInterview()
     disconnect()
     stopSpeaking()
@@ -413,17 +599,18 @@ function LiveInterview({ title, questions, state, setState, proctoring, setProct
     const nextStage = roleKey === 'hr' ? 'report' : 'hr'
     setState(s => ({ ...s, stage: nextStage, roundTransition: true }))
     navigate(`/${nextStage}`)
-  }, [endInterview, disconnect, roleKey, setState, navigate, stopListening])
+  }, [endInterview, disconnect, roleKey, setState, navigate, stopListening, stopVoiceTracking, sendMetrics, proctoring])
 
   const handleSkip = useCallback(() => {
     stopListening()
+    stopVoiceTracking()
     disconnect()
     stopSpeaking()
     ttsRef.current?.cancel()
     const nextStage = roleKey === 'hr' ? 'report' : 'hr'
     setState(s => ({ ...s, stage: nextStage, roundTransition: true }))
     navigate(`/${nextStage}`)
-  }, [disconnect, roleKey, setState, navigate, stopListening])
+  }, [disconnect, roleKey, setState, navigate, stopListening, stopVoiceTracking])
 
   // ── Guards ────────────────────────────────────────────────────────────
   if (!state.sessionId) return <Navigate to="/resume" replace />
@@ -444,6 +631,11 @@ function LiveInterview({ title, questions, state, setState, proctoring, setProct
           </div>
         </div>
         {proctorError ? <div className="notice danger">{proctorError}</div> : null}
+        {!SPEECH_SUPPORTED && (
+          <div className="notice warning">
+            <AlertTriangle size={14} /> Speech recognition is not supported in this browser. Voice mode will be disabled. Please use Chrome or Edge for full voice support.
+          </div>
+        )}
         <div className="empty-state" style={{ minHeight: 'auto', padding: '40px 0' }}>
           {!hasPermissions ? (
             <button className="btn primary" type="button" onClick={startProctoring}>Grant Permissions</button>
@@ -500,122 +692,142 @@ function LiveInterview({ title, questions, state, setState, proctoring, setProct
         </div>
       </div>
 
-      <div className="video-preview-topright interview-webcam">
-        <video ref={videoRef} autoPlay muted playsInline style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
-        <span className="live-indicator">Live</span>
-        {isAiSpeaking && <span className="ai-speaking-indicator">Obi speaking...</span>}
-      </div>
+      {/* Main layout: interview + proctoring sidebar */}
+      <div className="interview-layout">
+        {/* Left: interview content */}
+        <div className="interview-main">
+          <div className="video-preview-topright interview-webcam">
+            <video ref={videoRef} autoPlay muted playsInline style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+            <span className="live-indicator">Live</span>
+            {isAiSpeaking && <span className="ai-speaking-indicator">Obi speaking...</span>}
+          </div>
 
-      {/* Tab bar */}
-      <div className="live-interview-tabs">
-        <button className={`tab-btn ${activeTab === 'chat' ? 'active' : ''}`} onClick={() => setActiveTab('chat')}>
-          <MessageSquare size={14} /> Chat
-        </button>
-        <button className={`tab-btn ${activeTab === 'code' ? 'active' : ''}`} onClick={() => setActiveTab('code')}>
-          <Code2 size={14} /> Code
-        </button>
-      </div>
+          {/* Tab bar */}
+          <div className="live-interview-tabs">
+            <button className={`tab-btn ${activeTab === 'chat' ? 'active' : ''}`} onClick={() => setActiveTab('chat')}>
+              <MessageSquare size={14} /> Chat
+            </button>
+            <button className={`tab-btn ${activeTab === 'code' ? 'active' : ''}`} onClick={() => setActiveTab('code')}>
+              <Code2 size={14} /> Code
+            </button>
+          </div>
 
-      {/* Chat panel */}
-      {activeTab === 'chat' && (
-        <div className="chat-window" ref={scrollerRef}>
-          {messages.map((msg, i) => (
-            <div key={`${msg.role}-${i}`} className={`chat-bubble ${msg.role}`}>
-              <b>
-                {msg.role === 'interviewer' ? '🤖 Obi' :
-                 msg.role === 'reviewer' ? '📝 Obi - Code Review' :
-                 msg.role === 'candidate' ? '👤 You' : '⚡ System'}
-              </b>
-              <p>{msg.text}</p>
+          {/* Chat panel */}
+          {activeTab === 'chat' && (
+            <div className="chat-window" ref={scrollerRef}>
+              {messages.map((msg, i) => (
+                <div key={`${msg.role}-${i}`} className={`chat-bubble ${msg.role}`}>
+                  <b>
+                    {msg.role === 'interviewer' ? '🤖 Obi' :
+                     msg.role === 'reviewer' ? '📝 Obi - Code Review' :
+                     msg.role === 'candidate' ? '👤 You' : '⚡ System'}
+                  </b>
+                  <p>{msg.text}</p>
+                </div>
+              ))}
+              {isThinking && (
+                <div className="chat-bubble interviewer thinking-bubble">
+                  <b>🤖 Obi</b>
+                  <div className="typing-indicator">
+                    <span></span><span></span><span></span>
+                  </div>
+                </div>
+              )}
             </div>
-          ))}
-          {isThinking && (
-            <div className="chat-bubble interviewer thinking-bubble">
-              <b>🤖 Obi</b>
-              <div className="typing-indicator">
-                <span></span><span></span><span></span>
+          )}
+
+          {/* Code panel */}
+          {activeTab === 'code' && (
+            <div className="live-code-panel">
+              <div className="language-tabs">
+                {languages.map(lang => (
+                  <button key={lang} className={language === lang ? 'active' : ''} onClick={() => handleLanguageChange(lang)}>
+                    {langLabels[lang]}
+                  </button>
+                ))}
+              </div>
+              <CodeEditor
+                value={code}
+                onChange={handleCodeChange}
+                language={langLabels[language]}
+                questionTitle="Live Code"
+              />
+              {codeReview && (
+                <div className="code-review-output">
+                  <div className="output-title">AI Code Review</div>
+                  <pre>{codeReview.text}</pre>
+                </div>
+              )}
+              <div className="coding-actions">
+                <button className="btn primary" type="button" onClick={handleSubmitCode} disabled={!code.trim()}>
+                  Submit Code for Review
+                </button>
               </div>
             </div>
           )}
-        </div>
-      )}
 
-      {/* Code panel */}
-      {activeTab === 'code' && (
-        <div className="live-code-panel">
-          <div className="language-tabs">
-            {languages.map(lang => (
-              <button key={lang} className={language === lang ? 'active' : ''} onClick={() => handleLanguageChange(lang)}>
-                {langLabels[lang]}
-              </button>
-            ))}
-          </div>
-          <CodeEditor
-            value={code}
-            onChange={handleCodeChange}
-            language={langLabels[language]}
-            questionTitle="Live Code"
-          />
-          {codeReview && (
-            <div className="code-review-output">
-              <div className="output-title">AI Code Review</div>
-              <pre>{codeReview.text}</pre>
+          {/* Input area */}
+          <div className="live-interview-input">
+            {speechError && (
+              <div className="speech-error-notice">
+                <AlertTriangle size={12} /> {speechError}
+              </div>
+            )}
+
+            <div className="voice-controls">
+              {SPEECH_SUPPORTED && (
+                <button
+                  className={`btn ${voiceMode ? 'primary voice-active' : 'ghost'}`}
+                  type="button"
+                  onClick={toggleVoiceMode}
+                  title={voiceMode ? 'Disable voice mode' : 'Enable voice mode (continuous listening)'}
+                >
+                  {voiceMode ? <Mic size={16} /> : <MicOff size={16} />}
+                  {voiceMode ? 'Voice On' : 'Voice Off'}
+                </button>
+              )}
+
+              {!voiceMode && SPEECH_SUPPORTED && (
+                <button
+                  className={`btn ${isListening ? 'danger recording' : 'ghost'}`}
+                  type="button"
+                  onClick={toggleManualListen}
+                  title={isListening ? 'Stop listening' : 'Listen once'}
+                >
+                  {isListening ? <MicOff size={14} /> : <Mic size={14} />}
+                </button>
+              )}
             </div>
-          )}
-          <div className="coding-actions">
-            <button className="btn primary" type="button" onClick={handleSubmitCode} disabled={!code.trim()}>
-              Submit Code for Review
+
+            {isListening && (
+              <div className="listening-indicator">
+                <span className="listening-dot"></span>
+                <div className="audio-level-bar">
+                  <div className="audio-level-fill" style={{ width: `${audioLevel}%` }} />
+                </div>
+                Listening...
+              </div>
+            )}
+
+            <input
+              className="input"
+              value={inputText}
+              onChange={e => { setInputText(e.target.value); inputTextRef.current = e.target.value }}
+              onKeyDown={e => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); handleSend() } }}
+              placeholder={voiceMode ? "Listening... (speak or type)" : "Type your answer..."}
+              aria-label="Type your answer"
+              readOnly={isListening && voiceMode}
+            />
+            <button className="btn primary" type="button" onClick={handleSend} disabled={!inputText.trim() || isThinking}>
+              <Send size={14} /> Send
             </button>
           </div>
         </div>
-      )}
 
-      {/* Input area */}
-      <div className="live-interview-input">
-        <div className="voice-controls">
-          {/* Voice mode toggle (continuous) */}
-          <button
-            className={`btn ${voiceMode ? 'primary voice-active' : 'ghost'}`}
-            type="button"
-            onClick={toggleVoiceMode}
-            title={voiceMode ? 'Disable voice mode' : 'Enable voice mode (continuous listening)'}
-          >
-            {voiceMode ? <Mic size={16} /> : <MicOff size={16} />}
-            {voiceMode ? 'Voice On' : 'Voice Off'}
-          </button>
-
-          {/* One-shot listen (manual) */}
-          {!voiceMode && (
-            <button
-              className={`btn ${isListening ? 'danger recording' : 'ghost'}`}
-              type="button"
-              onClick={toggleManualListen}
-              title={isListening ? 'Stop listening' : 'Listen once'}
-            >
-              {isListening ? <MicOff size={14} /> : <Mic size={14} />}
-            </button>
-          )}
+        {/* Right: proctoring sidebar */}
+        <div className="interview-sidebar">
+          <ProctoringPanel proctoring={proctoring} />
         </div>
-
-        {isListening && (
-          <div className="listening-indicator">
-            <span className="listening-dot"></span>
-            Listening...
-          </div>
-        )}
-
-        <input
-          className="input"
-          value={inputText}
-          onChange={e => { setInputText(e.target.value); inputTextRef.current = e.target.value }}
-          onKeyDown={e => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); handleSend() } }}
-          placeholder={voiceMode ? "Listening... (speak or type)" : "Type your answer..."}
-          aria-label="Type your answer"
-          readOnly={isListening && voiceMode}
-        />
-        <button className="btn primary" type="button" onClick={handleSend} disabled={!inputText.trim() || isThinking}>
-          <Send size={14} /> Send
-        </button>
       </div>
     </section>
   )
