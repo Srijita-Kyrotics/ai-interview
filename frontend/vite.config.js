@@ -10,17 +10,25 @@ export default defineConfig({
         target: 'http://127.0.0.1:8000',
         changeOrigin: true,
         rewrite: (path) => path.replace(/^\/api/, ''),
+        ws: true,
       },
     },
   },
   build: {
-    chunkSizeWarningLimit: 800,
+    chunkSizeWarningLimit: 600,
     rollupOptions: {
       output: {
-        manualChunks: {
-          'vendor-react': ['react', 'react-dom'],
-          'vendor-chart': ['recharts'],
-          'vendor-lucide': ['lucide-react'],
+        manualChunks(id) {
+          if (id.includes('node_modules')) {
+            if (id.includes('react-dom')) return 'vendor-react'
+            if (id.includes('react-router') || id.includes('react-router-dom')) return 'vendor-router'
+            if (id.includes('@codemirror') || id.includes('codemirror')) return 'vendor-codemirror'
+            if (id.includes('recharts')) return 'vendor-chart'
+            if (id.includes('lucide-react')) return 'vendor-lucide'
+            if (id.includes('@tensorflow') || id.includes('face-api')) return 'vendor-ml'
+            if (id.includes('katex')) return 'vendor-katex'
+            if (id.includes('jspdf') || id.includes('html2canvas')) return 'vendor-pdf'
+          }
         },
       },
     },
@@ -32,4 +40,3 @@ export default defineConfig({
     css: false,
   },
 })
-

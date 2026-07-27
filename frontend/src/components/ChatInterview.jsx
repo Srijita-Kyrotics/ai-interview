@@ -128,19 +128,13 @@ function ChatInterview({ title, questions, state, setState, proctoring, setProct
     }
   }, [userStream, screenStream])
 
-  useEffect(() => {
-
-    document.documentElement
-      .requestFullscreen()
-      .catch(() => { })
-
-  }, [])
-
   const startProctoring = async () => {
+    let uMedia = null
+    let dMedia = null
     try {
       setProctorError('')
-      const uMedia = await navigator.mediaDevices.getUserMedia({ video: true, audio: true })
-      const dMedia = await navigator.mediaDevices.getDisplayMedia({ video: true })
+      uMedia = await navigator.mediaDevices.getUserMedia({ video: true, audio: true })
+      dMedia = await navigator.mediaDevices.getDisplayMedia({ video: true })
       setUserStream(uMedia)
       setScreenStream(dMedia)
       setHasPermissions(true)
@@ -150,8 +144,8 @@ function ChatInterview({ title, questions, state, setState, proctoring, setProct
       } else {
         setProctorError('Failed to access webcam, microphone, or screen share. These are required for the fully AI proctored interview.')
       }
-      if (userStream) userStream.getTracks().forEach(t => t.stop())
-      if (screenStream) screenStream.getTracks().forEach(t => t.stop())
+      uMedia?.getTracks().forEach(t => t.stop())
+      dMedia?.getTracks().forEach(t => t.stop())
       setUserStream(null)
       setScreenStream(null)
       setHasPermissions(false)
@@ -159,9 +153,17 @@ function ChatInterview({ title, questions, state, setState, proctoring, setProct
   }
 
   const beginInterview = async () => {
-    await proctor.requestFullscreen()
-    await api.post('/start-round', { session_id: state.sessionId, company: state.company, round_key: roleKey })
-    setIsStarted(true)
+    try {
+      await proctor.requestFullscreen()
+      const res = await api.post('/start-round', { session_id: state.sessionId, company: state.company, round_key: roleKey })
+      if (!res.ok && res.error) {
+        setProctorError(res.error)
+        return
+      }
+      setIsStarted(true)
+    } catch {
+      setProctorError('Failed to start the interview. Please check your connection and try again.')
+    }
   }
 
   if (!state.sessionId) return <Navigate to="/resume" replace />
@@ -205,35 +207,39 @@ function ChatInterview({ title, questions, state, setState, proctoring, setProct
     const q = activeQuestions[idx]
     if (!q || submittingRef.current || (!expired && !text.trim() && !audioBlob)) return
     submittingRef.current = true
-    const answerText = expired && !text.trim() && !audioBlob ? '[Time expired]' : (text.trim() || '[Voice recorded]')
-    const audioData = await audioBlobToDataUrl(audioBlob)
-    const submittedAnswer = audioBlob
-      ? JSON.stringify({ type: 'voice', transcript: text.trim(), audio: audioData })
-      : answerText
-    await api.post('/submit-answer', { session_id: state.sessionId, round_key: roleKey, question_index: idx, answer: submittedAnswer })
-    const timeSpent = Math.round((Date.now() - questionStartedAtRef.current) / 1000)
-    const voiceDuration = audioBlob ? Math.max(5, Math.min(180, Math.round(audioBlob.size / 16000))) : 0
-    setProctoring((currentState) => ({
-      ...currentState,
-      timeSpent: {
-        ...currentState.timeSpent,
-        [roleKey]: (currentState.timeSpent?.[roleKey] || 0) + timeSpent
-      },
-      interviewMetrics: {
-        ...currentState.interviewMetrics,
-        [roleKey]: {
-          questionTimes: [...(currentState.interviewMetrics?.[roleKey]?.questionTimes || []), timeSpent],
-          voiceDurations: [...(currentState.interviewMetrics?.[roleKey]?.voiceDurations || []), voiceDuration],
-          submissions: [
-            ...(currentState.interviewMetrics?.[roleKey]?.submissions || []),
-            { questionIndex: idx, submittedAt: new Date().toISOString(), answerLength: answerText.length, hasVoice: Boolean(audioBlob) }
-          ]
+    try {
+      const answerText = expired && !text.trim() && !audioBlob ? '[Time expired]' : (text.trim() || '[Voice recorded]')
+      const audioData = await audioBlobToDataUrl(audioBlob)
+      const submittedAnswer = audioBlob
+        ? JSON.stringify({ type: 'voice', transcript: text.trim(), audio: audioData })
+        : answerText
+      await api.post('/submit-answer', { session_id: state.sessionId, round_key: roleKey, question_index: idx, answer: submittedAnswer })
+      const timeSpent = Math.round((Date.now() - questionStartedAtRef.current) / 1000)
+      const voiceDuration = audioBlob ? Math.max(5, Math.min(180, Math.round(audioBlob.size / 16000))) : 0
+      setProctoring((currentState) => ({
+        ...currentState,
+        timeSpent: {
+          ...currentState.timeSpent,
+          [roleKey]: (currentState.timeSpent?.[roleKey] || 0) + timeSpent
+        },
+        interviewMetrics: {
+          ...currentState.interviewMetrics,
+          [roleKey]: {
+            questionTimes: [...(currentState.interviewMetrics?.[roleKey]?.questionTimes || []), timeSpent],
+            voiceDurations: [...(currentState.interviewMetrics?.[roleKey]?.voiceDurations || []), voiceDuration],
+            submissions: [
+              ...(currentState.interviewMetrics?.[roleKey]?.submissions || []),
+              { questionIndex: idx, submittedAt: new Date().toISOString(), answerLength: answerText.length, hasVoice: Boolean(audioBlob) }
+            ]
+          }
         }
-      }
-    }))
-    setMessages((m) => [...m, { role: 'candidate', text: answerText }])
-    setText('')
-    setAudioBlob(null)
+      }))
+      setMessages((m) => [...m, { role: 'candidate', text: answerText }])
+      setText('')
+      setAudioBlob(null)
+    } catch {
+      // Submission failed but continue
+    }
     submittingRef.current = false
     if (idx < activeQuestions.length - 1) {
       setIdx(idx + 1)
@@ -251,8 +257,12 @@ function ChatInterview({ title, questions, state, setState, proctoring, setProct
   const skipQuestion = async () => {
     if (submittingRef.current) return
     submittingRef.current = true
-    await api.post('/submit-answer', { session_id: state.sessionId, round_key: roleKey, question_index: idx, answer: '[Skipped]' })
-    setMessages((m) => [...m, { role: 'candidate', text: '[Skipped]' }])
+    try {
+      await api.post('/submit-answer', { session_id: state.sessionId, round_key: roleKey, question_index: idx, answer: '[Skipped]' })
+      setMessages((m) => [...m, { role: 'candidate', text: '[Skipped]' }])
+    } catch {
+      // Skip failed but continue
+    }
     submittingRef.current = false
     if (idx < activeQuestions.length - 1) {
       setIdx(idx + 1)

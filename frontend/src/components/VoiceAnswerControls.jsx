@@ -1,5 +1,5 @@
 import React, { useEffect, useRef, useState } from 'react'
-import { getSpeechRecognition } from '../utils/audio'
+import { getSpeechRecognition, getPreferredAudioMime } from '../utils/audio'
 
 function VoiceAnswerControls({ userStream, transcript, onTranscriptChange, onAudioChange }) {
   const [isRecording, setIsRecording] = useState(false)
@@ -10,6 +10,7 @@ function VoiceAnswerControls({ userStream, transcript, onTranscriptChange, onAud
   const recognitionRef = useRef(null)
   const audioRef = useRef(null)
   const [audioUrl, setAudioUrl] = useState(null)
+  const mimeType = useRef(getPreferredAudioMime())
 
   useEffect(() => {
     if (!audioBlob) { setAudioUrl(null); return }
@@ -26,7 +27,9 @@ function VoiceAnswerControls({ userStream, transcript, onTranscriptChange, onAud
 
   useEffect(() => {
     return () => {
-      if (mediaRecorderRef.current?.state === 'recording') mediaRecorderRef.current.stop()
+      if (mediaRecorderRef.current?.state === 'recording') {
+        try { mediaRecorderRef.current.stop() } catch { /* ignore */ }
+      }
       recognitionRef.current?.stop()
     }
   }, [])
@@ -44,13 +47,13 @@ function VoiceAnswerControls({ userStream, transcript, onTranscriptChange, onAud
   const startSpeechToText = () => {
     const Recognition = getSpeechRecognition()
     if (!Recognition) {
-      setSpeechStatus('Speech-to-text is not supported in this browser. Your audio can still be replayed before submit.')
+      setSpeechStatus('Speech-to-text is not supported in this browser. You can type your answer instead.')
       return
     }
     const recognition = new Recognition()
     recognition.continuous = true
     recognition.interimResults = true
-    recognition.lang = 'en-US'
+    recognition.lang = navigator.language || 'en-US'
     recognition.onresult = (event) => {
       let nextTranscript = ''
       for (let i = 0; i < event.results.length; i += 1) {
@@ -58,23 +61,56 @@ function VoiceAnswerControls({ userStream, transcript, onTranscriptChange, onAud
       }
       onTranscriptChange(nextTranscript.trim())
     }
-    recognition.onerror = () => setSpeechStatus('Speech-to-text paused. You can type or re-record.')
+    recognition.onerror = (event) => {
+      if (event.error === 'not-allowed' || event.error === 'service-not-allowed') {
+        setSpeechStatus('Microphone permission denied. Please allow microphone access and try again.')
+      } else if (event.error === 'no-speech') {
+        setSpeechStatus('No speech detected. Speak louder or check your microphone.')
+      } else if (event.error === 'aborted') {
+        // Intentional stop — no message needed
+      } else {
+        setSpeechStatus('Speech-to-text paused. You can type or re-record.')
+      }
+    }
+    recognition.onend = () => {
+      if (recognitionRef.current === recognition) {
+        setSpeechStatus((prev) => prev || 'Speech recognition ended. Click record again to resume.')
+      }
+    }
     recognitionRef.current = recognition
-    recognition.start()
-    setSpeechStatus('Listening and transcribing...')
+    try {
+      recognition.start()
+      setSpeechStatus('Listening and transcribing...')
+    } catch {
+      setSpeechStatus('Could not start speech recognition. You can type your answer.')
+    }
   }
 
   const startRecording = async () => {
+    if (typeof MediaRecorder === 'undefined') {
+      setSpeechStatus('Recording is not supported in this browser.')
+      return
+    }
     try {
       const audioTrack = userStream?.getAudioTracks?.()[0]
       const stream = audioTrack ? new MediaStream([audioTrack]) : await navigator.mediaDevices.getUserMedia({ audio: true })
       const chunks = []
-      const recorder = new MediaRecorder(stream)
+      const options = mimeType.current ? { mimeType: mimeType.current } : undefined
+      const recorder = new MediaRecorder(stream, options)
       recorder.ondataavailable = (event) => {
         if (event.data.size) chunks.push(event.data)
       }
+      recorder.onerror = () => {
+        setSpeechStatus('Recording failed. Please try again.')
+        setIsRecording(false)
+      }
       recorder.onstop = () => {
-        const blob = new Blob(chunks, { type: 'audio/webm' })
+        if (!chunks.length) {
+          setSpeechStatus('Recording was empty. Please try again.')
+          setIsRecording(false)
+          return
+        }
+        const blob = new Blob(chunks, { type: mimeType.current || recorder.mimeType || 'audio/webm' })
         setAudioBlob(blob)
         if (!audioTrack) stream.getTracks().forEach((track) => track.stop())
       }
@@ -83,7 +119,7 @@ function VoiceAnswerControls({ userStream, transcript, onTranscriptChange, onAud
       setRecordingTime(0)
       setIsRecording(true)
       setSpeechStatus('')
-      recorder.start()
+      recorder.start(1000)
       startSpeechToText()
     } catch {
       setSpeechStatus('Could not start microphone recording. Please allow microphone access and try again.')
@@ -91,13 +127,19 @@ function VoiceAnswerControls({ userStream, transcript, onTranscriptChange, onAud
   }
 
   const stopRecording = () => {
-    if (mediaRecorderRef.current?.state === 'recording') mediaRecorderRef.current.stop()
+    if (mediaRecorderRef.current?.state === 'recording') {
+      mediaRecorderRef.current.stop()
+    }
     recognitionRef.current?.stop()
     setIsRecording(false)
     setSpeechStatus((status) => status || 'Recording saved.')
   }
 
   const reRecord = () => {
+    if (mediaRecorderRef.current?.state === 'recording') {
+      mediaRecorderRef.current.stop()
+    }
+    recognitionRef.current?.stop()
     setAudioBlob(null)
     onTranscriptChange('')
     startRecording()

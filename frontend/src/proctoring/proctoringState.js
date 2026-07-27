@@ -13,7 +13,13 @@ export const VIOLATION_PENALTIES = {
   devtools: 20,
   right_click: 0,
   shortcut: 0,
-  half_face: 15
+  half_face: 15,
+  looking_away: 5,
+  head_turn: 5,
+  background_voice: 10,
+  mouse_stationary: 5,
+  rapid_submit: 10,
+  suspicious_object: 15
 }
 
 const SCORE_WEIGHTS = {
@@ -49,28 +55,65 @@ export const defaultProctoringState = {
   }
 }
 
+function deepMerge(defaults, stored) {
+  if (!stored || typeof stored !== 'object') return { ...defaults }
+  const result = { ...defaults }
+  for (const key of Object.keys(stored)) {
+    if (stored[key] === undefined) continue
+    if (
+      defaults[key] &&
+      typeof defaults[key] === 'object' &&
+      !Array.isArray(defaults[key]) &&
+      typeof stored[key] === 'object' &&
+      !Array.isArray(stored[key])
+    ) {
+      result[key] = deepMerge(defaults[key], stored[key])
+    } else {
+      result[key] = stored[key]
+    }
+  }
+  return result
+}
+
+function createDefault() {
+  return deepMerge(defaultProctoringState, null)
+}
+
 export function loadProctoringState() {
   try {
     const stored = localStorage.getItem(PROCTORING_STORAGE_KEY)
-    return stored ? { ...defaultProctoringState, ...JSON.parse(stored) } : defaultProctoringState
+    return stored ? deepMerge(defaultProctoringState, JSON.parse(stored)) : createDefault()
   } catch {
-    localStorage.removeItem(PROCTORING_STORAGE_KEY)
-    return defaultProctoringState
+    try { localStorage.removeItem(PROCTORING_STORAGE_KEY) } catch { /* quota */ }
+    return createDefault()
   }
 }
 
 export function resetProctoringState() {
-  localStorage.removeItem(PROCTORING_STORAGE_KEY)
-  localStorage.removeItem('warnings')
-  return defaultProctoringState
+  try { localStorage.removeItem(PROCTORING_STORAGE_KEY) } catch { /* quota */ }
+  return createDefault()
 }
 
 export function usePersistentProctoring() {
   const [proctoring, setProctoring] = useState(loadProctoringState)
 
   useEffect(() => {
-    localStorage.setItem(PROCTORING_STORAGE_KEY, JSON.stringify(proctoring))
-    localStorage.setItem('warnings', String(proctoring.warnings || 0))
+    try {
+      const serializable = {
+        ...proctoring,
+        snapshots: proctoring.snapshots.slice(-5)
+      }
+      localStorage.setItem(PROCTORING_STORAGE_KEY, JSON.stringify(serializable))
+    } catch {
+      // localStorage quota exceeded — discard oldest snapshots and retry
+      try {
+        const reduced = { ...proctoring, snapshots: [] }
+        localStorage.setItem(PROCTORING_STORAGE_KEY, JSON.stringify(reduced))
+      } catch {
+        // Still failing — clear everything and start fresh
+        try { localStorage.removeItem(PROCTORING_STORAGE_KEY) } catch { /* ignore */ }
+      }
+    }
   }, [proctoring])
 
   return [proctoring, setProctoring]

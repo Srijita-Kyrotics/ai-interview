@@ -17,14 +17,16 @@ from typing import Any
 
 import google.generativeai as genai
 import httpx
-import jwt
 from fastapi import Depends, FastAPI, File, Header, HTTPException, Request, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
+
+from app.interview_ws import router as interview_router
 from pydantic import BaseModel
 from pythonjsonlogger import json as json_logger
 
 from app.config import BASE_DIR, settings
+from app.helpers import create_token, decode_token, default_scores, sanitize_for_ai
 from app.db import (
     cache_get,
     cache_set,
@@ -84,6 +86,7 @@ async def lifespan(app):
     logger.info("Application shutting down")
 
 app = FastAPI(title="AI Mock Recruitment Platform", lifespan=lifespan)
+app.include_router(interview_router)
 
 app.add_middleware(
     CORSMiddleware,
@@ -106,7 +109,7 @@ async def add_security_headers(request, call_next):
         "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; "
         "font-src 'self' https://fonts.gstatic.com data:; "
         "img-src 'self' data: blob:; "
-        f"connect-src {settings.csp_connect_sources}"
+        f"connect-src 'self' {settings.csp_connect_sources} ws://localhost:* wss://localhost:*"
     )
     response.headers["Strict-Transport-Security"] = "max-age=31536000; includeSubDomains"
     return response
@@ -147,7 +150,7 @@ def _cache_set(key: str, data: Any, ttl: int = 300) -> None:
 
 
 # ─── Input Sanitization ──────────────────────────────────────────────────────
-def _sanitize_for_ai(text: str, max_length: int = 5000) -> str:
+def sanitize_for_ai(text: str, max_length: int = 5000) -> str:
     text = text[:max_length]
     text = re.sub(r'[\x00-\x08\x0b\x0c\x0e-\x1f\x7f]', '', text)
     return text.strip()
@@ -156,23 +159,6 @@ JWT_SECRET = settings.resolved_jwt_secret
 JWT_ALGORITHM = settings.jwt_algorithm
 JWT_EXPIRY_HOURS = settings.jwt_expiry_hours
 MAX_UPLOAD_BYTES = settings.max_upload_bytes
-
-
-def create_token(email: str, role: str) -> str:
-    payload = {
-        "sub": email,
-        "email": email,
-        "role": role,
-        "exp": time.time() + JWT_EXPIRY_HOURS * 3600,
-    }
-    return jwt.encode(payload, JWT_SECRET, algorithm=JWT_ALGORITHM)
-
-
-def decode_token(token: str) -> dict[str, Any] | None:
-    try:
-        return jwt.decode(token, JWT_SECRET, algorithms=[JWT_ALGORITHM])
-    except Exception:
-        return None
 
 
 async def get_current_user(authorization: str | None = Header(None)) -> dict[str, Any]:
@@ -228,10 +214,6 @@ OTP_TTL_SECONDS = settings.otp_ttl_seconds
 CAPTCHA_TTL_SECONDS = settings.captcha_ttl_seconds
 OTP_RATE_LIMIT = settings.otp_rate_limit
 OTP_RATE_WINDOW = settings.otp_rate_window
-
-
-def default_scores() -> dict[str, int]:
-    return dict(settings.default_scores)
 
 
 def hash_password(password: str, salt: str | None = None) -> dict[str, str]:
@@ -1028,8 +1010,8 @@ def generate_ai_questions(payload: AIQuestionsRequest, user: dict[str, Any] = De
     model = genai.GenerativeModel(settings.gemini_model)
 
     resume = state.get("resume", {})
-    skills = _sanitize_for_ai(", ".join(resume.get("skills", [])))
-    company = _sanitize_for_ai(state.get("selectedCompany", "Unknown"))
+    skills = sanitize_for_ai(", ".join(resume.get("skills", [])))
+    company = sanitize_for_ai(state.get("selectedCompany", "Unknown"))
 
     prompt = f"Generate {payload.count} {payload.round_type} interview questions for a candidate applying to {company} with skills in {skills}. Respond with a JSON array of objects, each containing a 'question' string and an 'id' integer."
 
@@ -1064,7 +1046,7 @@ def generate_ai_feedback(payload: AIFeedbackRequest, user: dict[str, Any] = Depe
     model = genai.GenerativeModel(settings.gemini_model)
 
     answers = state.get("answers", {})
-    sanitized_answers = {k: _sanitize_for_ai(json.dumps(v)) for k, v in answers.items()}
+    sanitized_answers = {k: sanitize_for_ai(json.dumps(v)) for k, v in answers.items()}
     prompt = f"Review the following interview answers and provide personalised feedback. Answers: {json.dumps(sanitized_answers)}. Provide strengths, weaknesses, and 3 concrete recommendations in JSON format: {{ 'strengths': ['...'], 'weaknesses': ['...'], 'recommendations': ['...'], 'feedback': {{'technical': '...', 'hr': '...'}} }}"
 
     try:

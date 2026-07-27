@@ -14,3 +14,7 @@ alembic/versions/*.pyc
 htmlcov/
 .coverage
 backend/accounts.json
+test-results/
+playwright-report/
+blob-report/
+.playwright/

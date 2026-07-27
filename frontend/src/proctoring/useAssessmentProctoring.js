@@ -6,6 +6,9 @@ import { API, getAuthToken } from '../api.js'
 const COOLDOWN_MS = 5000
 const NO_FACE_LIMIT_MS = 2000
 const DEVTOOLS_THRESHOLD = 160
+const FACE_DETECT_INTERVAL_MS = 400
+const MODEL_RETRY_DELAY_MS = 5000
+const MODEL_MAX_RETRIES = 3
 
 const violationLabels = {
   tab_switch: 'Tab Switch',
@@ -18,7 +21,13 @@ const violationLabels = {
   devtools: 'Developer Tools',
   right_click: 'Right Click',
   shortcut: 'Restricted Shortcut',
-  half_face: 'Partial Face Detected'
+  half_face: 'Partial Face Detected',
+  looking_away: 'Looking Away',
+  head_turn: 'Head Turned',
+  background_voice: 'Background Voice Detected',
+  mouse_stationary: 'Mouse Inactivity',
+  rapid_submit: 'Rapid Submission',
+  suspicious_object: 'Suspicious Object'
 }
 
 function nowLabel(date = new Date()) {
@@ -47,7 +56,10 @@ function captureFrame(video) {
   canvas.height = Math.round((canvas.width / video.videoWidth) * video.videoHeight)
   const context = canvas.getContext('2d')
   context.drawImage(video, 0, 0, canvas.width, canvas.height)
-  return canvas.toDataURL('image/jpeg', 0.76)
+  const dataUrl = canvas.toDataURL('image/jpeg', 0.76)
+  canvas.width = 0
+  canvas.height = 0
+  return dataUrl
 }
 
 function hasVisibleFrame(video) {
@@ -58,12 +70,23 @@ function hasVisibleFrame(video) {
   const context = canvas.getContext('2d', { willReadFrequently: true })
   context.drawImage(video, 0, 0, canvas.width, canvas.height)
   const data = context.getImageData(0, 0, canvas.width, canvas.height).data
+  canvas.width = 0
+  canvas.height = 0
   let litPixels = 0
   for (let i = 0; i < data.length; i += 16) {
     const brightness = (data[i] + data[i + 1] + data[i + 2]) / 3
-    if (brightness > 28) litPixels += 1
+    if (brightness > 20) litPixels += 1
   }
-  return litPixels > 80
+  return litPixels > 60
+}
+
+function getPreferredMime() {
+  const types = ['audio/webm;codecs=opus', 'audio/webm', 'audio/mp4', 'audio/ogg;codecs=opus']
+  if (typeof MediaRecorder === 'undefined') return ''
+  for (const type of types) {
+    if (MediaRecorder.isTypeSupported(type)) return type
+  }
+  return ''
 }
 
 export function useAssessmentProctoring({
@@ -82,11 +105,25 @@ export function useAssessmentProctoring({
   const lastViolationAtRef = useRef(0)
   const faceMissingSinceRef = useRef(null)
   const devtoolsOpenRef = useRef(false)
+  const detectingRef = useRef(false)
+  const modelRetriesRef = useRef(0)
+  const faceModelsLoadedRef = useRef(false)
+  const objectModelRef = useRef(null)
+  const lastMousePosRef = useRef({ x: 0, y: 0, time: Date.now() })
+  const lastSubmitTimeRef = useRef(0)
+  const lookingAwaySinceRef = useRef(null)
+  const headTurnSinceRef = useRef(null)
 
   const requestFullscreen = useCallback(async () => {
-    if (document.fullscreenElement || !document.documentElement.requestFullscreen) return true
+    const el = document.documentElement
+    if (document.fullscreenElement || document.webkitFullscreenElement) return true
+    if (!el.requestFullscreen && !el.webkitRequestFullscreen) return true
     try {
-      await document.documentElement.requestFullscreen()
+      if (el.requestFullscreen) {
+        await el.requestFullscreen()
+      } else if (el.webkitRequestFullscreen) {
+        el.webkitRequestFullscreen()
+      }
       return true
     } catch {
       return false
@@ -126,7 +163,7 @@ export function useAssessmentProctoring({
         integrityScore: nextIntegrity,
         logs: [...current.logs, event],
         violations: [...current.violations, violation],
-        snapshots: snapshot ? [...current.snapshots, snapshot] : current.snapshots
+        snapshots: snapshot ? [...current.snapshots.slice(-4), snapshot] : current.snapshots
       }
       const nextState = nextWarnings > 3
         ? terminate('Repeated malpractice detected.', baseState)
@@ -167,9 +204,15 @@ export function useAssessmentProctoring({
     const onVisibility = () => {
       if (document.hidden) registerViolation('tab_switch', 'You switched away from the assessment window.')
     }
-    const onBlur = () => registerViolation('tab_switch', 'Window focus was lost during the assessment.')
+    const onBlur = () => {
+      if (!document.hidden) registerViolation('tab_switch', 'Window focus was lost during the assessment.')
+    }
     const onFullscreen = () => {
-      if (!document.fullscreenElement) registerViolation('fullscreen_exit', 'Fullscreen exited.')
+      const isFs = document.fullscreenElement || document.webkitFullscreenElement
+      if (!isFs) registerViolation('fullscreen_exit', 'Fullscreen exited.')
+    }
+    const onFullscreenError = () => {
+      // Fullscreen request failed — do not penalize, just log
     }
     const onClipboard = (event) => {
       event.preventDefault()
@@ -181,15 +224,17 @@ export function useAssessmentProctoring({
     }
     const onKeyDown = (event) => {
       const key = event.key.toLowerCase()
-      const blockedCtrl = event.ctrlKey && ['c', 'v', 'x', 'a', 's', 'p', 'u'].includes(key)
-      const blockedDevTools = event.key === 'F12' || (event.ctrlKey && event.shiftKey && ['i', 'j', 'c'].includes(key))
-      if (!blockedCtrl && !blockedDevTools) return
+      const isMeta = event.metaKey || event.ctrlKey
+      const blockedMeta = isMeta && ['c', 'v', 'x', 'a', 's', 'p', 'u'].includes(key)
+      const blockedDevTools = event.key === 'F12' || (isMeta && event.shiftKey && ['i', 'j', 'c'].includes(key))
+      if (!blockedMeta && !blockedDevTools) return
       event.preventDefault()
       registerViolation(blockedDevTools ? 'devtools' : 'shortcut', blockedDevTools ? 'Developer tools attempt detected.' : 'Restricted keyboard shortcut detected.')
     }
 
     document.addEventListener('visibilitychange', onVisibility)
     document.addEventListener('fullscreenchange', onFullscreen)
+    document.addEventListener('fullscreenerror', onFullscreenError)
     document.addEventListener('copy', onClipboard)
     document.addEventListener('paste', onClipboard)
     document.addEventListener('cut', onClipboard)
@@ -206,6 +251,7 @@ export function useAssessmentProctoring({
     return () => {
       document.removeEventListener('visibilitychange', onVisibility)
       document.removeEventListener('fullscreenchange', onFullscreen)
+      document.removeEventListener('fullscreenerror', onFullscreenError)
       document.removeEventListener('copy', onClipboard)
       document.removeEventListener('paste', onClipboard)
       document.removeEventListener('cut', onClipboard)
@@ -225,21 +271,123 @@ export function useAssessmentProctoring({
   }, [active, registerViolation, screenStream])
 
   useEffect(() => {
+    if (!active) return undefined
+    let mouseTimeout = null
+
+    const onMouseMove = (e) => {
+      const now = Date.now()
+      const dx = Math.abs(e.clientX - lastMousePosRef.current.x)
+      const dy = Math.abs(e.clientY - lastMousePosRef.current.y)
+      const dt = now - lastMousePosRef.current.time
+      if (dx > 5 || dy > 5) {
+        lastMousePosRef.current = { x: e.clientX, y: e.clientY, time: now }
+        if (mouseTimeout) { clearTimeout(mouseTimeout); mouseTimeout = null }
+      }
+    }
+
+    mouseTimeout = window.setTimeout(() => {
+      registerViolation('mouse_stationary', 'No mouse movement for extended period.')
+    }, 120000)
+
+    const onMouse = () => {
+      if (mouseTimeout) { clearTimeout(mouseTimeout); mouseTimeout = null }
+      mouseTimeout = window.setTimeout(() => {
+        registerViolation('mouse_stationary', 'No mouse movement for extended period.')
+      }, 120000)
+    }
+
+    document.addEventListener('mousemove', onMouseMove)
+    document.addEventListener('mousedown', onMouse)
+    document.addEventListener('keydown', onMouse)
+
+    return () => {
+      document.removeEventListener('mousemove', onMouseMove)
+      document.removeEventListener('mousedown', onMouse)
+      document.removeEventListener('keydown', onMouse)
+      if (mouseTimeout) clearTimeout(mouseTimeout)
+    }
+  }, [active, registerViolation])
+
+  useEffect(() => {
+    if (!active || !webcamStream) return undefined
+    let audioContext = null
+    let analyser = null
+    let audioTimeout = null
+    let cancelled = false
+
+    const startAudioDetection = async () => {
+      try {
+        audioContext = new (window.AudioContext || window.webkitAudioContext)()
+        const source = audioContext.createMediaStreamSource(webcamStream)
+        analyser = audioContext.createAnalyser()
+        analyser.fftSize = 512
+        source.connect(analyser)
+
+        const dataArray = new Uint8Array(analyser.frequencyBinCount)
+        let voiceActiveSince = null
+
+        const checkAudio = () => {
+          if (cancelled) return
+          analyser.getByteFrequencyData(dataArray)
+          let sum = 0
+          for (let i = 0; i < dataArray.length; i++) sum += dataArray[i]
+          const average = sum / dataArray.length
+
+          if (average > 15) {
+            if (voiceActiveSince === null) {
+              voiceActiveSince = Date.now()
+            } else if (Date.now() - voiceActiveSince > 5000) {
+              registerViolation('background_voice', 'Sustained background voice detected.')
+              voiceActiveSince = null
+            }
+          } else {
+            voiceActiveSince = null
+          }
+          audioTimeout = window.setTimeout(checkAudio, 1000)
+        }
+        checkAudio()
+      } catch {
+        // AudioContext not available
+      }
+    }
+
+    startAudioDetection()
+
+    return () => {
+      cancelled = true
+      if (audioTimeout) clearTimeout(audioTimeout)
+      if (audioContext) {
+        try { audioContext.close() } catch { /* ignore */ }
+      }
+    }
+  }, [active, registerViolation, webcamStream])
+
+  useEffect(() => {
     if (!active || !webcamVideoRef?.current) return undefined
     let cancelled = false
-    let faceModelsLoaded = false
-    let objectModel = null
 
-    const loadModels = async () => {
+    const loadModels = async (retryCount = 0) => {
+      if (faceModelsLoadedRef.current) return true
       try {
         await Promise.all([
           faceapi.nets.tinyFaceDetector.loadFromUri('/models'),
           faceapi.nets.faceLandmark68Net.loadFromUri('/models')
         ])
-        faceModelsLoaded = true
+        faceModelsLoadedRef.current = true
+        modelRetriesRef.current = 0
+        return true
       } catch (err) {
         console.error('Failed to load face-api models', err)
+        if (retryCount < MODEL_MAX_RETRIES && !cancelled) {
+          await new Promise((r) => setTimeout(r, MODEL_RETRY_DELAY_MS))
+          return loadModels(retryCount + 1)
+        }
+        return false
       }
+    }
+
+    const loadObjectModel = async () => {
+      if (objectModelRef.current) return objectModelRef.current
       try {
         if (!window.objectModel) {
           const tf = await import('@tensorflow/tfjs')
@@ -247,37 +395,91 @@ export function useAssessmentProctoring({
           const cocoSsd = await import('@tensorflow-models/coco-ssd')
           window.objectModel = await cocoSsd.load()
         }
-        objectModel = window.objectModel
+        objectModelRef.current = window.objectModel
+        return objectModelRef.current
       } catch (err) {
         console.error('Failed to load object model', err)
+        return null
       }
     }
-    loadModels()
+
+    const init = async () => {
+      await Promise.all([loadModels(), loadObjectModel()])
+    }
+    init()
 
     const monitor = async () => {
-      if (cancelled) return
+      if (cancelled || detectingRef.current) return
+      detectingRef.current = true
       const video = webcamVideoRef.current
       try {
-        if (objectModel && video?.readyState >= 2) {
-          await objectModel.detect(video, 20, 0.15)
+        if (objectModelRef.current && video?.readyState >= 2) {
+          const detections = await objectModelRef.current.detect(video, 20, 0.15)
+          if (detections?.length) {
+            const suspicious = detections.filter((d) => ['cell phone', 'laptop', 'tv', 'remote'].includes(d.class))
+            if (suspicious.length > 0) {
+              registerViolation('suspicious_object', `Suspicious object detected: ${suspicious[0].class}`)
+            }
+          }
         }
 
-        if (faceModelsLoaded && video?.readyState >= 2) {
+        if (faceModelsLoadedRef.current && video?.readyState >= 2) {
           const detections = await faceapi.detectAllFaces(video, new faceapi.TinyFaceDetectorOptions({ inputSize: 160, scoreThreshold: 0.3 })).withFaceLandmarks()
           if (detections.length > 1) {
             registerViolation('multiple_faces', 'Multiple faces detected.')
           } else if (detections.length === 0) {
-            if (faceMissingSinceRef.current === null) faceMissingSinceRef.current = Date.now()
-            else if (Date.now() - faceMissingSinceRef.current > NO_FACE_LIMIT_MS) {
+            if (faceMissingSinceRef.current === null) {
+              faceMissingSinceRef.current = Date.now()
+            } else if (Date.now() - faceMissingSinceRef.current > NO_FACE_LIMIT_MS) {
               registerViolation('no_face', 'No face detected.')
+              faceMissingSinceRef.current = null
             }
           } else {
             faceMissingSinceRef.current = null
             const face = detections[0]
             const { width, height, x, y } = face.detection.box
-            
-            if (x < -10 || y < -10 || x + width > video.videoWidth + 10 || y + height > video.videoHeight + 10) {
+            const marginX = video.videoWidth * 0.02
+            const marginY = video.videoHeight * 0.02
+            if (x < -marginX || y < -marginY || x + width > video.videoWidth + marginX || y + height > video.videoHeight + marginY) {
               registerViolation('half_face', 'Partial face detected.')
+            }
+
+            const landmarks = face.landmarks
+            if (landmarks) {
+              const positions = landmarks.positions
+              const noseTip = positions[30]
+              const leftEye = positions[36]
+              const rightEye = positions[45]
+              const chin = positions[8]
+              const forehead = positions[19]
+
+              const eyeCenter = {
+                x: (leftEye.x + rightEye.x) / 2,
+                y: (leftEye.y + rightEye.y) / 2
+              }
+              const horizontalRatio = (noseTip.x - eyeCenter.x) / width
+              if (Math.abs(horizontalRatio) > 0.18) {
+                if (headTurnSinceRef.current === null) {
+                  headTurnSinceRef.current = Date.now()
+                } else if (Date.now() - headTurnSinceRef.current > 3000) {
+                  registerViolation('head_turn', 'Head turned away from camera.')
+                  headTurnSinceRef.current = null
+                }
+              } else {
+                headTurnSinceRef.current = null
+              }
+
+              const verticalRatio = (noseTip.y - forehead.y) / (chin.y - forehead.y)
+              if (verticalRatio < 0.35 || verticalRatio > 0.65) {
+                if (lookingAwaySinceRef.current === null) {
+                  lookingAwaySinceRef.current = Date.now()
+                } else if (Date.now() - lookingAwaySinceRef.current > 4000) {
+                  registerViolation('looking_away', 'Looking away from screen.')
+                  lookingAwaySinceRef.current = null
+                }
+              } else {
+                lookingAwaySinceRef.current = null
+              }
             }
           }
           return
@@ -287,11 +489,13 @@ export function useAssessmentProctoring({
           registerViolation('face_missing', 'Candidate not visible.')
         }
       } catch {
-        // ignore
+        // Detection error — will retry on next interval
+      } finally {
+        detectingRef.current = false
       }
     }
 
-    const timer = window.setInterval(monitor, 300)
+    const timer = window.setInterval(monitor, FACE_DETECT_INTERVAL_MS)
     return () => {
       cancelled = true
       window.clearInterval(timer)

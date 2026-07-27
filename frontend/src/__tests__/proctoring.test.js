@@ -102,7 +102,6 @@ describe('proctoringState', () => {
       const state = resetProctoringState()
       expect(state).toEqual(defaultProctoringState)
       expect(localStorageMock.removeItem).toHaveBeenCalledWith('mockRecruitmentProctoring')
-      expect(localStorageMock.removeItem).toHaveBeenCalledWith('warnings')
     })
   })
 

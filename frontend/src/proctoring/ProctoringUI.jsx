@@ -19,6 +19,14 @@ export function ProctoringPanel({ proctoring }) {
         <span className={proctoring.screenShareActive ? 'active' : ''}>Screen Share: {proctoring.screenShareActive ? 'Active' : 'Inactive'}</span>
         <span className={proctoring.faceDetectionActive ? 'active' : ''}>Face Detection: {proctoring.faceDetectionActive ? 'Active' : 'Standby'}</span>
       </div>
+      {proctoring.violations.length > 0 && (
+        <div className="proctor-recent-violations">
+          <span>Recent:</span>
+          {proctoring.violations.slice(-3).map((v, i) => (
+            <small key={i}>{v.kind.replace(/_/g, ' ')}{i < Math.min(proctoring.violations.length, 3) - 1 ? ',' : ''}</small>
+          ))}
+        </div>
+      )}
     </aside>
   )
 }

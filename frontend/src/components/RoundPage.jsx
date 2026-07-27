@@ -6,61 +6,10 @@ import { roundDurations } from '../constants'
 import { ProctoringModal } from '../proctoring/ProctoringUI'
 import { useAssessmentProctoring } from '../proctoring/useAssessmentProctoring'
 import { formatQuestionText } from '../utils/questionFormat'
+import { processAptitudeText } from '../utils/aptitudeFormat'
 import { formatTime } from '../utils/formatTime'
-import { audioBlobToDataUrl } from '../utils/audio'
+import { audioBlobToDataUrl, getPreferredAudioMime } from '../utils/audio'
 import { CodeEditor } from './CodeEditor'
-
-function findHighlighted(sentence, options, correct) {
-  const words = sentence.split(/\s+/)
-  if (!words.length || !correct) return null
-
-  const skip = new Set(['the', 'a', 'an', 'is', 'was', 'were', 'are', 'been', 'being', 'be',
-    'in', 'on', 'at', 'to', 'for', 'of', 'by', 'with', 'from', 'as', 'into', 'through',
-    'it', 'its', 'they', 'them', 'he', 'she', 'his', 'her', 'their', 'this', 'that',
-    'and', 'or', 'but', 'not', 'no', 'so', 'if', 'than', 'then'])
-
-  let bestStart = words.length, bestEnd = 0
-  const candidates = [correct, ...options.filter(o => o !== 'No correction required')]
-  for (const cand of candidates) {
-    const candWords = cand.toLowerCase().split(/\s+/)
-    for (const cw of candWords) {
-      if (skip.has(cw) || cw.length < 2) continue
-      for (let i = 0; i < words.length; i++) {
-        const w = words[i].replace(/[^a-zA-Z]/g, '').toLowerCase()
-        if (w === cw || (w.length >= 3 && cw.length >= 3 && (w.startsWith(cw) || cw.startsWith(w)))) {
-          bestStart = Math.min(bestStart, i)
-          bestEnd = Math.max(bestEnd, i + 1)
-        }
-      }
-    }
-  }
-
-  if (bestStart >= bestEnd) return null
-
-  const len = bestEnd - bestStart
-  if (len > 8) {
-    const mid = Math.floor((bestStart + bestEnd) / 2)
-    bestStart = Math.max(0, mid - 3)
-    bestEnd = Math.min(words.length, mid + 3)
-  }
-
-  return { start: bestStart, end: bestEnd }
-}
-
-const parenCleanRe = /\(([a-zA-Z0-9]+)\)\/([a-zA-Z0-9]+)/g
-const mixedFractionRe = /\(([a-zA-Z0-9]+)\)\s*\(\(([^()]+?)\/([^()]+?)\)\)/g
-const spacedFractionRe = /\(\s*([a-zA-Z0-9.]+)\s*\)\s*\/\s*\(\s*([a-zA-Z0-9.]+)\s*\)/g
-const supSubFractionRe = /\^\(\s*([a-zA-Z0-9.]+)\s*\)\s*\/\s*_\(\s*([a-zA-Z0-9.]+)\s*\)/g
-
-function cleanParens(str) {
-  return (str || '')
-    .replace(/\^\(\)/g, '')
-    .replace(mixedFractionRe, '$1 $2/$3')
-    .replace(spacedFractionRe, '$1/$2')
-    .replace(supSubFractionRe, '$1/$2')
-    .replace(parenCleanRe, '$1/$2')
-    .replace(/\(\s*([a-zA-Z0-9]+)\s*\)/g, '$1')
-}
 
 function isFormulaImage(src = '') {
   return /(^|\/)(?:\d+-sym-|sym-|frac|math|formula|equation)/i.test(src) || /fraction|frac/i.test(src)
@@ -206,42 +155,6 @@ function getNextStage(type) {
   return 'report'
 }
 
-function processAptitudeText(questions) {
-  return questions.map(q => {
-    if (q.options) {
-      q.options = q.options.map(opt => formatQuestionText(cleanParens(opt)))
-    }
-    q.question = formatQuestionText(cleanParens(q.question || ''))
-    const text = q.question
-
-    if (text.includes('highlighted')) {
-      const lines = text.split('\n')
-      const instruction = lines[0]
-      const sentence = lines.slice(1).join(' ').trim()
-      if (sentence) {
-        const hl = findHighlighted(sentence, q.options || [], q.correct || '')
-        if (hl) {
-          const wordArr = sentence.split(/\s+/)
-          const before = wordArr.slice(0, hl.start).join(' ')
-          const mid = wordArr.slice(hl.start, hl.end).join(' ')
-          const after = wordArr.slice(hl.end).join(' ')
-          const sep = before && after ? ' ' : ''
-          q.question = instruction + '\n' + before + (before ? ' ' : '') + '«hl»' + mid + '«/hl»' + (after ? ' ' : '') + after
-          return q
-        }
-      }
-    }
-
-    const match = text.match(/^(.*?)\n([A-Z][A-Z\s-]{1,})$/)
-    if (match) {
-      const word = match[2].trim()
-      q.question = match[1] + '\n«b»' + word + '«/b»'
-    }
-
-    return q
-  })
-}
-
 function RoundPage({ title, items, type, state, setState, proctoring, setProctoring }) {
   const navigate = useNavigate()
   const [idx, setIdx] = useState(0)
@@ -267,6 +180,7 @@ function RoundPage({ title, items, type, state, setState, proctoring, setProctor
   const screenRef = useRef(null)
   const audioRef = useRef(null)
   const mediaRecorderRef = useRef(null)
+  const mimeTypeRef = useRef(getPreferredAudioMime())
   const submittingRef = useRef(false)
   const submitRef = useRef(null)
   const proctor = useAssessmentProctoring({
@@ -352,11 +266,12 @@ function RoundPage({ title, items, type, state, setState, proctoring, setProctor
   }, [userStream, screenStream])
 
   const startProctoring = async () => {
+    let uMedia = null
+    let dMedia = null
     try {
       setProctorError('')
-      const uMedia = await navigator.mediaDevices.getUserMedia({ video: true, audio: true })
-      const dMedia = await navigator.mediaDevices.getDisplayMedia({ video: true })
-
+      uMedia = await navigator.mediaDevices.getUserMedia({ video: true, audio: true })
+      dMedia = await navigator.mediaDevices.getDisplayMedia({ video: true })
       setUserStream(uMedia)
       setScreenStream(dMedia)
       setHasPermissions(true)
@@ -366,8 +281,8 @@ function RoundPage({ title, items, type, state, setState, proctoring, setProctor
       } else {
         setProctorError('Failed to access webcam, microphone, or screen share. These are required for the fully AI proctored test.')
       }
-      if (userStream) userStream.getTracks().forEach((t) => t.stop())
-      if (screenStream) screenStream.getTracks().forEach((t) => t.stop())
+      uMedia?.getTracks().forEach((t) => t.stop())
+      dMedia?.getTracks().forEach((t) => t.stop())
       setUserStream(null)
       setScreenStream(null)
       setHasPermissions(false)
@@ -375,28 +290,42 @@ function RoundPage({ title, items, type, state, setState, proctoring, setProctor
   }
 
   const beginTest = async () => {
-    await proctor.requestFullscreen()
-    await api.post('/start-round', { session_id: state.sessionId, company: state.company, round_key: type })
-    setTimeLeft(duration)
-    setIsStarted(true)
-    setRunStatus('')
-    setTestResults([])
+    try {
+      await proctor.requestFullscreen()
+      const res = await api.post('/start-round', { session_id: state.sessionId, company: state.company, round_key: type })
+      if (!res.ok && res.error) {
+        setProctorError(res.error)
+        return
+      }
+      setTimeLeft(duration)
+      setIsStarted(true)
+      setRunStatus('')
+      setTestResults([])
+    } catch {
+      setProctorError('Failed to start the test. Please check your connection and try again.')
+    }
   }
 
   const startRecording = async () => {
     try {
       if (!userStream) return
+      if (typeof MediaRecorder === 'undefined') return
       const audioStream = userStream.getAudioTracks()[0]
       if (!audioStream) return
       const mediaStream = new MediaStream([audioStream])
-      mediaRecorderRef.current = new MediaRecorder(mediaStream)
+      const options = mimeTypeRef.current ? { mimeType: mimeTypeRef.current } : undefined
+      mediaRecorderRef.current = new MediaRecorder(mediaStream, options)
       const chunks = []
       mediaRecorderRef.current.ondataavailable = (e) => chunks.push(e.data)
+      mediaRecorderRef.current.onerror = () => {
+        setIsRecording(false)
+      }
       mediaRecorderRef.current.onstop = () => {
-        const blob = new Blob(chunks, { type: 'audio/webm' })
+        if (!chunks.length) return
+        const blob = new Blob(chunks, { type: mimeTypeRef.current || mediaRecorderRef.current.mimeType || 'audio/webm' })
         setAudioBlob(blob)
       }
-      mediaRecorderRef.current.start()
+      mediaRecorderRef.current.start(1000)
       setIsRecording(true)
       setRecordingTime(0)
     } catch (err) {
@@ -405,10 +334,10 @@ function RoundPage({ title, items, type, state, setState, proctoring, setProctor
   }
 
   const stopRecording = () => {
-    if (mediaRecorderRef.current && isRecording) {
+    if (mediaRecorderRef.current?.state === 'recording') {
       mediaRecorderRef.current.stop()
-      setIsRecording(false)
     }
+    setIsRecording(false)
   }
 
   const reRecord = () => {
@@ -453,31 +382,35 @@ function RoundPage({ title, items, type, state, setState, proctoring, setProctor
     if (!current || submittingRef.current) return
     submittingRef.current = true
 
-    if (type === 'aptitude') {
-      await api.post('/submit-answer', {
-        session_id: state.sessionId,
-        round_key: 'aptitude',
-        question_index: idx,
-        answer: skipped ? '[Skipped]' : (selectedMCQ || '[No answer]'),
-      })
-    } else if (type === 'coding') {
-      await api.post('/submit-code', {
-        session_id: state.sessionId,
-        round_key: 'coding',
-        question_index: idx,
-        language: selectedLanguage,
-        code: skipped ? '[Skipped]' : code,
-      })
-    } else if (type === 'technical' || type === 'hr') {
-      const audioData = await audioBlobToDataUrl(audioBlob)
-      await api.post('/submit-answer', {
-        session_id: state.sessionId,
-        round_key: type,
-        question_index: idx,
-        answer: audioBlob
-          ? JSON.stringify({ type: 'voice', transcript: answer.trim(), audio: audioData })
-          : (expired && !answer.trim() ? '[Time expired]' : answer),
-      })
+    try {
+      if (type === 'aptitude') {
+        await api.post('/submit-answer', {
+          session_id: state.sessionId,
+          round_key: 'aptitude',
+          question_index: idx,
+          answer: skipped ? '[Skipped]' : (selectedMCQ || '[No answer]'),
+        })
+      } else if (type === 'coding') {
+        await api.post('/submit-code', {
+          session_id: state.sessionId,
+          round_key: 'coding',
+          question_index: idx,
+          language: selectedLanguage,
+          code: skipped ? '[Skipped]' : code,
+        })
+      } else if (type === 'technical' || type === 'hr') {
+        const audioData = await audioBlobToDataUrl(audioBlob)
+        await api.post('/submit-answer', {
+          session_id: state.sessionId,
+          round_key: type,
+          question_index: idx,
+          answer: audioBlob
+            ? JSON.stringify({ type: 'voice', transcript: answer.trim(), audio: audioData })
+            : (expired && !answer.trim() ? '[Time expired]' : answer),
+        })
+      }
+    } catch {
+      // Submission failed but continue to next question
     }
 
     submittingRef.current = false
@@ -623,8 +556,8 @@ function RoundPage({ title, items, type, state, setState, proctoring, setProctor
                 ))}
               </div>
               <div className="action-row">
-                <button className="btn primary" type="button" onClick={() => submit(false)} disabled={!selectedMCQ}>Submit answer</button>
-                <button className="btn ghost" type="button" onClick={() => setIdx((i) => Math.min(i + 1, items.length - 1))}>Skip</button>
+                <button className="btn primary" type="button" onClick={() => submit(false)} disabled={!selectedMCQ || submittingRef.current}>Submit answer</button>
+                <button className="btn ghost" type="button" onClick={() => submit(false, true)} disabled={submittingRef.current}>Skip</button>
               </div>
             </div>
           ) : type === 'coding' ? (
@@ -756,4 +689,4 @@ function RoundPage({ title, items, type, state, setState, proctoring, setProctor
   )
 }
 
-export { RoundPage, processAptitudeText }
+export { RoundPage }

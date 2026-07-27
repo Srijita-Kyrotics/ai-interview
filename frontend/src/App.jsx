@@ -2,7 +2,7 @@ import React, { Suspense, useEffect, useMemo, useState } from 'react'
 import { Navigate, Route, Routes } from 'react-router-dom'
 import { api } from './api'
 import { resetProctoringState, usePersistentProctoring } from './proctoring/proctoringState'
-import { processAptitudeText } from './components/RoundPage'
+import { processAptitudeText } from './utils/aptitudeFormat'
 import { AuthPage } from './components/AuthPage'
 import { Shell } from './components/Shell'
 import { Home } from './components/Home'
@@ -12,7 +12,7 @@ import { TerminatedPage } from './components/TerminatedPage'
 import { ToastProvider } from './utils/ToastContext'
 
 const RoundPage = React.lazy(() => import('./components/RoundPage').then(m => ({ default: m.RoundPage })))
-const ChatInterview = React.lazy(() => import('./components/ChatInterview').then(m => ({ default: m.ChatInterview })))
+const LiveInterview = React.lazy(() => import('./components/LiveInterview').then(m => ({ default: m.LiveInterview })))
 const ReportPage = React.lazy(() => import('./components/ReportPage').then(m => ({ default: m.ReportPage })))
 const DashboardPage = React.lazy(() => import('./components/DashboardPage').then(m => ({ default: m.DashboardPage })))
 const RecruiterPage = React.lazy(() => import('./components/RecruiterPage').then(m => ({ default: m.RecruiterPage })))
@@ -178,8 +178,8 @@ export default function App() {
             <Route path="/company" element={<CompanyPage state={state} setState={setState} user={user} />} />
             <Route path="/aptitude" element={<RoundPage key="aptitude" title="Aptitude Round" items={aptitudeItems} type="aptitude" state={state} setState={setState} proctoring={proctoring} setProctoring={setProctoring} />} />
             <Route path="/coding" element={<RoundPage key="coding" title="Coding Round" items={codingItems} type="coding" state={state} setState={setState} proctoring={proctoring} setProctoring={setProctoring} />} />
-            <Route path="/technical" element={<ChatInterview key="technical" title="Technical Interview" questions={technicalItems} state={state} setState={setState} proctoring={proctoring} setProctoring={setProctoring} />} />
-            <Route path="/hr" element={<ChatInterview key="hr" title="HR Interview" questions={hrItems} state={state} setState={setState} proctoring={proctoring} setProctoring={setProctoring} />} />
+            <Route path="/technical" element={<LiveInterview key="technical" title="Technical Interview" questions={technicalItems} state={state} setState={setState} proctoring={proctoring} setProctoring={setProctoring} />} />
+            <Route path="/hr" element={<LiveInterview key="hr" title="HR Interview" questions={hrItems} state={state} setState={setState} proctoring={proctoring} setProctoring={setProctoring} />} />
             <Route path="/report" element={<ReportPage state={state} proctoring={proctoring} />} />
             <Route path="/dashboard" element={<DashboardPage user={user} />} />
             <Route path="/recruiter" element={user?.role === 'recruiter' || user?.role === 'admin' ? <RecruiterPage user={user} /> : <Navigate to="/dashboard" replace />} />
