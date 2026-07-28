@@ -10,7 +10,6 @@ import jwt
 
 from app.config import settings
 
-
 JWT_SECRET = settings.resolved_jwt_secret
 JWT_ALGORITHM = settings.jwt_algorithm
 

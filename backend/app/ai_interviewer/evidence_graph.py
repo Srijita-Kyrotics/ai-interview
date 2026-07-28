@@ -24,9 +24,8 @@ Used by:
 
 from __future__ import annotations
 
-import uuid
 import logging
-from typing import Optional
+import uuid
 
 from app.ai_interviewer.state import EvidenceNode, ResumeClaim
 
@@ -137,10 +136,7 @@ class EvidenceGraph:
                     has_strong_refutation = True
 
         # Normalize to 0-1
-        if total_weight > 0:
-            normalized = (support_score + total_weight) / (2 * total_weight)
-        else:
-            normalized = 0.5
+        normalized = (support_score + total_weight) / (2 * total_weight) if total_weight > 0 else 0.5
 
         net_strength = support_score / total_weight if total_weight > 0 else 0.0
 
@@ -228,7 +224,7 @@ class EvidenceGraph:
         }
 
     @classmethod
-    def from_dict(cls, data: dict[str, list[dict]], claims: list[ResumeClaim] | None = None) -> "EvidenceGraph":
+    def from_dict(cls, data: dict[str, list[dict]], claims: list[ResumeClaim] | None = None) -> EvidenceGraph:
         """Deserialize an evidence graph from storage."""
         graph = cls(claims=claims)
         for claim_id, evidence_list in data.items():
@@ -238,7 +234,7 @@ class EvidenceGraph:
         return graph
 
     @classmethod
-    def from_claims(cls, claims: list[ResumeClaim]) -> "EvidenceGraph":
+    def from_claims(cls, claims: list[ResumeClaim]) -> EvidenceGraph:
         """Create an evidence graph from existing claims (for backward compat)."""
         graph = cls(claims=claims)
         for claim in claims:

@@ -135,5 +135,5 @@ class TestSkillCanonicalization:
 class TestExtractTextFromPdf:
     def test_invalid_pdf_raises(self):
         import pytest
-        with pytest.raises(Exception):
+        with pytest.raises(Exception, match="not a valid PDF|Invalid|not a PDF"):
             extract_text_from_pdf_content(b"not a pdf")

@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import contextlib
 import json
 import logging
 import time
@@ -316,7 +317,5 @@ async def interview_websocket(
                 logger.error("Failed to save conversation on disconnect", extra={"error": str(e)})
 
         if websocket.client_state == WebSocketState.CONNECTED:
-            try:
+            with contextlib.suppress(Exception):
                 await websocket.close()
-            except Exception:
-                pass

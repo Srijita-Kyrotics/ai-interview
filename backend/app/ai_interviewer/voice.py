@@ -39,11 +39,10 @@ Add to .env:
 
 from __future__ import annotations
 
-import asyncio
 import io
 import logging
 import time
-from typing import AsyncIterator, Callable, Optional
+from collections.abc import AsyncIterator, Callable
 
 import httpx
 
@@ -57,7 +56,7 @@ logger = logging.getLogger("ai_interview.voice")
 class DeepgramSTT:
     """
     Deepgram Nova-3 streaming speech-to-text.
-    
+
     Uses Deepgram's WebSocket streaming API for low-latency transcription.
     Supports interim results and endpointing.
     """
@@ -69,7 +68,7 @@ class DeepgramSTT:
         self.ws = None
 
     @classmethod
-    def from_settings(cls) -> "DeepgramSTT":
+    def from_settings(cls) -> DeepgramSTT:
         api_key = getattr(settings, "deepgram_api_key", "")
         return cls(api_key=api_key)
 
@@ -130,7 +129,7 @@ class WhisperSTT:
         self.openai_api_key = openai_api_key
 
     @classmethod
-    def from_settings(cls) -> "WhisperSTT":
+    def from_settings(cls) -> WhisperSTT:
         return cls(
             groq_api_key=getattr(settings, "groq_api_key", ""),
             openai_api_key=getattr(settings, "openai_api_key", ""),
@@ -174,7 +173,7 @@ class WhisperSTT:
 class ElevenLabsTTS:
     """
     ElevenLabs Turbo v2.5 text-to-speech.
-    
+
     Uses the "eleven_turbo_v2_5" model for lowest latency.
     Voice: "Alex" persona mapped to Rachel (neutral, professional).
     """
@@ -187,7 +186,7 @@ class ElevenLabsTTS:
         self.voice_id = voice_id or self.DEFAULT_VOICE_ID
 
     @classmethod
-    def from_settings(cls) -> "ElevenLabsTTS":
+    def from_settings(cls) -> ElevenLabsTTS:
         return cls(
             api_key=getattr(settings, "elevenlabs_api_key", ""),
             voice_id=getattr(settings, "elevenlabs_voice_id", ""),
@@ -196,7 +195,7 @@ class ElevenLabsTTS:
     async def synthesize(self, text: str) -> bytes:
         """
         Convert text to speech audio bytes (MP3).
-        
+
         Returns empty bytes if API key not configured.
         """
         if not self.api_key:
@@ -256,16 +255,15 @@ class ElevenLabsTTS:
             "voice_settings": {"stability": 0.5, "similarity_boost": 0.8},
         }
 
-        async with httpx.AsyncClient(timeout=30.0) as client:
-            async with client.stream(
-                "POST",
-                url,
-                json=payload,
-                headers={"xi-api-key": self.api_key, "Content-Type": "application/json"},
-            ) as response:
-                async for chunk in response.aiter_bytes(chunk_size=4096):
-                    if chunk:
-                        yield chunk
+        async with httpx.AsyncClient(timeout=30.0) as client, client.stream(
+            "POST",
+            url,
+            json=payload,
+            headers={"xi-api-key": self.api_key, "Content-Type": "application/json"},
+        ) as response:
+            async for chunk in response.aiter_bytes(chunk_size=4096):
+                if chunk:
+                    yield chunk
 
 
 # ── TTS: OpenAI (Fallback) ────────────────────────────────────────────────────
@@ -280,13 +278,13 @@ class OpenAITTS:
         self.api_key = api_key
 
     @classmethod
-    def from_settings(cls) -> "OpenAITTS":
+    def from_settings(cls) -> OpenAITTS:
         return cls(api_key=getattr(settings, "openai_api_key", ""))
 
     async def synthesize(self, text: str) -> bytes:
         if not self.api_key:
             return b""
-        
+
         async with httpx.AsyncClient(timeout=15.0) as client:
             try:
                 response = await client.post(
@@ -315,10 +313,10 @@ class VoicePipeline:
     """
     Orchestrates the full voice interview pipeline:
     Audio → STT → Interview Agent → TTS → Audio
-    
+
     Handles:
     - STT provider selection with fallback
-    - TTS provider selection with fallback  
+    - TTS provider selection with fallback
     - Latency tracking
     - Silence detection and VAD signals
     - Audio format normalization
@@ -328,7 +326,7 @@ class VoicePipeline:
         self,
         stt: DeepgramSTT | WhisperSTT,
         tts: ElevenLabsTTS | OpenAITTS,
-        on_transcript: Optional[Callable[[str], None]] = None,
+        on_transcript: Callable[[str], None] | None = None,
     ):
         self.stt = stt
         self.tts = tts
@@ -336,7 +334,7 @@ class VoicePipeline:
         self._total_latency_ms: list[int] = []
 
     @classmethod
-    def from_settings(cls) -> "VoicePipeline":
+    def from_settings(cls) -> VoicePipeline:
         """Create pipeline with best available providers."""
         # Try Deepgram first, fall back to Whisper
         deepgram_key = getattr(settings, "deepgram_api_key", "")
@@ -394,7 +392,7 @@ class VoicePipeline:
         1. STT: audio → text
         2. Interview agent: text → response text
         3. TTS: response text → audio
-        
+
         Returns:
         {
             "transcript": str,      # What the candidate said

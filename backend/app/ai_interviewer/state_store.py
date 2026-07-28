@@ -15,10 +15,10 @@ All keys have a configurable TTL (default 4 hours) that resets on each write.
 
 from __future__ import annotations
 
+import contextlib
 import json
 import logging
 import time
-from typing import Any, Optional
 
 import redis
 
@@ -192,8 +192,8 @@ class InterviewStateStore:
                 if raw:
                     meta = json.loads(raw)
                     sid = key.split(":")[1]
-                    if meta.get("status") not in ("completed", "error"):
-                        if platform_session_id is None or meta.get("platform_session_id") == platform_session_id:
+                    if (meta.get("status") not in ("completed", "error")
+                            and (platform_session_id is None or meta.get("platform_session_id") == platform_session_id)):
                             results.append({"session_id": sid, **meta})
             return results
         except redis.RedisError as e:
@@ -223,10 +223,8 @@ class InterviewStateStore:
 
     def release_lock(self, session_id: str) -> None:
         """Release the distributed lock."""
-        try:
+        with contextlib.suppress(redis.RedisError):
             self._r.delete(f"interview:{session_id}:lock")
-        except redis.RedisError:
-            pass
 
     # ── Health Check ──────────────────────────────────────────────────────
 

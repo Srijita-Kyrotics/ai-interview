@@ -18,7 +18,6 @@ import json
 import logging
 import time
 from abc import ABC, abstractmethod
-from typing import Any, Optional
 
 from app.config import settings
 
@@ -110,7 +109,7 @@ class GeminiProvider(LLMProvider):
         except LLMProviderError:
             raise
         except Exception as e:
-            raise LLMProviderError(self.name, f"Generation failed: {e}")
+            raise LLMProviderError(self.name, f"Generation failed: {e}") from e
 
     async def health_check(self) -> bool:
         if not settings.gemini_api_key:
@@ -262,7 +261,7 @@ def _parse_json_response(text: str, provider: str) -> dict:
     try:
         return json.loads(text)
     except json.JSONDecodeError as e:
-        raise LLMProviderError(provider, f"Invalid JSON response: {e}\nRaw: {text[:500]}")
+        raise LLMProviderError(provider, f"Invalid JSON response: {e}\nRaw: {text[:500]}") from e
 
 
 # ── Provider Registry with Failover ───────────────────────────────────────────

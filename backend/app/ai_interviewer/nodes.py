@@ -23,53 +23,49 @@ import json
 import logging
 import time
 import uuid
-from typing import Any
 
-from app.ai_interviewer.state import (
-    InterviewState,
-    ResumeAnalysis,
-    InterviewPlan,
-    InterviewStage,
-    QuestionRecord,
-    AnswerRecord,
-    AnswerEvaluation,
-    FinalScores,
-    FinalReport,
-    InterviewMemory,
-    ResumeClaim,
-    CandidateFact,
-    DifficultyLevel,
-)
 from app.ai_interviewer.memory import MemoryManager
 from app.ai_interviewer.prompts import (
-    RESUME_ANALYZER_SYSTEM,
-    RESUME_ANALYZER_PROMPT,
-    INTERVIEW_PLANNER_SYSTEM,
-    INTERVIEW_PLANNER_PROMPT,
-    QUESTION_GENERATOR_SYSTEM,
-    QUESTION_GENERATOR_PROMPT,
-    ANSWER_ANALYZER_SYSTEM,
     ANSWER_ANALYZER_PROMPT,
-    FOLLOW_UP_GENERATOR_SYSTEM,
-    FOLLOW_UP_GENERATOR_PROMPT,
-    REPORT_GENERATOR_SYSTEM,
-    REPORT_GENERATOR_PROMPT,
-    STAGE_TRANSITION_PROMPT,
-    INTERVIEW_OPENING_PROMPT,
-    INTERVIEW_CLOSING_PROMPT,
-    CLAIM_VERIFIER_SYSTEM,
-    CLAIM_VERIFIER_PROMPT,
-    CLAIM_EXTRACTOR_SYSTEM,
+    ANSWER_ANALYZER_SYSTEM,
     CLAIM_EXTRACTOR_PROMPT,
-    CONTRADICTION_DETECTOR_SYSTEM,
+    CLAIM_EXTRACTOR_SYSTEM,
+    CLAIM_VERIFIER_PROMPT,
+    CLAIM_VERIFIER_SYSTEM,
     CONTRADICTION_DETECTOR_PROMPT,
-    INTERVIEW_REPLANNER_SYSTEM,
-    INTERVIEW_REPLANNER_PROMPT,
-    SYSTEM_DESIGN_EVALUATOR_SYSTEM,
-    SYSTEM_DESIGN_EVALUATOR_PROMPT,
+    CONTRADICTION_DETECTOR_SYSTEM,
     DIFFICULTY_GUIDANCE,
+    FOLLOW_UP_GENERATOR_PROMPT,
+    FOLLOW_UP_GENERATOR_SYSTEM,
+    INTERVIEW_CLOSING_PROMPT,
+    INTERVIEW_OPENING_PROMPT,
+    INTERVIEW_PLANNER_PROMPT,
+    INTERVIEW_PLANNER_SYSTEM,
+    INTERVIEW_REPLANNER_PROMPT,
+    INTERVIEW_REPLANNER_SYSTEM,
+    QUESTION_GENERATOR_PROMPT,
+    QUESTION_GENERATOR_SYSTEM,
+    REPORT_GENERATOR_PROMPT,
+    REPORT_GENERATOR_SYSTEM,
+    RESUME_ANALYZER_PROMPT,
+    RESUME_ANALYZER_SYSTEM,
+    STAGE_TRANSITION_PROMPT,
+    SYSTEM_DESIGN_EVALUATOR_PROMPT,
+    SYSTEM_DESIGN_EVALUATOR_SYSTEM,
 )
-from app.config import settings
+from app.ai_interviewer.state import (
+    AnswerEvaluation,
+    CandidateFact,
+    DifficultyLevel,
+    FinalReport,
+    FinalScores,
+    InterviewPlan,
+    InterviewStage,
+    InterviewState,
+    QuestionRecord,
+    ResumeAnalysis,
+    ResumeClaim,
+)
 
 logger = logging.getLogger("ai_interview.nodes")
 
@@ -96,9 +92,9 @@ async def _call_llm_json(system: str, prompt: str) -> dict:
     Raises RuntimeError if all providers fail.
     """
     from app.ai_interviewer.llm_providers import (
-        get_llm_registry,
-        LLMProviderUnavailableError,
         LLMProviderError,
+        LLMProviderUnavailableError,
+        get_llm_registry,
     )
 
     registry = get_llm_registry()
@@ -325,7 +321,7 @@ async def question_generator_node(state: InterviewState) -> dict:
     logger.info("Executing question_generator_node", extra={"session": state["session_id"]})
 
     analysis = state.get("resume_analysis", {})
-    plan = state.get("interview_plan", {})
+    state.get("interview_plan", {})
     current_stage = state.get("current_stage", {})
     memory = state.get("memory", {})
     evaluations = state.get("evaluations_history", [])
@@ -368,7 +364,7 @@ async def question_generator_node(state: InterviewState) -> dict:
     difficulty_hint = DIFFICULTY_GUIDANCE.get(current_diff, DIFFICULTY_GUIDANCE["intermediate"])
 
     # ── Feature 2: Get mastery context ────────────────────────────────────
-    topic_mastery = state.get("topic_mastery", {})
+    state.get("topic_mastery", {})
     mastery_context = ""
     weak_topics = mem_mgr.get_weak_mastery_topics(threshold=5.0)
     strong_topics = mem_mgr.get_strong_mastery_topics(threshold=8.0)
@@ -631,8 +627,8 @@ async def follow_up_generator_node(state: InterviewState) -> dict:
     """
     Generates a targeted follow-up question when the previous answer
     was shallow, vague, or contained red flags.
-    
-    This is the most important node for interview quality — it's what 
+
+    This is the most important node for interview quality — it's what
     separates a real interviewer from a scripted one.
     """
     logger.info("Executing follow_up_generator_node", extra={"session": state["session_id"]})
@@ -720,7 +716,7 @@ async def follow_up_generator_node(state: InterviewState) -> dict:
 
 async def scoring_node(state: InterviewState) -> dict:
     """
-    Computes aggregate scores across all dimensions by aggregating 
+    Computes aggregate scores across all dimensions by aggregating
     all answer evaluations from the session.
     """
     logger.info("Executing scoring_node", extra={"session": state["session_id"]})
@@ -818,7 +814,7 @@ async def report_generator_node(state: InterviewState) -> dict:
 
     # Build transcript summary
     transcript_pairs = []
-    for i, entry in enumerate(transcript):
+    for _i, entry in enumerate(transcript):
         text = entry.get("text", "")[:300]
         role = entry.get("role", "")
         transcript_pairs.append(f"{role.upper()}: {text}")
@@ -1139,7 +1135,7 @@ async def claim_verifier_node(state: InterviewState) -> dict:
     current_question = state.get("current_question", {})
     current_answer = state.get("current_answer", {})
     resume_claims = list(state.get("resume_claims", []))
-    analysis = state.get("resume_analysis", {})
+    state.get("resume_analysis", {})
 
     if not current_answer or not resume_claims:
         return {"resume_claims": resume_claims}
@@ -1279,7 +1275,7 @@ async def interview_replanner_node(state: InterviewState) -> dict:
     # Update stages in plan if replanner provided new stages
     updated_plan = dict(plan)
     if replanned_stages:
-        current_idx = state.get("current_stage_index", 0)
+        state.get("current_stage_index", 0)
         stages = list(plan.get("stages", []))
         for new_stage in replanned_stages:
             # Find matching stage by ID or add as new
@@ -1342,7 +1338,7 @@ async def system_design_evaluator_node(state: InterviewState) -> dict:
 
     current_question = state.get("current_question", {})
     current_answer = state.get("current_answer", {})
-    analysis = state.get("resume_analysis", {})
+    state.get("resume_analysis", {})
 
     if not current_question or not current_answer:
         return {}

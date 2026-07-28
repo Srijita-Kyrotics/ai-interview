@@ -44,26 +44,24 @@ WebSocket Protocol (voice mode):
 
 from __future__ import annotations
 
+import contextlib
 import json
 import logging
 import time
 import uuid
-from typing import Any
 
 from fastapi import APIRouter, Depends, HTTPException, Query, WebSocket, WebSocketDisconnect
 from pydantic import BaseModel
 from starlette.websockets import WebSocketState
 
+from app.ai_interviewer.graph import InterviewGraphRunner
+from app.ai_interviewer.nodes import GeminiUnavailableError
+from app.ai_interviewer.state import make_initial_state
+from app.ai_interviewer.state_store import InterviewStateStore, get_state_store
+from app.ai_interviewer.voice import VoicePipeline
 from app.config import settings
 from app.db import load_session, save_session
-from app.helpers import decode_token, create_token
-from app.resume_parser import extract_text_from_pdf_content, parse_resume_text
-
-from app.ai_interviewer.state import make_initial_state, InterviewState
-from app.ai_interviewer.graph import InterviewGraphRunner
-from app.ai_interviewer.voice import VoicePipeline
-from app.ai_interviewer.nodes import GeminiUnavailableError
-from app.ai_interviewer.state_store import get_state_store, InterviewStateStore
+from app.helpers import create_token, decode_token
 
 logger = logging.getLogger("ai_interview.router")
 
@@ -611,14 +609,12 @@ async def ai_interview_websocket(
             "Gemini call failed",
             extra={"error": str(e), "session": interview_session_id}
         )
-        try:
+        with contextlib.suppress(Exception):
             await websocket.send_json({
                 "type": "error",
                 "message": f"AI model error: {e}",
                 "error_code": "GEMINI_ERROR",
             })
-        except Exception:
-            pass
 
     except WebSocketDisconnect:
         logger.info(
@@ -644,21 +640,17 @@ async def ai_interview_websocket(
             "AI interview WebSocket error",
             extra={"error": str(e), "session": interview_session_id}
         )
-        try:
+        with contextlib.suppress(Exception):
             await websocket.send_json({
                 "type": "error",
                 "message": f"Interview error: {e}",
                 "error_code": "INTERNAL_ERROR",
             })
-        except Exception:
-            pass
 
     finally:
         if websocket.client_state == WebSocketState.CONNECTED:
-            try:
+            with contextlib.suppress(Exception):
                 await websocket.close()
-            except Exception:
-                pass
 
 
 # ── Voice Interview WebSocket ──────────────────────────────────────────────────
@@ -866,14 +858,12 @@ async def voice_interview_websocket(
 
     except RuntimeError as e:
         logger.error("Gemini call failed (voice)", extra={"error": str(e)})
-        try:
+        with contextlib.suppress(Exception):
             await websocket.send_json({
                 "type": "error",
                 "message": f"AI model error: {e}",
                 "error_code": "GEMINI_ERROR",
             })
-        except Exception:
-            pass
 
     except WebSocketDisconnect:
         logger.info("Voice interview disconnected", extra={"session": interview_session_id})
@@ -885,14 +875,12 @@ async def voice_interview_websocket(
         })
     except Exception as e:
         logger.error("Voice interview error", extra={"error": str(e)})
-        try:
+        with contextlib.suppress(Exception):
             await websocket.send_json({
                 "type": "error",
                 "message": f"Interview error: {e}",
                 "error_code": "INTERNAL_ERROR",
             })
-        except Exception:
-            pass
 
 
 # ── Helper Functions ──────────────────────────────────────────────────────────

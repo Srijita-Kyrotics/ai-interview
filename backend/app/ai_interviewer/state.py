@@ -7,9 +7,9 @@ LangGraph interview pipeline.  Every field is documented.
 
 from __future__ import annotations
 
-from typing import Any, Optional
-from typing_extensions import TypedDict, NotRequired
+from typing import NotRequired
 
+from typing_extensions import TypedDict
 
 # ── Sub-schemas ──────────────────────────────────────────────────────────────
 

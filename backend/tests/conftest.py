@@ -11,11 +11,11 @@ from app.config import settings
 # Force test database
 settings.database_url = settings.database_url.replace("/ai_interview", "/ai_interview_test")
 
-import app.db as _db
+import app.db as _db  # noqa: E402
 
 _db._pool = None  # Reset pool so it picks up test URL
 
-from app.db import (
+from app.db import (  # noqa: E402
     close_pool,
     get_connection,
     init_db,
@@ -23,7 +23,7 @@ from app.db import (
     save_session,
     save_user,
 )
-from app.main import app, create_token, hash_password
+from app.main import app, create_token, hash_password  # noqa: E402
 
 
 @pytest.fixture(scope="session", autouse=True)

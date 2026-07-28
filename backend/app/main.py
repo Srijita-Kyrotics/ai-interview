@@ -20,14 +20,11 @@ import httpx
 from fastapi import Depends, FastAPI, File, Header, HTTPException, Request, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
-
-from app.interview_ws import router as interview_router
-from app.ai_interviewer.router import router as ai_interviewer_router
 from pydantic import BaseModel
 from pythonjsonlogger import json as json_logger
 
+from app.ai_interviewer.router import router as ai_interviewer_router
 from app.config import BASE_DIR, settings
-from app.helpers import create_token, decode_token, default_scores, sanitize_for_ai
 from app.db import (
     cache_get,
     cache_set,
@@ -56,6 +53,8 @@ from app.db import (
     update_user_role,
     user_exists,
 )
+from app.helpers import create_token, decode_token, default_scores, sanitize_for_ai
+from app.interview_ws import router as interview_router
 from app.resume_parser import extract_text_from_pdf_content, parse_resume_text
 
 logger = logging.getLogger("ai_interview")
@@ -85,7 +84,7 @@ async def lifespan(app):
     # P1: Initialize Redis for persistent interview state
     try:
         from app.ai_interviewer.state_store import get_redis, get_state_store
-        redis = get_redis()
+        get_redis()
         store = get_state_store()
         if store.health_check():
             logger.info("Redis connected for interview state persistence")
@@ -177,12 +176,6 @@ def _cache_get(key: str, ttl: int = 300) -> Any:
 def _cache_set(key: str, data: Any, ttl: int = 300) -> None:
     cache_set(key, data, ttl)
 
-
-# ─── Input Sanitization ──────────────────────────────────────────────────────
-def sanitize_for_ai(text: str, max_length: int = 5000) -> str:
-    text = text[:max_length]
-    text = re.sub(r'[\x00-\x08\x0b\x0c\x0e-\x1f\x7f]', '', text)
-    return text.strip()
 
 JWT_SECRET = settings.resolved_jwt_secret
 JWT_ALGORITHM = settings.jwt_algorithm

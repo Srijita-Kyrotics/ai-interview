@@ -143,7 +143,7 @@ Return ONLY valid JSON:
 
 Stage ideas (customize based on resume):
 - "Warm-Up & Background" - Get them talking, establish rapport, confirm basics
-- "Deep Dive: [Key Project]" - Probe their most impressive project thoroughly  
+- "Deep Dive: [Key Project]" - Probe their most impressive project thoroughly
 - "Technical Depth: [Core Technology]" - Test real vs. claimed expertise
 - "System Design" - How would they architect something relevant to their experience
 - "Problem Solving" - Scenario-based technical challenge
@@ -154,7 +154,7 @@ Important: The plan should be adaptive. Stages are guidelines, not strict script
 """
 
 # ─────────────────────────────────────────────────────────────────────────────
-# QUESTION GENERATOR PROMPT  
+# QUESTION GENERATOR PROMPT
 # ─────────────────────────────────────────────────────────────────────────────
 
 QUESTION_GENERATOR_SYSTEM = """You are a Senior Staff Engineer conducting a technical interview.
@@ -243,8 +243,8 @@ Scoring principles:
 - 3-4: Weak answer, incorrect in parts, clearly lacking real experience
 - 1-2: Very poor — wrong, incoherent, or just a restatement of the question
 
-Be harsh but fair. A candidate who says "I used Redis for caching" without explaining 
-what they cached, why Redis specifically, how they handled eviction/TTL/consistency — 
+Be harsh but fair. A candidate who says "I used Redis for caching" without explaining
+what they cached, why Redis specifically, how they handled eviction/TTL/consistency —
 that's a 4/10 answer, not 7/10.
 
 When code is provided alongside the spoken answer:
@@ -263,7 +263,7 @@ Question Intent: {question_intent}
 Stage: {stage_name}
 Expected Answer Signals: {expected_signals}
 
-Candidate's Answer: 
+Candidate's Answer:
 {answer_text}
 
 Candidate's Code (if provided):
@@ -306,7 +306,7 @@ Return ONLY valid JSON:
 FOLLOW_UP_GENERATOR_SYSTEM = """You are a relentlessly curious Senior Engineer.
 
 When a candidate gives a vague, incomplete, or suspiciously shallow answer, you dig.
-You ask "why" and "how" and "what would happen if". 
+You ask "why" and "how" and "what would happen if".
 You're not aggressive — you're genuinely trying to understand their depth.
 
 Your follow-up questions:
@@ -618,7 +618,7 @@ Return ONLY valid JSON:
 # ─────────────────────────────────────────────────────────────────────────────
 
 CONTRADICTION_DETECTOR_SYSTEM = """You are a sharp-eyed fact-checker analyzing a candidate's interview
-responses for internal contradictions. 
+responses for internal contradictions.
 
 A contradiction occurs when:
 1. The candidate says X in one answer, then says the opposite or incompatible Y later

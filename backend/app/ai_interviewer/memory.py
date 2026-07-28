@@ -14,14 +14,13 @@ import uuid
 from typing import Any
 
 from app.ai_interviewer.state import (
-    InterviewMemory,
     AnswerEvaluation,
-    QuestionRecord,
+    CandidateFact,
+    CodeVersion,
+    DifficultyLevel,
+    InterviewMemory,
     ResumeClaim,
     TopicMastery,
-    CandidateFact,
-    DifficultyLevel,
-    CodeVersion,
 )
 
 

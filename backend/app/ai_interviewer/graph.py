@@ -63,32 +63,29 @@ manual step-by-step invocation via the WebSocket handler.
 
 from __future__ import annotations
 
-import json
 import logging
 import time
-from typing import Any, Literal, Optional
+from typing import Literal
 
-from langgraph.graph import StateGraph, START, END
 from langgraph.checkpoint.memory import MemorySaver
+from langgraph.graph import END, START, StateGraph
 
-from app.ai_interviewer.state import InterviewState
-from app.ai_interviewer.evidence_graph import EvidenceGraph
 from app.ai_interviewer.nodes import (
-    resume_analyzer_node,
-    interview_planner_node,
-    question_generator_node,
     answer_analyzer_node,
-    follow_up_generator_node,
-    scoring_node,
-    report_generator_node,
-    stage_advance_node,
-    opening_node,
-    closing_node,
     claim_verifier_node,
+    closing_node,
+    follow_up_generator_node,
+    interview_planner_node,
     interview_replanner_node,
+    opening_node,
+    question_generator_node,
+    report_generator_node,
+    resume_analyzer_node,
+    scoring_node,
+    stage_advance_node,
     system_design_evaluator_node,
-    GeminiUnavailableError,
 )
+from app.ai_interviewer.state import InterviewState
 
 logger = logging.getLogger("ai_interview.graph")
 
@@ -162,18 +159,18 @@ def error_node(state: InterviewState) -> dict:
 
 # ── Graph Builder ─────────────────────────────────────────────────────────────
 
-def build_interview_graph(checkpointer=None) -> "CompiledGraph":
+def build_interview_graph(checkpointer=None):
     """
     Build and compile the LangGraph interview graph.
-    
+
     The graph supports:
     1. Full automated runs (for testing)
     2. Step-by-step event-driven runs (for WebSocket interviews)
-    
+
     Args:
         checkpointer: Optional LangGraph checkpointer for persistence.
                       Use MemorySaver() for in-memory, or PostgresSaver for prod.
-    
+
     Returns:
         Compiled LangGraph StateGraph
     """
@@ -261,7 +258,7 @@ def build_interview_graph(checkpointer=None) -> "CompiledGraph":
     # ── Compile ────────────────────────────────────────────────────────────
     checkpointer = checkpointer or MemorySaver()
     compiled = graph.compile(checkpointer=checkpointer)
-    
+
     logger.info("Interview graph compiled successfully")
     return compiled
 
@@ -329,7 +326,7 @@ class InterviewGraphRunner:
             self._store.append_timeline_event(self.session_id, event)
 
     @classmethod
-    def restore(cls, session_id: str, state_store=None) -> "InterviewGraphRunner | None":
+    def restore(cls, session_id: str, state_store=None) -> InterviewGraphRunner | None:
         """
         Restore a runner from Redis checkpoint.
         Returns None if no checkpoint exists.
