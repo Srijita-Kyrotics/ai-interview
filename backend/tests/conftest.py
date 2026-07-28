@@ -8,8 +8,11 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 from app.config import settings
 
-# Force test database
-settings.database_url = settings.database_url.replace("/ai_interview", "/ai_interview_test")
+# Force test database (only replace if not already _test)
+db_url = settings.database_url
+if not db_url.endswith("_test"):
+    # Replace the database name at the end of the URL
+    settings.database_url = db_url[:db_url.rfind("/")] + "/ai_interview_test"
 
 import app.db as _db  # noqa: E402
 
