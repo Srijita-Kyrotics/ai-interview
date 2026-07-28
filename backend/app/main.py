@@ -22,6 +22,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 
 from app.interview_ws import router as interview_router
+from app.ai_interviewer.router import router as ai_interviewer_router
 from pydantic import BaseModel
 from pythonjsonlogger import json as json_logger
 
@@ -87,6 +88,7 @@ async def lifespan(app):
 
 app = FastAPI(title="AI Mock Recruitment Platform", lifespan=lifespan)
 app.include_router(interview_router)
+app.include_router(ai_interviewer_router)
 
 app.add_middleware(
     CORSMiddleware,

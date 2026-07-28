@@ -13,6 +13,7 @@ import { ToastProvider } from './utils/ToastContext'
 
 const RoundPage = React.lazy(() => import('./components/RoundPage').then(m => ({ default: m.RoundPage })))
 const LiveInterview = React.lazy(() => import('./components/LiveInterview').then(m => ({ default: m.LiveInterview })))
+const AIInterviewer = React.lazy(() => import('./components/AIInterviewer'))
 const ReportPage = React.lazy(() => import('./components/ReportPage').then(m => ({ default: m.ReportPage })))
 const DashboardPage = React.lazy(() => import('./components/DashboardPage').then(m => ({ default: m.DashboardPage })))
 const RecruiterPage = React.lazy(() => import('./components/RecruiterPage').then(m => ({ default: m.RecruiterPage })))
@@ -178,8 +179,11 @@ export default function App() {
             <Route path="/company" element={<CompanyPage state={state} setState={setState} user={user} />} />
             <Route path="/aptitude" element={<RoundPage key="aptitude" title="Aptitude Round" items={aptitudeItems} type="aptitude" state={state} setState={setState} proctoring={proctoring} setProctoring={setProctoring} />} />
             <Route path="/coding" element={<RoundPage key="coding" title="Coding Round" items={codingItems} type="coding" state={state} setState={setState} proctoring={proctoring} setProctoring={setProctoring} />} />
-            <Route path="/technical" element={<LiveInterview key="technical" title="Technical Interview" questions={technicalItems} state={state} setState={setState} proctoring={proctoring} setProctoring={setProctoring} />} />
-            <Route path="/hr" element={<LiveInterview key="hr" title="HR Interview" questions={hrItems} state={state} setState={setState} proctoring={proctoring} setProctoring={setProctoring} />} />
+            
+            {/* Swapped legacy LiveInterview with our new AIInterviewer component */}
+            <Route path="/technical" element={<AIInterviewer sessionId={state.sessionId} token={user.token} role="Software Engineer" company={state.company || 'the company'} proctoring={proctoring} setProctoring={setProctoring} onComplete={(report) => { console.log('Final Report:', report); window.location.href = '/report'; }} />} />
+            <Route path="/hr" element={<AIInterviewer sessionId={state.sessionId} token={user.token} role="Software Engineer" company={state.company || 'the company'} proctoring={proctoring} setProctoring={setProctoring} onComplete={(report) => { console.log('Final Report:', report); window.location.href = '/report'; }} />} />
+
             <Route path="/report" element={<ReportPage state={state} proctoring={proctoring} />} />
             <Route path="/dashboard" element={<DashboardPage user={user} />} />
             <Route path="/recruiter" element={user?.role === 'recruiter' || user?.role === 'admin' ? <RecruiterPage user={user} /> : <Navigate to="/dashboard" replace />} />

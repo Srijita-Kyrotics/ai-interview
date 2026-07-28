@@ -47,6 +47,19 @@ class Settings(BaseSettings):
         alias="JUDGE0_LANGUAGE_IDS",
     )
 
+    # ── AI Interviewer: Voice Pipeline ────────────────────────────────────
+    deepgram_api_key: str = Field("", alias="DEEPGRAM_API_KEY")
+    elevenlabs_api_key: str = Field("", alias="ELEVENLABS_API_KEY")
+    elevenlabs_voice_id: str = Field("21m00Tcm4TlvDq8ikWAM", alias="ELEVENLABS_VOICE_ID")
+    openai_api_key: str = Field("", alias="OPENAI_API_KEY")
+    groq_api_key: str = Field("", alias="GROQ_API_KEY")
+
+    # ── AI Interviewer: LangGraph ─────────────────────────────────────────
+    ai_interviewer_max_questions: int = Field(12, alias="AI_INTERVIEWER_MAX_QUESTIONS")
+    ai_interviewer_gemini_model: str = Field("gemini-1.5-pro", alias="AI_INTERVIEWER_GEMINI_MODEL")
+    ai_interviewer_temperature: float = Field(0.7, alias="AI_INTERVIEWER_TEMPERATURE")
+    ai_interviewer_session_ttl_hours: int = Field(4, alias="AI_INTERVIEWER_SESSION_TTL_HOURS")
+
     # ── CORS ──────────────────────────────────────────────────────────────
     allowed_origins: str = Field(
         "http://localhost:5173,http://127.0.0.1:5173", alias="ALLOWED_ORIGINS"

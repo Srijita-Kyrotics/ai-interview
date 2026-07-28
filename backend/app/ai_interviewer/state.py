@@ -97,6 +97,64 @@ class AnswerEvaluation(TypedDict):
     overall_quality: str      # "excellent" | "good" | "average" | "poor"
 
 
+# ── Feature 1: Claim Verification Engine ────────────────────────────────────
+
+class ResumeClaim(TypedDict):
+    claim_id: str
+    claim_text: str              # e.g. "Expert in React", "Built scalable microservices at Acme"
+    source: str                  # "resume" | "answer" | "project"
+    skill: NotRequired[str]      # Associated skill/technology
+    verification_status: str     # "UNVERIFIED" | "PARTIALLY_VERIFIED" | "VERIFIED" | "FAILED_VERIFICATION"
+    verification_evidence: list[str]  # Interview moments that support/refute
+    asked_question_ids: list[str]     # Questions used to verify this claim
+
+
+# ── Feature 2: Topic Mastery Tracking ───────────────────────────────────────
+
+class TopicMastery(TypedDict):
+    topic: str
+    mastery_score: float         # 0-10, computed from evaluations
+    questions_asked: int         # Number of questions on this topic
+    avg_technical_accuracy: float
+    avg_depth: float
+    last_assessed_at: float
+
+
+# ── Feature 3: Contradiction Detection ─────────────────────────────────────
+
+class CandidateFact(TypedDict):
+    fact_id: str
+    statement: str               # Extracted factual claim from an answer
+    topic: str
+    source_question_id: str
+    timestamp: float
+    contradicted: bool
+    contradicted_by: NotRequired[str]  # fact_id of contradicting fact
+    contradiction_evidence: NotRequired[str]
+
+
+# ── Feature 5: Code Evolution Tracking ─────────────────────────────────────
+
+class CodeVersion(TypedDict):
+    version_id: int
+    timestamp: float
+    question_id: str
+    code: str
+    language: NotRequired[str]
+    diff_summary: NotRequired[str]    # Summary of changes from previous version
+
+
+# ── Feature 4: Difficulty Escalation System ─────────────────────────────────
+
+class DifficultyLevel(TypedDict):
+    level: str                   # "beginner" | "intermediate" | "advanced" | "expert"
+    level_numeric: int           # 1-4, maps to level string
+    overall_mastery: float       # Aggregate mastery across topics
+    resume_seniority: str        # Initial difficulty seeded from resume
+    consecutive_strong: int      # Consecutive strong answers (>=7 avg)
+    consecutive_weak: int        # Consecutive weak answers (<=4 avg)
+
+
 class InterviewMemory(TypedDict):
     questions_asked: list[str]         # question IDs
     topics_covered: list[str]
@@ -133,6 +191,12 @@ class FinalReport(TypedDict):
     answer_evaluations: list[AnswerEvaluation]
     recommendation_rationale: str
     generated_at: float
+    # Feature 1: Claim verification summary
+    claim_verification_summary: NotRequired[list[dict]]
+    # Feature 2: Topic mastery summary
+    topic_mastery_summary: NotRequired[list[dict]]
+    # Feature 5: Code evolution summary
+    code_evolution_summary: NotRequired[list[dict]]
 
 
 # ── Master State ─────────────────────────────────────────────────────────────
@@ -170,6 +234,29 @@ class InterviewState(TypedDict):
 
     # ── Memory ────────────────────────────────────────────────────────────
     memory: InterviewMemory
+
+    # ── Feature 1: Claim Verification ────────────────────────────────────
+    resume_claims: NotRequired[list[ResumeClaim]]
+
+    # ── Feature 2: Topic Mastery ─────────────────────────────────────────
+    topic_mastery: NotRequired[dict[str, TopicMastery]]
+
+    # ── Feature 3: Contradiction Detection ───────────────────────────────
+    candidate_facts: NotRequired[list[CandidateFact]]
+
+    # ── Feature 4: Difficulty Escalation ─────────────────────────────────
+    difficulty_level: NotRequired[DifficultyLevel]
+
+    # ── Feature 5: Code Evolution ────────────────────────────────────────
+    code_history: NotRequired[list[CodeVersion]]
+
+    # ── Feature 6: Dynamic Replanning ────────────────────────────────────
+    replan_count: NotRequired[int]
+    replan_topics_added: NotRequired[list[str]]
+
+    # ── Feature 7: System Design Mode ────────────────────────────────────
+    is_system_design_mode: NotRequired[bool]
+    system_design_scores: NotRequired[dict[str, int]]
 
     # ── Timing ───────────────────────────────────────────────────────────
     interview_started_at: float
@@ -231,6 +318,23 @@ def make_initial_state(
             concerning_moments=[],
             depth_map={},
         ),
+        # Feature 1-7: Initialize empty
+        resume_claims=[],
+        topic_mastery={},
+        candidate_facts=[],
+        difficulty_level=DifficultyLevel(
+            level="intermediate",
+            level_numeric=2,
+            overall_mastery=5.0,
+            resume_seniority="mid",
+            consecutive_strong=0,
+            consecutive_weak=0,
+        ),
+        code_history=[],
+        replan_count=0,
+        replan_topics_added=[],
+        is_system_design_mode=False,
+        system_design_scores={},
         interview_started_at=now,
         last_activity_at=now,
         phase="analyzing",

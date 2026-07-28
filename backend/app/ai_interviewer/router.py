@@ -175,6 +175,28 @@ async def get_interview_state(
         "current_stage": state.get("current_stage", {}).get("name"),
         "topics_covered": state.get("memory", {}).get("topics_covered", []),
         "should_end": state.get("should_end"),
+        # Feature 1: Claim verification
+        "claims_summary": {
+            "total": len(state.get("resume_claims", [])),
+            "verified": len([c for c in state.get("resume_claims", []) if c.get("verification_status") == "VERIFIED"]),
+            "failed": len([c for c in state.get("resume_claims", []) if c.get("verification_status") == "FAILED_VERIFICATION"]),
+            "unverified": len([c for c in state.get("resume_claims", []) if c.get("verification_status") == "UNVERIFIED"]),
+        },
+        # Feature 2: Topic mastery
+        "topic_mastery": {
+            t: m["mastery_score"]
+            for t, m in state.get("topic_mastery", {}).items()
+        },
+        # Feature 3: Contradictions
+        "contradictions_found": len([
+            f for f in state.get("candidate_facts", []) if f.get("contradicted", False)
+        ]),
+        # Feature 4: Difficulty
+        "difficulty_level": state.get("difficulty_level", {}).get("level", "intermediate"),
+        # Feature 5: Code versions
+        "code_versions": len(state.get("code_history", [])),
+        # Feature 6: Replans
+        "replan_count": state.get("replan_count", 0),
     }
 
 
@@ -299,14 +321,28 @@ async def ai_interview_websocket(
                 })
                 break
 
+            # Feature 7: Toggle system design mode
+            if msg_type == "set_system_design_mode":
+                enabled = msg.get("enabled", False)
+                runner.state["is_system_design_mode"] = bool(enabled)
+                await websocket.send_json({
+                    "type": "system_design_mode_changed",
+                    "enabled": bool(enabled),
+                    "timestamp": time.time(),
+                })
+                continue
+
             # Candidate answer
             if msg_type == "answer":
                 answer_text = msg.get("text", "").strip()
                 if not answer_text:
                     continue
 
-                # Extract code snapshot from the answer message
+                # Extract code snapshot and language from the answer message
                 code_snapshot = msg.get("code") or None
+                code_language = msg.get("language") or ""
+                if code_snapshot and code_language:
+                    runner.state["current_code_snapshot_language"] = code_language
 
                 await websocket.send_json({"type": "thinking", "timestamp": time.time()})
 
@@ -499,8 +535,11 @@ async def voice_interview_websocket(
                         "is_final": True,
                     })
 
-                    # Extract code snapshot from the audio_end message
+                    # Extract code snapshot and language from the audio_end message
                     code_snapshot = msg.get("code") or None
+                    code_language = msg.get("language") or ""
+                    if code_snapshot and code_language:
+                        runner.state["current_code_snapshot_language"] = code_language
 
                     # Process through interview agent
                     result = await runner.process_answer(transcript, code_snapshot=code_snapshot)

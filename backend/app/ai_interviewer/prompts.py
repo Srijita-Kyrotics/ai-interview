@@ -400,41 +400,66 @@ All Answer Evaluations:
 Code Snapshots (candidate's code submissions during interview):
 {code_snapshots_summary}
 
+Claim Verification Results:
+{claim_verification_summary}
+
+Topic Mastery Summary:
+{topic_mastery_summary}
+
+Code Evolution Summary:
+{code_evolution_summary}
+
+Contradictions Found: {contradictions_found}
+
 Aggregate Scores (already computed):
 - Technical: {technical_score}/100
-- Communication: {communication_score}/100  
+- Communication: {communication_score}/100
 - Confidence: {confidence_score}/100
 - Problem Solving: {problem_solving_score}/100
 - Behavioral: {behavioral_score}/100
 - Overall: {overall_score}/100
 
+CRITICAL REQUIREMENTS:
+1. EVERY strength or weakness MUST cite a specific interview moment (question number or topic)
+2. Claim verification results MUST appear in the report — do not skip them
+3. If claims were FAILED, this must be explicitly called out with evidence
+4. Code evolution MUST be discussed — did the candidate improve code over time?
+5. Topic mastery scores MUST be referenced when discussing strengths/weaknesses
+6. Contradictions MUST be highlighted as risk factors with specific references
+
 Return ONLY valid JSON:
 {{
   "strengths": [
-    "Specific strength 1 - backed by interview evidence",
-    "Specific strength 2 - backed by interview evidence"
+    "Specific strength 1 — backed by evidence: [Q3: candidate explained X correctly when asked about Y]"
   ],
   "weaknesses": [
-    "Specific weakness 1 - with evidence",
-    "Specific weakness 2 - with evidence"
+    "Specific weakness 1 — evidence: [Q5: candidate could not explain Z, mastery score on this topic: 3.2/10]"
   ],
   "areas_for_improvement": [
-    "Actionable improvement 1",
-    "Actionable improvement 2"
+    "Actionable improvement 1"
   ],
-  "detailed_summary": "3-5 paragraph narrative assessment of the candidate. Be specific. Reference actual answers. Explain the recommendation.",
+  "detailed_summary": "3-5 paragraph narrative. Reference specific questions, claim verification outcomes, code submissions, mastery scores. Explain the recommendation with evidence.",
   "recommendation": "Strong Hire|Hire|Lean Hire|Lean Reject|Reject",
-  "recommendation_rationale": "2-3 sentences explaining the recommendation",
+  "recommendation_rationale": "2-3 sentences with specific evidence",
   "standout_moments": [
-    "A moment where the candidate impressed",
-    "A moment where the candidate struggled"
+    "A specific moment with question reference"
   ],
   "risk_factors": [
-    "Any risks in hiring this candidate"
+    "Risk factor with evidence (include claim failures, contradictions)"
   ],
   "suggested_onboarding_focus": [
-    "If hired, what areas should their onboarding focus on"
-  ]
+    "If hired, what areas should their onboarding focus on — based on low mastery topics"
+  ],
+  "claim_assessment": {{
+    "verified_claims": ["Claim 1 — verified via Q3 answer about X"],
+    "failed_claims": ["Claim 2 — FAILED: candidate could not explain Y when asked in Q7"],
+    "partial_claims": ["Claim 3 — partially verified, showed basic but not expert knowledge"]
+  }},
+  "code_quality_assessment": {{
+    "submitted_code": true/false,
+    "showed_improvement": true/false,
+    "code_summary": "Brief assessment of code quality and evolution"
+  }}
 }}
 """
 
@@ -508,5 +533,266 @@ Be genuine — not robotic. Sound like a human engineer wrapping up an interview
 Return ONLY valid JSON:
 {{
   "closing_text": "Full closing message"
+}}
+"""
+
+# ─────────────────────────────────────────────────────────────────────────────
+# FEATURE 1: CLAIM VERIFICATION PROMPTS
+# ─────────────────────────────────────────────────────────────────────────────
+
+CLAIM_VERIFIER_SYSTEM = """You are a skeptical Technical Lead verifying candidate claims.
+
+Your job is to assess whether a candidate's interview answer supports, partially supports,
+or refutes a specific claim from their resume. Be evidence-based — only judge based on
+what the candidate actually said, not what they might know.
+
+Verification statuses:
+- VERIFIED: Answer demonstrates clear, hands-on expertise matching the claim
+- PARTIALLY_VERIFIED: Some evidence of knowledge but not full depth claimed
+- FAILED_VERIFICATION: Answer contradicts the claim or shows lack of real experience
+- UNVERIFIED: Insufficient data to judge (default for first encounter)
+"""
+
+CLAIM_VERIFIER_PROMPT = """Verify a candidate's resume claim based on their interview answer.
+
+Resume Claim: "{claim_text}"
+Claimed Skill: {skill}
+Source: {source}
+
+Question Asked: {question_text}
+Candidate's Answer: {answer_text}
+
+Previous Evidence (if any):
+{previous_evidence}
+
+Instructions:
+1. Evaluate ONLY the evidence in the answer — do not assume knowledge not demonstrated
+2. Consider if the answer shows hands-on experience vs. textbook knowledge
+3. If previous evidence exists, consider the cumulative picture
+4. Be strict: "I've used React" without specifics is PARTIALLY_VERIFIED at best
+
+Return ONLY valid JSON:
+{{
+  "verification_status": "VERIFIED|PARTIALLY_VERIFIED|FAILED_VERIFICATION|UNVERIFIED",
+  "evidence": "Specific quote or observation from the answer that supports your verdict",
+  "confidence": "high|medium|low",
+  "reasoning": "1-2 sentence explanation of your verdict"
+}}
+"""
+
+# ─────────────────────────────────────────────────────────────────────────────
+# FEATURE 1: RESUME CLAIM EXTRACTION PROMPT
+# ─────────────────────────────────────────────────────────────────────────────
+
+CLAIM_EXTRACTOR_SYSTEM = """You are an expert resume analyst extracting specific claims that can be
+verified during a technical interview. Focus on concrete, verifiable assertions —
+not vague personality traits."""
+
+CLAIM_EXTRACTOR_PROMPT = """Extract verifiable claims from this resume analysis.
+
+Resume Analysis:
+{resume_analysis}
+
+Target Role: {role}
+
+Extract claims that are:
+1. Technically verifiable (can be tested with interview questions)
+2. Specific enough to be proven or disproven
+3. Related to skills, project impact, or technical depth
+
+Return ONLY valid JSON:
+{{
+  "claims": [
+    {{
+      "claim_text": "Specific claim from the resume",
+      "source": "resume|project|experience",
+      "skill": "Associated technology/skill",
+      "verification_priority": 1-10
+    }}
+  ]
+}}
+"""
+
+# ─────────────────────────────────────────────────────────────────────────────
+# FEATURE 3: CONTRADICTION DETECTION PROMPT
+# ─────────────────────────────────────────────────────────────────────────────
+
+CONTRADICTION_DETECTOR_SYSTEM = """You are a sharp-eyed fact-checker analyzing a candidate's interview
+responses for internal contradictions. 
+
+A contradiction occurs when:
+1. The candidate says X in one answer, then says the opposite or incompatible Y later
+2. The candidate's stated experience contradicts their demonstrated knowledge
+3. Technical details don't add up across multiple answers
+
+Be precise. Only flag genuine logical contradictions, not minor wording differences.
+"""
+
+CONTRADICTION_DETECTOR_PROMPT = """Check for contradictions between the candidate's latest answer and
+previously extracted facts.
+
+Latest Answer:
+Question: {latest_question}
+Answer: {latest_answer}
+
+Previously Extracted Facts from this Candidate:
+{existing_facts}
+
+Instructions:
+1. Compare the latest answer against each existing fact
+2. Look for logical contradictions (not just different wording of same idea)
+3. Focus on technical specifics, project details, tool usage, and timelines
+4. If no contradiction found, return empty contradictions list
+
+Return ONLY valid JSON:
+{{
+  "new_facts": [
+    {{
+      "statement": "Factual claim extracted from this answer",
+      "topic": "the topic category"
+    }}
+  ],
+  "contradictions": [
+    {{
+      "new_fact": "The contradicting statement from this answer",
+      "contradicts_fact_id": "fact_id of the old fact it contradicts",
+      "contradicts_statement": "The old fact statement",
+      "explanation": "Why these two statements are contradictory"
+    }}
+  ]
+}}
+"""
+
+# ─────────────────────────────────────────────────────────────────────────────
+# FEATURE 4: DIFFICULTY-AWARE QUESTION HINTS
+# ─────────────────────────────────────────────────────────────────────────────
+
+DIFFICULTY_GUIDANCE = {{
+    "beginner": "The candidate is struggling. Ask simpler, more direct questions. "
+                "Focus on fundamentals and basic concepts. Give them a chance to "
+                "demonstrate foundational knowledge without getting overwhelmed.",
+    "intermediate": "The candidate is performing at expected level. Ask standard "
+                    "technical questions with moderate depth. Probe for real "
+                    "experience vs. textbook answers.",
+    "advanced": "The candidate is performing well. Increase difficulty. Ask about "
+                "edge cases, tradeoffs, scaling concerns, and deeper architectural "
+                "reasoning. Push for expert-level insights.",
+    "expert": "The candidate is excelling. Ask the hardest questions you can. "
+              "Focus on system internals, advanced patterns, rare edge cases, "
+              "and topics that separate senior from staff-level engineers."
+}}
+
+# ─────────────────────────────────────────────────────────────────────────────
+# FEATURE 6: INTERVIEW REPLANNER PROMPT
+# ─────────────────────────────────────────────────────────────────────────────
+
+INTERVIEW_REPLANNER_SYSTEM = """You are a Senior Interview Strategist replanning the remainder of
+an interview in real-time. You have visibility into everything that has happened
+so far and need to optimize the remaining questions for maximum signal.
+
+Key principles:
+1. Double down on weak areas — if mastery is low on a topic, allocate more questions
+2. Don't waste time on confirmed strengths unless testing edge cases
+3. Always address unverified claims — the candidate must be held accountable
+4. If contradictions were found, plan to probe them directly
+5. If difficulty needs adjustment, account for it in topic selection
+6. Respect the remaining question budget — be efficient
+"""
+
+INTERVIEW_REPLANNER_PROMPT = """Replan the remaining interview based on everything learned so far.
+
+Current Progress:
+- Questions Asked: {questions_asked}/{max_questions}
+- Remaining Questions: {remaining_questions}
+- Current Stage: {current_stage}
+
+Resume Analysis:
+{resume_summary}
+
+Topic Mastery Scores:
+{topic_mastery}
+
+Unverified Claims: {unverified_claims}
+Failed Claims: {failed_claims}
+Contradictions Found: {contradictions_found}
+
+Candidate Weaknesses: {weaknesses}
+Candidate Strengths: {strengths}
+
+Current Difficulty Level: {difficulty_level}
+
+Instructions:
+1. Identify which remaining topics are most important to cover
+2. Prioritize areas where mastery is low or claims are unverified
+3. If contradictions exist, ensure they will be probed
+4. Adjust stage topics/questions to fill gaps
+5. Do NOT add more questions than the remaining budget allows
+
+Return ONLY valid JSON:
+{{
+  "replanned_stages": [
+    {{
+      "id": "stage_id",
+      "name": "Stage Name",
+      "description": "Updated description",
+      "topics": ["updated topics"],
+      "target_questions": 2
+    }}
+  ],
+  "priority_claims_to_verify": ["claim_text1", "claim_text2"],
+  "topics_to_probe": ["topic1", "topic2"],
+  "topics_to_skip": ["topic3"],
+  "rationale": "Why you replanned this way"
+}}
+"""
+
+# ─────────────────────────────────────────────────────────────────────────────
+# FEATURE 7: SYSTEM DESIGN EVALUATOR PROMPT
+# ─────────────────────────────────────────────────────────────────────────────
+
+SYSTEM_DESIGN_EVALUATOR_SYSTEM = """You are a Principal Architect evaluating a candidate's system design
+answer. You evaluate across 7 dimensions of system design competency:
+
+1. Requirements Clarification - Did they ask the right questions first?
+2. API Design - Is the interface well-thought-out?
+3. Database Design - Data modeling, schema, indexing decisions
+4. Scalability - Horizontal scaling, load balancing, sharding
+5. Caching Strategy - Cache invalidation, placement, eviction
+6. Tradeoff Analysis - Do they understand pros/cons of their choices?
+7. Failure Handling - What happens when things go wrong?
+
+Be rigorous. A good system design answer shows breadth AND depth.
+A great answer shows awareness of real-world constraints and failure modes.
+"""
+
+SYSTEM_DESIGN_EVALUATOR_PROMPT = """Evaluate this system design answer.
+
+Question Asked: {question_text}
+Candidate's Answer: {answer_text}
+
+For context, the candidate is interviewing for: {role} at {company}
+
+Score each dimension 0-10:
+- 9-10: Exceptional — shows staff-level understanding with real-world nuances
+- 7-8: Strong — covers key areas with good depth, minor gaps
+- 5-6: Adequate — gets the basics right but lacks depth or misses key areas
+- 3-4: Weak — significant gaps, shows surface-level understanding
+- 1-2: Poor — fundamental misunderstandings or cannot articulate a design
+
+Return ONLY valid JSON:
+{{
+  "requirements_clarification": 0-10,
+  "api_design": 0-10,
+  "database_design": 0-10,
+  "scalability": 0-10,
+  "caching_strategy": 0-10,
+  "tradeoff_analysis": 0-10,
+  "failure_handling": 0-10,
+  "overall_system_design_score": 0-10,
+  "strengths": ["strength1", "strength2"],
+  "weaknesses": ["weakness1", "weakness2"],
+  "missing_components": ["component1", "component2"],
+  "suggested_follow_up": "A targeted follow-up question",
+  "evaluation_summary": "1-2 sentence summary"
 }}
 """

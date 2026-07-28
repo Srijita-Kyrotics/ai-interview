@@ -16,3 +16,15 @@ requests==2.32.3
 ruff==0.8.6
 pytest==8.3.4
 pytest-asyncio==0.24.0
+
+# ── AI Interviewer: LangGraph ──────────────────────────────────────────────
+langgraph==0.2.67
+langgraph-checkpoint==2.0.6
+typing-extensions>=4.12.0
+
+# ── AI Interviewer: Voice Pipeline ────────────────────────────────────────
+# Deepgram SDK (optional - also works via REST)
+deepgram-sdk==3.10.1
+
+# ── Optional: Local Whisper (offline STT fallback) ────────────────────────
+# openai-whisper==20231117  # Uncomment for local Whisper (requires ffmpeg)

@@ -81,6 +81,9 @@ from app.ai_interviewer.nodes import (
     stage_advance_node,
     opening_node,
     closing_node,
+    claim_verifier_node,
+    interview_replanner_node,
+    system_design_evaluator_node,
 )
 
 logger = logging.getLogger("ai_interview.graph")
@@ -184,6 +187,9 @@ def build_interview_graph(checkpointer=None) -> "CompiledGraph":
     graph.add_node("scoring", scoring_node)
     graph.add_node("report_generator", report_generator_node)
     graph.add_node("error_node", error_node)
+    # Feature 1: Claim verification (called inline in process_answer, not a graph node)
+    # Feature 6: Replanner (called inline in process_answer every N questions)
+    # Feature 7: System design evaluator (called inline for system design questions)
 
     # ── Add Edges ─────────────────────────────────────────────────────────
 
@@ -365,6 +371,46 @@ class InterviewGraphRunner:
         eval_result = await answer_analyzer_node(self.state)
         self.state.update(eval_result)
 
+        # ── Feature 1: Verify claims after each answer ────────────────────
+        claim_result = await claim_verifier_node(self.state)
+        self.state.update(claim_result)
+
+        # ── Feature 7: System design evaluator (if in system design mode) ─
+        if self.state.get("is_system_design_mode", False):
+            sd_result = await system_design_evaluator_node(self.state)
+            self.state.update(sd_result)
+
+        # ── Feature 5: Track code evolution ───────────────────────────────
+        if code_snapshot:
+            code_history = list(self.state.get("code_history", []))
+            question_id = current_question.get("id", "")
+            language = self.state.get("current_code_snapshot_language", "")
+            from app.ai_interviewer.state import CodeVersion
+            version_num = len(code_history) + 1
+            diff_summary = ""
+            if code_history:
+                prev_code = code_history[-1].get("code", "")
+                old_lines = set(prev_code.strip().splitlines())
+                new_lines = set(code_snapshot.strip().splitlines())
+                added = new_lines - old_lines
+                removed = old_lines - new_lines
+                parts = []
+                if added:
+                    parts.append(f"+{len(added)} lines")
+                if removed:
+                    parts.append(f"-{len(removed)} lines")
+                diff_summary = ", ".join(parts) if parts else "No changes"
+
+            code_history.append(CodeVersion(
+                version_id=version_num,
+                timestamp=time.time(),
+                question_id=question_id,
+                code=code_snapshot,
+                language=language,
+                diff_summary=diff_summary,
+            ))
+            self.state["code_history"] = code_history
+
         # Check if interview should end
         should_end = self.state.get("should_end", False)
         questions_asked = self.state.get("questions_asked", 0)
@@ -404,6 +450,14 @@ class InterviewGraphRunner:
                     "questions_asked": self.state.get("questions_asked", 0),
                     "max_questions": max_questions,
                 }
+
+        # ── Feature 6: Dynamic replanning every 3 questions ───────────────
+        replan_count = self.state.get("replan_count", 0)
+        questions_since_replan = questions_asked - (replan_count * 3)
+        if questions_since_replan >= 3 and questions_asked < max_questions - 2:
+            replan_result = await interview_replanner_node(self.state)
+            if replan_result:
+                self.state.update(replan_result)
 
         # Check should_end after stage advance
         if self.state.get("should_end", False) or self.state.get("questions_asked", 0) >= max_questions:

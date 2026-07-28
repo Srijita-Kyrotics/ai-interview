@@ -35,6 +35,9 @@ from app.ai_interviewer.state import (
     FinalScores,
     FinalReport,
     InterviewMemory,
+    ResumeClaim,
+    CandidateFact,
+    DifficultyLevel,
 )
 from app.ai_interviewer.memory import MemoryManager
 from app.ai_interviewer.prompts import (
@@ -53,6 +56,17 @@ from app.ai_interviewer.prompts import (
     STAGE_TRANSITION_PROMPT,
     INTERVIEW_OPENING_PROMPT,
     INTERVIEW_CLOSING_PROMPT,
+    CLAIM_VERIFIER_SYSTEM,
+    CLAIM_VERIFIER_PROMPT,
+    CLAIM_EXTRACTOR_SYSTEM,
+    CLAIM_EXTRACTOR_PROMPT,
+    CONTRADICTION_DETECTOR_SYSTEM,
+    CONTRADICTION_DETECTOR_PROMPT,
+    INTERVIEW_REPLANNER_SYSTEM,
+    INTERVIEW_REPLANNER_PROMPT,
+    SYSTEM_DESIGN_EVALUATOR_SYSTEM,
+    SYSTEM_DESIGN_EVALUATOR_PROMPT,
+    DIFFICULTY_GUIDANCE,
 )
 from app.config import settings
 
@@ -187,18 +201,59 @@ async def resume_analyzer_node(state: InterviewState) -> dict:
     updated_memory = dict(state["memory"])
     updated_memory["unresolved_claims"] = unresolved
 
+    # ── Feature 1: Extract structured resume claims ───────────────────────
+    claim_prompt = CLAIM_EXTRACTOR_PROMPT.format(
+        resume_analysis=json.dumps(result, indent=2)[:4000],
+        role=state["role"],
+    )
+    claim_result = await _call_gemini_json(
+        CLAIM_EXTRACTOR_SYSTEM,
+        claim_prompt,
+        {"claims": []},
+    )
+
+    resume_claims: list[ResumeClaim] = []
+    for raw_claim in claim_result.get("claims", []):
+        claim_id = str(uuid.uuid4())[:8]
+        resume_claims.append(ResumeClaim(
+            claim_id=claim_id,
+            claim_text=raw_claim.get("claim_text", ""),
+            source=raw_claim.get("source", "resume"),
+            skill=raw_claim.get("skill", ""),
+            verification_status="UNVERIFIED",
+            verification_evidence=[],
+            asked_question_ids=[],
+        ))
+
+    # ── Feature 4: Seed difficulty from resume seniority ──────────────────
+    seniority = result.get("seniority_level", "mid")
+    seniority_map = {"junior": 1, "mid": 2, "senior": 3, "staff": 4}
+    level_num = seniority_map.get(seniority, 2)
+    level_map = {1: "beginner", 2: "intermediate", 3: "advanced", 4: "expert"}
+    difficulty = DifficultyLevel(
+        level=level_map[level_num],
+        level_numeric=level_num,
+        overall_mastery=5.0,
+        resume_seniority=seniority,
+        consecutive_strong=0,
+        consecutive_weak=0,
+    )
+
     logger.info(
         "Resume analyzed",
         extra={
             "candidate": analysis["candidate_name"],
             "seniority": analysis["seniority_level"],
             "red_flags": len(analysis["red_flags"]),
+            "claims_extracted": len(resume_claims),
         }
     )
 
     return {
         "resume_analysis": analysis,
         "memory": updated_memory,
+        "resume_claims": resume_claims,
+        "difficulty_level": difficulty,
         "phase": "planning",
     }
 
@@ -332,6 +387,9 @@ async def question_generator_node(state: InterviewState) -> dict:
     - Previous answer quality
     - Memory (what's been covered, what's pending)
     - Resume analysis
+    - Difficulty level (Feature 4)
+    - Topic mastery (Feature 2)
+    - Claim verification status (Feature 1)
     """
     logger.info("Executing question_generator_node", extra={"session": state["session_id"]})
 
@@ -348,7 +406,18 @@ async def question_generator_node(state: InterviewState) -> dict:
     last_answer_text = last_answer[-1].get("answer_text", "") if last_answer else ""
 
     # Build compressed conversation history
-    mem_mgr = MemoryManager(memory, current_stage.get("topics", []))
+    mem_mgr = MemoryManager(
+        memory,
+        current_stage.get("topics", []),
+        resume_claims=state.get("resume_claims", []),
+        topic_mastery=state.get("topic_mastery", {}),
+        candidate_facts=state.get("candidate_facts", []),
+        difficulty_level=state.get("difficulty_level", DifficultyLevel(
+            level="intermediate", level_numeric=2, overall_mastery=5.0,
+            resume_seniority="mid", consecutive_strong=0, consecutive_weak=0,
+        )),
+        code_history=state.get("code_history", []),
+    )
     conversation_history = mem_mgr.get_compression_context(transcript, max_turns=4)
 
     # Build resume summary
@@ -361,6 +430,21 @@ async def question_generator_node(state: InterviewState) -> dict:
     )
 
     mem_summary = mem_mgr.get_summary_for_prompt()
+
+    # ── Feature 4: Get difficulty guidance ────────────────────────────────
+    difficulty_level = state.get("difficulty_level", {})
+    current_diff = difficulty_level.get("level", "intermediate")
+    difficulty_hint = DIFFICULTY_GUIDANCE.get(current_diff, DIFFICULTY_GUIDANCE["intermediate"])
+
+    # ── Feature 2: Get mastery context ────────────────────────────────────
+    topic_mastery = state.get("topic_mastery", {})
+    mastery_context = ""
+    weak_topics = mem_mgr.get_weak_mastery_topics(threshold=5.0)
+    strong_topics = mem_mgr.get_strong_mastery_topics(threshold=8.0)
+    if weak_topics:
+        mastery_context += f"LOW MASTERY (needs more questions): {', '.join(weak_topics)}. "
+    if strong_topics:
+        mastery_context += f"HIGH MASTERY (can go deeper or move on): {', '.join(strong_topics)}. "
 
     prompt = QUESTION_GENERATOR_PROMPT.format(
         candidate_name=analysis.get("candidate_name", "the candidate"),
@@ -381,6 +465,20 @@ async def question_generator_node(state: InterviewState) -> dict:
         last_depth_score=last_eval.get("depth", "N/A"),
         last_missing_points=", ".join(last_eval.get("missing_points", [])),
     )
+
+    # Append difficulty and mastery guidance to prompt
+    prompt += f"\n\nDIFFICULTY GUIDANCE (current level: {current_diff}):\n{difficulty_hint}"
+    if mastery_context:
+        prompt += f"\n\nTOPIC MASTERY:\n{mastery_context}"
+
+    # ── Feature 7: System design mode detection ───────────────────────────
+    is_system_design = state.get("is_system_design_mode", False)
+    if is_system_design:
+        prompt += (
+            "\n\nSYSTEM DESIGN MODE ACTIVE: This question should be a system design "
+            "question. Ask the candidate to design a system related to their experience "
+            "or the target role. Focus on architecture, scalability, tradeoffs."
+        )
 
     fallback_question = {
         "question_text": f"Can you walk me through one of your most challenging projects?",
@@ -528,7 +626,17 @@ async def answer_analyzer_node(state: InterviewState) -> dict:
 
     # Update memory with evaluation insights
     memory = state.get("memory", {})
-    mem_mgr = MemoryManager(memory, [])
+    mem_mgr = MemoryManager(
+        memory, [],
+        resume_claims=state.get("resume_claims", []),
+        topic_mastery=state.get("topic_mastery", {}),
+        candidate_facts=state.get("candidate_facts", []),
+        difficulty_level=state.get("difficulty_level", DifficultyLevel(
+            level="intermediate", level_numeric=2, overall_mastery=5.0,
+            resume_seniority="mid", consecutive_strong=0, consecutive_weak=0,
+        )),
+        code_history=state.get("code_history", []),
+    )
     mem_mgr.process_evaluation(evaluation, current_question.get("topic", "general"))
 
     updated_evaluations = list(state.get("evaluations_history", [])) + [evaluation]
@@ -541,6 +649,57 @@ async def answer_analyzer_node(state: InterviewState) -> dict:
         len(evaluation["missing_points"]) > 1
     )
 
+    # ── Feature 3: Contradiction detection ────────────────────────────────
+    existing_facts = state.get("candidate_facts", [])
+    facts_for_check = [
+        {"fact_id": f["fact_id"], "statement": f["statement"], "topic": f["topic"]}
+        for f in existing_facts
+    ]
+
+    contradiction_prompt = CONTRADICTION_DETECTOR_PROMPT.format(
+        latest_question=current_question.get("question", ""),
+        latest_answer=current_answer.get("answer_text", ""),
+        existing_facts=json.dumps(facts_for_check[:20], indent=2) if facts_for_check else "No previous facts recorded.",
+    )
+
+    contradiction_result = await _call_gemini_json(
+        CONTRADICTION_DETECTOR_SYSTEM,
+        contradiction_prompt,
+        {"new_facts": [], "contradictions": []},
+    )
+
+    # Process new facts
+    updated_facts = list(existing_facts)
+    for raw_fact in contradiction_result.get("new_facts", []):
+        fact_id = str(uuid.uuid4())[:8]
+        new_fact = CandidateFact(
+            fact_id=fact_id,
+            statement=raw_fact.get("statement", ""),
+            topic=raw_fact.get("topic", current_question.get("topic", "general")),
+            source_question_id=current_question.get("id", ""),
+            timestamp=time.time(),
+            contradicted=False,
+        )
+        updated_facts.append(new_fact)
+
+    # Process contradictions
+    contradictions_found = contradiction_result.get("contradictions", [])
+    for contra in contradictions_found:
+        new_fact_id = contra.get("new_fact_id", "")
+        old_fact_id = contra.get("contradicts_fact_id", "")
+        # Mark the older fact as contradicted
+        for fact in updated_facts:
+            if fact["fact_id"] == old_fact_id:
+                fact["contradicted"] = True
+                fact["contradicted_by"] = new_fact_id
+                fact["contradiction_evidence"] = contra.get("explanation", "")
+                break
+        # Add contradiction to concerning moments
+        if contra.get("explanation"):
+            memory["concerning_moments"].append(
+                f"Contradiction detected: {contra['explanation'][:100]}"
+            )
+
     logger.info(
         "Answer evaluated",
         extra={
@@ -548,6 +707,8 @@ async def answer_analyzer_node(state: InterviewState) -> dict:
             "depth": evaluation["depth"],
             "overall": evaluation["overall_quality"],
             "should_follow_up": should_follow_up,
+            "new_facts": len(contradiction_result.get("new_facts", [])),
+            "contradictions": len(contradictions_found),
         }
     )
 
@@ -555,6 +716,9 @@ async def answer_analyzer_node(state: InterviewState) -> dict:
         "current_evaluation": evaluation,
         "evaluations_history": updated_evaluations,
         "memory": mem_mgr.get_full_memory(),
+        "candidate_facts": updated_facts,
+        "topic_mastery": mem_mgr.topic_mastery,
+        "difficulty_level": mem_mgr.difficulty_level,
         "_should_follow_up": should_follow_up,  # routing signal
         "_dig_deeper_angle": result.get("dig_deeper_angle", ""),
         "last_activity_at": time.time(),
@@ -596,6 +760,12 @@ async def follow_up_generator_node(state: InterviewState) -> dict:
         claimed_skills=", ".join(analysis.get("technologies", [])[:8]),
         topics_covered=", ".join(memory.get("topics_covered", [])[-5:]),
     )
+
+    # Append difficulty guidance
+    difficulty_level = state.get("difficulty_level", {})
+    current_diff = difficulty_level.get("level", "intermediate")
+    difficulty_hint = DIFFICULTY_GUIDANCE.get(current_diff, DIFFICULTY_GUIDANCE["intermediate"])
+    prompt += f"\n\nDIFFICULTY GUIDANCE (current level: {current_diff}):\n{difficulty_hint}"
 
     fallback_follow_up = {
         "follow_up_question": "Could you elaborate on that? Specifically, what were the technical challenges you faced?",
@@ -790,6 +960,43 @@ async def report_generator_node(state: InterviewState) -> dict:
             code_snapshots.append(f"--- Code for: {q_text[:80]} ---\n{snap[:2000]}")
     code_snapshots_summary = "\n\n".join(code_snapshots) if code_snapshots else "No code was submitted during the interview."
 
+    # ── Feature 1: Claim verification summary ─────────────────────────────
+    resume_claims = state.get("resume_claims", [])
+    claim_verification_lines = []
+    for c in resume_claims:
+        evidence_str = "; ".join(c.get("verification_evidence", [])[:2])
+        claim_verification_lines.append(
+            f"- [{c['verification_status']}] \"{c['claim_text']}\" "
+            f"(skill: {c.get('skill', 'N/A')}, evidence: {evidence_str or 'none'})"
+        )
+    claim_verification_summary = "\n".join(claim_verification_lines) if claim_verification_lines else "No claims tracked."
+
+    # ── Feature 2: Topic mastery summary ──────────────────────────────────
+    topic_mastery = state.get("topic_mastery", {})
+    topic_mastery_lines = []
+    for topic, mastery in topic_mastery.items():
+        topic_mastery_lines.append(
+            f"- {topic}: {mastery['mastery_score']}/10 "
+            f"(questions: {mastery['questions_asked']}, "
+            f"avg_depth: {mastery['avg_depth']:.1f})"
+        )
+    topic_mastery_summary = "\n".join(topic_mastery_lines) if topic_mastery_lines else "No topic mastery data."
+
+    # ── Feature 5: Code evolution summary ─────────────────────────────────
+    code_history = state.get("code_history", [])
+    code_evolution_lines = []
+    for v in code_history:
+        code_evolution_lines.append(
+            f"- Version {v['version_id']} (Q: {v.get('question_id', 'N/A')[:8]}, "
+            f"lang: {v.get('language', 'N/A')}, "
+            f"changes: {v.get('diff_summary', 'N/A')})"
+        )
+    code_evolution_summary = "\n".join(code_evolution_lines) if code_evolution_lines else "No code evolution data."
+
+    # ── Feature 3: Contradictions count ───────────────────────────────────
+    candidate_facts = state.get("candidate_facts", [])
+    contradictions_found = len([f for f in candidate_facts if f.get("contradicted", False)])
+
     # Duration
     start = state.get("interview_started_at", time.time())
     duration_secs = time.time() - start
@@ -805,6 +1012,10 @@ async def report_generator_node(state: InterviewState) -> dict:
         transcript_summary=transcript_summary,
         evaluations_summary=evaluations_summary,
         code_snapshots_summary=code_snapshots_summary[:4000],
+        claim_verification_summary=claim_verification_summary[:3000],
+        topic_mastery_summary=topic_mastery_summary,
+        code_evolution_summary=code_evolution_summary,
+        contradictions_found=str(contradictions_found),
         technical_score=scores.get("technical_score", 50),
         communication_score=scores.get("communication_score", 50),
         confidence_score=scores.get("confidence_score", 50),
@@ -844,6 +1055,37 @@ async def report_generator_node(state: InterviewState) -> dict:
         "answer_evaluations": list(evaluations),
         "recommendation_rationale": result.get("recommendation_rationale", ""),
         "generated_at": time.time(),
+        # Feature 1: Claim verification
+        "claim_verification_summary": [
+            {
+                "claim_id": c["claim_id"],
+                "claim_text": c["claim_text"],
+                "skill": c.get("skill", ""),
+                "status": c["verification_status"],
+                "evidence": c.get("verification_evidence", []),
+            }
+            for c in resume_claims
+        ],
+        # Feature 2: Topic mastery
+        "topic_mastery_summary": [
+            {
+                "topic": t,
+                "mastery_score": m["mastery_score"],
+                "questions_asked": m["questions_asked"],
+                "avg_technical_accuracy": m["avg_technical_accuracy"],
+                "avg_depth": m["avg_depth"],
+            }
+            for t, m in topic_mastery.items()
+        ],
+        # Feature 5: Code evolution
+        "code_evolution_summary": [
+            {
+                "version": v["version_id"],
+                "language": v.get("language", ""),
+                "diff_summary": v.get("diff_summary", ""),
+            }
+            for v in code_history
+        ],
     }
 
     logger.info(
@@ -1012,4 +1254,286 @@ async def closing_node(state: InterviewState) -> dict:
         "conversation_transcript": updated_transcript,
         "should_end": True,
         "last_activity_at": time.time(),
+    }
+
+
+# ══════════════════════════════════════════════════════════════════════════════
+# FEATURE 1: Claim Verifier Node
+# ══════════════════════════════════════════════════════════════════════════════
+
+async def claim_verifier_node(state: InterviewState) -> dict:
+    """
+    Verifies resume claims against the candidate's latest answer.
+    Updates claim verification status with evidence.
+    """
+    logger.info("Executing claim_verifier_node", extra={"session": state["session_id"]})
+
+    current_question = state.get("current_question", {})
+    current_answer = state.get("current_answer", {})
+    resume_claims = list(state.get("resume_claims", []))
+    analysis = state.get("resume_analysis", {})
+
+    if not current_answer or not resume_claims:
+        return {"resume_claims": resume_claims}
+
+    # Find unverified claims relevant to this answer's topic
+    topic = current_question.get("topic", "general")
+    claims_to_verify = [
+        c for c in resume_claims
+        if c["verification_status"] == "UNVERIFIED"
+        and (
+            c.get("skill", "").lower() in topic.lower()
+            or topic.lower() in c.get("claim_text", "").lower()
+            or not c.get("skill")
+        )
+    ][:3]  # Max 3 claims per answer
+
+    for claim in claims_to_verify:
+        previous_evidence = "\n".join(claim.get("verification_evidence", [])) or "No previous evidence."
+
+        prompt = CLAIM_VERIFIER_PROMPT.format(
+            claim_text=claim["claim_text"],
+            skill=claim.get("skill", "N/A"),
+            source=claim.get("source", "resume"),
+            question_text=current_question.get("question", ""),
+            answer_text=current_answer.get("answer_text", ""),
+            previous_evidence=previous_evidence,
+        )
+
+        result = await _call_gemini_json(
+            CLAIM_VERIFIER_SYSTEM,
+            prompt,
+            {"verification_status": "UNVERIFIED", "evidence": "", "confidence": "low", "reasoning": ""},
+        )
+
+        new_status = result.get("verification_status", "UNVERIFIED")
+        evidence = result.get("evidence", "")
+        question_id = current_question.get("id", "")
+
+        # Update claim — only upgrade status, never downgrade
+        status_priority = {"UNVERIFIED": 0, "PARTIALLY_VERIFIED": 1, "VERIFIED": 2, "FAILED_VERIFICATION": 3}
+        current_priority = status_priority.get(claim["verification_status"], 0)
+        new_priority = status_priority.get(new_status, 0)
+
+        # Allow upgrading UNVERIFIED → any status
+        # Allow upgrading PARTIALLY_VERIFIED → VERIFIED or FAILED
+        if claim["verification_status"] == "UNVERIFIED" or new_priority > current_priority:
+            claim["verification_status"] = new_status
+            if evidence and evidence not in claim["verification_evidence"]:
+                claim["verification_evidence"].append(evidence)
+            if question_id and question_id not in claim["asked_question_ids"]:
+                claim["asked_question_ids"].append(question_id)
+
+    logger.info(
+        "Claims verified",
+        extra={
+            "claims_checked": len(claims_to_verify),
+            "total_claims": len(resume_claims),
+        }
+    )
+
+    return {"resume_claims": resume_claims}
+
+
+# ══════════════════════════════════════════════════════════════════════════════
+# FEATURE 6: Interview Replanner Node
+# ══════════════════════════════════════════════════════════════════════════════
+
+async def interview_replanner_node(state: InterviewState) -> dict:
+    """
+    Replans the remaining interview based on everything learned so far.
+    Called every 2-3 questions to adapt the interview strategy.
+    """
+    logger.info("Executing interview_replanner_node", extra={"session": state["session_id"]})
+
+    analysis = state.get("resume_analysis", {})
+    plan = state.get("interview_plan", {})
+    memory = state.get("memory", {})
+    resume_claims = state.get("resume_claims", [])
+    topic_mastery = state.get("topic_mastery", {})
+    candidate_facts = state.get("candidate_facts", [])
+    difficulty_level = state.get("difficulty_level", {})
+
+    questions_asked = state.get("questions_asked", 0)
+    max_questions = state.get("max_questions", 12)
+    remaining = max_questions - questions_asked
+
+    if remaining <= 2:
+        return {}  # Too few questions left to replan
+
+    # Build context
+    mem_mgr = MemoryManager(
+        memory,
+        plan.get("stages", [{}])[state.get("current_stage_index", 0)].get("topics", []),
+        resume_claims=resume_claims,
+        topic_mastery=topic_mastery,
+        candidate_facts=candidate_facts,
+        difficulty_level=difficulty_level,
+    )
+    mem_summary = mem_mgr.get_summary_for_prompt()
+
+    # Build unverified/failed claims strings
+    unverified = [c["claim_text"] for c in resume_claims if c["verification_status"] == "UNVERIFIED"]
+    failed = [c["claim_text"] for c in resume_claims if c["verification_status"] == "FAILED_VERIFICATION"]
+    contradictions = len([f for f in candidate_facts if f.get("contradicted", False)])
+
+    prompt = INTERVIEW_REPLANNER_PROMPT.format(
+        questions_asked=questions_asked,
+        max_questions=max_questions,
+        remaining_questions=remaining,
+        current_stage=state.get("current_stage", {}).get("name", "General"),
+        resume_summary=json.dumps(analysis, indent=2)[:2000],
+        topic_mastery=json.dumps(
+            {t: m["mastery_score"] for t, m in topic_mastery.items()},
+            indent=2,
+        ) if topic_mastery else "No mastery data yet",
+        unverified_claims=", ".join(unverified[:5]) if unverified else "None",
+        failed_claims=", ".join(failed[:3]) if failed else "None",
+        contradictions_found=str(contradictions),
+        weaknesses="; ".join(mem_summary.get("weaknesses", [])),
+        strengths="; ".join(mem_summary.get("strengths", [])),
+        difficulty_level=difficulty_level.get("level", "intermediate"),
+    )
+
+    result = await _call_gemini_json(
+        INTERVIEW_REPLANNER_SYSTEM,
+        prompt,
+        {"replanned_stages": [], "rationale": "No changes needed"},
+    )
+
+    # Apply replanning — update stage topics if provided
+    replanned_stages = result.get("replanned_stages", [])
+    topics_to_probe = result.get("topics_to_probe", [])
+    topics_to_skip = result.get("topics_to_skip", [])
+
+    # Add new topics to pending if they aren't already covered
+    updated_memory = dict(memory)
+    for topic in topics_to_probe:
+        if topic not in updated_memory.get("topics_covered", []) and topic not in updated_memory.get("topics_pending", []):
+            updated_memory["topics_pending"].append(topic)
+    # Remove topics to skip
+    for topic in topics_to_skip:
+        if topic in updated_memory.get("topics_pending", []):
+            updated_memory["topics_pending"].remove(topic)
+
+    # Update stages in plan if replanner provided new stages
+    updated_plan = dict(plan)
+    if replanned_stages:
+        current_idx = state.get("current_stage_index", 0)
+        stages = list(plan.get("stages", []))
+        for new_stage in replanned_stages:
+            # Find matching stage by ID or add as new
+            found = False
+            for i, existing in enumerate(stages):
+                if existing.get("id") == new_stage.get("id"):
+                    stages[i] = InterviewStage(
+                        id=existing["id"],
+                        name=new_stage.get("name", existing["name"]),
+                        description=new_stage.get("description", existing["description"]),
+                        topics=new_stage.get("topics", existing["topics"]),
+                        target_questions=int(new_stage.get("target_questions", existing["target_questions"])),
+                        completed=existing["completed"],
+                    )
+                    found = True
+                    break
+            if not found:
+                stages.append(InterviewStage(
+                    id=new_stage.get("id", str(uuid.uuid4())[:8]),
+                    name=new_stage.get("name", "Additional Stage"),
+                    description=new_stage.get("description", ""),
+                    topics=new_stage.get("topics", []),
+                    target_questions=int(new_stage.get("target_questions", 2)),
+                    completed=False,
+                ))
+        updated_plan["stages"] = stages
+
+    replan_count = state.get("replan_count", 0) + 1
+    replan_topics_added = state.get("replan_topics_added", []) + topics_to_probe
+
+    logger.info(
+        "Interview replanned",
+        extra={
+            "replan_count": replan_count,
+            "topics_probed": len(topics_to_probe),
+            "topics_skipped": len(topics_to_skip),
+            "rationale": result.get("rationale", "")[:100],
+        }
+    )
+
+    return {
+        "interview_plan": updated_plan,
+        "memory": updated_memory,
+        "replan_count": replan_count,
+        "replan_topics_added": replan_topics_added,
+    }
+
+
+# ══════════════════════════════════════════════════════════════════════════════
+# FEATURE 7: System Design Evaluator Node
+# ══════════════════════════════════════════════════════════════════════════════
+
+async def system_design_evaluator_node(state: InterviewState) -> dict:
+    """
+    Specialized evaluator for system design questions.
+    Evaluates across 7 dimensions: requirements, API, DB, scalability,
+    caching, tradeoffs, failure handling.
+    """
+    logger.info("Executing system_design_evaluator_node", extra={"session": state["session_id"]})
+
+    current_question = state.get("current_question", {})
+    current_answer = state.get("current_answer", {})
+    analysis = state.get("resume_analysis", {})
+
+    if not current_question or not current_answer:
+        return {}
+
+    prompt = SYSTEM_DESIGN_EVALUATOR_PROMPT.format(
+        question_text=current_question.get("question", ""),
+        answer_text=current_answer.get("answer_text", ""),
+        role=state.get("role", "Software Engineer"),
+        company=state.get("company", "the company"),
+    )
+
+    fallback_eval = {
+        "requirements_clarification": 5,
+        "api_design": 5,
+        "database_design": 5,
+        "scalability": 5,
+        "caching_strategy": 5,
+        "tradeoff_analysis": 5,
+        "failure_handling": 5,
+        "overall_system_design_score": 5,
+        "strengths": [],
+        "weaknesses": [],
+        "missing_components": [],
+    }
+
+    result = await _call_gemini_json(
+        SYSTEM_DESIGN_EVALUATOR_SYSTEM,
+        prompt,
+        fallback_eval,
+    )
+
+    # Store system design scores in state
+    system_design_scores = {
+        "requirements_clarification": int(result.get("requirements_clarification", 5)),
+        "api_design": int(result.get("api_design", 5)),
+        "database_design": int(result.get("database_design", 5)),
+        "scalability": int(result.get("scalability", 5)),
+        "caching_strategy": int(result.get("caching_strategy", 5)),
+        "tradeoff_analysis": int(result.get("tradeoff_analysis", 5)),
+        "failure_handling": int(result.get("failure_handling", 5)),
+        "overall_system_design_score": int(result.get("overall_system_design_score", 5)),
+    }
+
+    logger.info(
+        "System design evaluated",
+        extra={
+            "overall_score": system_design_scores["overall_system_design_score"],
+            "dimensions": len(system_design_scores),
+        }
+    )
+
+    return {
+        "system_design_scores": system_design_scores,
     }
