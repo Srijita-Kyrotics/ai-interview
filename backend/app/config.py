@@ -39,6 +39,8 @@ class Settings(BaseSettings):
     # ── External APIs ─────────────────────────────────────────────────────
     gemini_api_key: str = Field("", alias="GEMINI_API_KEY")
     gemini_model: str = Field("gemini-1.5-flash", alias="GEMINI_MODEL")
+    openai_api_key: str = Field("", alias="OPENAI_API_KEY")
+    claude_api_key: str = Field("", alias="CLAUDE_API_KEY")
     judge0_api_key: str = Field("", alias="JUDGE0_API_KEY")
     judge0_host: str = Field("judge0-ce.p.rapidapi.com", alias="JUDGE0_HOST")
     judge0_timeout: float = Field(10.0, alias="JUDGE0_TIMEOUT")
@@ -113,6 +115,10 @@ class Settings(BaseSettings):
 
     # ── Resume ───────────────────────────────────────────────────────────
     resume_raw_text_limit: int = Field(2000, alias="RESUME_RAW_TEXT_LIMIT")
+
+    # ── Redis ─────────────────────────────────────────────────────────────
+    redis_url: str = Field("redis://localhost:6379/0", alias="REDIS_URL")
+    redis_interview_ttl_hours: int = Field(4, alias="REDIS_INTERVIEW_TTL_HOURS")
 
     # ── Session cleanup ───────────────────────────────────────────────────
     session_retention_days: int = Field(30, alias="SESSION_RETENTION_DAYS")

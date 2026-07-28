@@ -166,14 +166,14 @@ async def interview_websocket(
         question_count += 1
     except Exception as e:
         logger.error("Gemini first question failed", extra={"error": str(e)})
-        fallback = f"Hi there! I'm Obi, your AI interviewer for this {round_key} round. Let's get started. Can you tell me about your experience with the technologies mentioned in your resume?"
+        error_msg = f"Gemini API failed: {e}. Please check your GEMINI_API_KEY configuration."
         await websocket.send_json({
-            "type": "ai_message",
-            "text": fallback,
-            "timestamp": time.time(),
+            "type": "error",
+            "message": error_msg,
+            "error_code": "GEMINI_ERROR",
         })
-        conversation_log.append({"role": "interviewer", "text": fallback})
-        question_count += 1
+        await websocket.close(code=4003)
+        return
 
     # ── Main loop ─────────────────────────────────────────────────────────
     try:

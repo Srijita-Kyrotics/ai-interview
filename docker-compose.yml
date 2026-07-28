@@ -1,4 +1,17 @@
 services:
+  redis:
+    image: redis:7-alpine
+    restart: unless-stopped
+    ports:
+      - "${REDIS_PORT:-6379}:6379"
+    volumes:
+      - redisdata:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
   db:
     image: postgres:16-alpine
     restart: unless-stopped
@@ -29,6 +42,8 @@ services:
     ports:
       - "${BACKEND_PORT:-8000}:8000"
     depends_on:
+      redis:
+        condition: service_healthy
       db:
         condition: service_healthy
     healthcheck:
@@ -54,4 +69,5 @@ services:
 
 volumes:
   pgdata:
+  redisdata:
   custom_questions:

@@ -81,8 +81,28 @@ async def lifespan(app):
         session_retention_days=settings.session_retention_days,
     )
     cleanup_expired_cache()
+
+    # P1: Initialize Redis for persistent interview state
+    try:
+        from app.ai_interviewer.state_store import get_redis, get_state_store
+        redis = get_redis()
+        store = get_state_store()
+        if store.health_check():
+            logger.info("Redis connected for interview state persistence")
+        else:
+            logger.warning("Redis health check failed — interview state will not persist")
+    except Exception as e:
+        logger.warning("Redis not available: %s — interview state will not persist", e)
+
     logger.info("Application started", extra={"environment": settings.environment})
     yield
+
+    # Shutdown: close Redis and DB
+    try:
+        from app.ai_interviewer.state_store import close_redis
+        close_redis()
+    except Exception:
+        pass
     close_pool()
     logger.info("Application shutting down")
 
@@ -120,6 +140,12 @@ async def add_security_headers(request, call_next):
 @app.get("/health")
 def health_check():
     db_ok = check_db_health()
+    redis_ok = False
+    try:
+        from app.ai_interviewer.state_store import get_state_store
+        redis_ok = get_state_store().health_check()
+    except Exception:
+        pass
     status = "healthy" if db_ok else "degraded"
     code = 200 if db_ok else 503
     return JSONResponse(
@@ -127,6 +153,7 @@ def health_check():
         content={
             "status": status,
             "database": "ok" if db_ok else "unreachable",
+            "redis": "ok" if redis_ok else "unavailable",
             "environment": settings.environment,
         },
     )

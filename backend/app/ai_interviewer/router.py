@@ -5,8 +5,11 @@ Provides REST endpoints and a WebSocket for the AI interviewer.
 
 Endpoints:
   POST /ai-interview/start         → Start a new AI interview session
+  POST /ai-interview/resume        → Resume an interrupted interview
   GET  /ai-interview/{session}/state → Get current session state
   GET  /ai-interview/{session}/report → Get final report
+  GET  /ai-interview/{session}/timeline → Get interview timeline (P6)
+  GET  /ai-interview/{session}/refresh-token → Refresh JWT for WS (P3)
   WS   /ws/ai-interview            → Real-time interview WebSocket
   WS   /ws/ai-interview/voice      → Voice interview WebSocket
 
@@ -15,6 +18,7 @@ WebSocket Protocol (text mode):
     {"type": "answer", "text": "candidate answer text", "duration_ms": 5000}
     {"type": "end"}
     {"type": "ping"}
+    {"type": "refresh_token", "token": "new_jwt_token"}  (P3)
 
   Server → Client:
     {"type": "session_ready", "opening_text": "...", "session_id": "..."}
@@ -22,6 +26,7 @@ WebSocket Protocol (text mode):
     {"type": "thinking"}
     {"type": "transition", "text": "..."}
     {"type": "interview_complete", "closing_text": "...", "report": {...}}
+    {"type": "token_refreshed"}
     {"type": "error", "message": "..."}
     {"type": "pong"}
 
@@ -51,20 +56,28 @@ from starlette.websockets import WebSocketState
 
 from app.config import settings
 from app.db import load_session, save_session
-from app.helpers import decode_token
+from app.helpers import decode_token, create_token
 from app.resume_parser import extract_text_from_pdf_content, parse_resume_text
 
 from app.ai_interviewer.state import make_initial_state, InterviewState
 from app.ai_interviewer.graph import InterviewGraphRunner
 from app.ai_interviewer.voice import VoicePipeline
+from app.ai_interviewer.nodes import GeminiUnavailableError
+from app.ai_interviewer.state_store import get_state_store, InterviewStateStore
 
 logger = logging.getLogger("ai_interview.router")
 
 router = APIRouter(prefix="/ai-interview", tags=["AI Interviewer"])
 
-# ── In-Memory Session Store (replace with Redis in production) ────────────────
-_active_runners: dict[str, InterviewGraphRunner] = {}
-_voice_pipelines: dict[str, VoicePipeline] = {}
+# ── State Store (Redis-backed, replaces in-memory _active_runners) ───────────
+_store: InterviewStateStore | None = None
+
+
+def _get_store() -> InterviewStateStore:
+    global _store
+    if _store is None:
+        _store = get_state_store()
+    return _store
 
 
 # ── Request/Response Models ──────────────────────────────────────────────────
@@ -82,6 +95,11 @@ class StartInterviewResponse(BaseModel):
     interview_session_id: str
     status: str
     message: str
+
+
+class ResumeInterviewRequest(BaseModel):
+    interview_session_id: str
+    session_id: str  # Original platform session
 
 
 # ── Dependency: Auth ──────────────────────────────────────────────────────────
@@ -102,12 +120,12 @@ async def start_ai_interview(
 ):
     """
     Initialize an AI interview session.
-    
+
     This endpoint:
     1. Loads the session (which contains the parsed resume)
     2. Creates an InterviewGraphRunner
-    3. Runs the setup phase (resume analysis + planning)
-    4. Returns the opening message
+    3. Stores initial state in Redis
+    4. Returns the interview session ID (WS does the actual initialization)
     """
     session_data = load_session(request.session_id)
     if not session_data:
@@ -118,6 +136,18 @@ async def start_ai_interview(
 
     if not resume_parsed and not resume_raw:
         raise HTTPException(status_code=400, detail="No resume data found in session")
+
+    store = _get_store()
+
+    # Check for existing resumable session
+    existing_id = store.get_resumable_session(request.session_id)
+    if existing_id:
+        return StartInterviewResponse(
+            session_id=request.session_id,
+            interview_session_id=existing_id,
+            status="resumable",
+            message="An existing interview session was found. Use /resume to continue.",
+        )
 
     # Create the interview state
     interview_session_id = str(uuid.uuid4())
@@ -132,12 +162,23 @@ async def start_ai_interview(
         voice_enabled=request.voice_enabled,
     )
 
-    # Create runner and store
+    # Create runner with state store
     runner = InterviewGraphRunner(
         session_id=interview_session_id,
         initial_state=initial_state,
+        platform_session_id=request.session_id,
+        state_store=store,
     )
-    _active_runners[interview_session_id] = runner
+
+    # Persist to Redis
+    store.save_state(interview_session_id, runner.state)
+    store.save_meta(interview_session_id, {
+        "platform_session_id": request.session_id,
+        "status": "created",
+        "created_at": time.time(),
+        "updated_at": time.time(),
+        "candidate_email": user.get("email", ""),
+    })
 
     logger.info(
         "AI interview session created",
@@ -157,17 +198,82 @@ async def start_ai_interview(
     )
 
 
+@router.post("/resume", response_model=StartInterviewResponse)
+async def resume_ai_interview(
+    request: ResumeInterviewRequest,
+    user: dict = Depends(get_current_user),
+):
+    """
+    Resume an interrupted AI interview session (P2).
+
+    Restores state from Redis checkpoint and returns the session ID
+    for the client to reconnect via WebSocket.
+    """
+    store = _get_store()
+
+    # Try to load from Redis
+    state = store.load_state(request.interview_session_id)
+    if not state:
+        raise HTTPException(status_code=404, detail="No resumable session found in Redis")
+
+    meta = store.load_meta(request.interview_session_id)
+    if meta and meta.get("status") in ("completed", "error"):
+        raise HTTPException(status_code=410, detail="This interview session is no longer resumable")
+
+    # Verify platform session matches
+    if meta and meta.get("platform_session_id") != request.session_id:
+        raise HTTPException(status_code=403, detail="Session does not belong to this user")
+
+    # Update meta
+    store.save_meta(request.interview_session_id, {
+        **(meta or {}),
+        "status": "resuming",
+        "updated_at": time.time(),
+    })
+
+    logger.info(
+        "AI interview session resumed",
+        extra={
+            "interview_session_id": request.interview_session_id,
+            "phase": state.get("phase"),
+            "questions_asked": state.get("questions_asked", 0),
+        }
+    )
+
+    return StartInterviewResponse(
+        session_id=request.session_id,
+        interview_session_id=request.interview_session_id,
+        status="resuming",
+        message="Session restored. Connect via WebSocket to continue.",
+    )
+
+
+@router.get("/refresh-token")
+async def refresh_interview_token(
+    interview_session_id: str,
+    user: dict = Depends(get_current_user),
+) -> dict:
+    """
+    Issue a fresh JWT for WebSocket re-authentication (P3).
+
+    Call this before the current token expires to get a new one,
+    then send it to the WebSocket via a 'refresh_token' message.
+    """
+    new_token = create_token(user["email"], user.get("role", "candidate"))
+    return {"token": new_token, "expires_in": settings.jwt_expiry_hours * 3600}
+
+
 @router.get("/{interview_session_id}/state")
 async def get_interview_state(
     interview_session_id: str,
     user: dict = Depends(get_current_user),
 ) -> dict:
     """Get current state of an active interview session."""
-    runner = _active_runners.get(interview_session_id)
-    if not runner:
+    store = _get_store()
+    state = store.load_state(interview_session_id)
+    if not state:
         raise HTTPException(status_code=404, detail="Interview session not found or expired")
 
-    state = runner.get_state()
     return {
         "phase": state.get("phase"),
         "questions_asked": state.get("questions_asked"),
@@ -175,27 +281,21 @@ async def get_interview_state(
         "current_stage": state.get("current_stage", {}).get("name"),
         "topics_covered": state.get("memory", {}).get("topics_covered", []),
         "should_end": state.get("should_end"),
-        # Feature 1: Claim verification
         "claims_summary": {
             "total": len(state.get("resume_claims", [])),
             "verified": len([c for c in state.get("resume_claims", []) if c.get("verification_status") == "VERIFIED"]),
             "failed": len([c for c in state.get("resume_claims", []) if c.get("verification_status") == "FAILED_VERIFICATION"]),
             "unverified": len([c for c in state.get("resume_claims", []) if c.get("verification_status") == "UNVERIFIED"]),
         },
-        # Feature 2: Topic mastery
         "topic_mastery": {
             t: m["mastery_score"]
             for t, m in state.get("topic_mastery", {}).items()
         },
-        # Feature 3: Contradictions
         "contradictions_found": len([
             f for f in state.get("candidate_facts", []) if f.get("contradicted", False)
         ]),
-        # Feature 4: Difficulty
         "difficulty_level": state.get("difficulty_level", {}).get("level", "intermediate"),
-        # Feature 5: Code versions
         "code_versions": len(state.get("code_history", [])),
-        # Feature 6: Replans
         "replan_count": state.get("replan_count", 0),
     }
 
@@ -206,15 +306,48 @@ async def get_interview_report(
     user: dict = Depends(get_current_user),
 ) -> dict:
     """Get the final interview report (only available after completion)."""
-    runner = _active_runners.get(interview_session_id)
-    if not runner:
+    store = _get_store()
+    state = store.load_state(interview_session_id)
+    if not state:
         raise HTTPException(status_code=404, detail="Interview session not found")
 
-    report = runner.get_final_report()
+    report = state.get("final_report")
     if not report:
         raise HTTPException(status_code=425, detail="Interview not yet completed")
 
     return report
+
+
+@router.get("/{interview_session_id}/timeline")
+async def get_interview_timeline(
+    interview_session_id: str,
+    user: dict = Depends(get_current_user),
+) -> dict:
+    """
+    Get the interview timeline for the recruiter portal (P6).
+
+    Returns a list of timestamped events in chronological order.
+    """
+    store = _get_store()
+    timeline = store.get_timeline(interview_session_id)
+    if not timeline:
+        # Fallback: check if state exists
+        state = store.load_state(interview_session_id)
+        if not state:
+            raise HTTPException(status_code=404, detail="Interview session not found")
+
+    return {
+        "interview_session_id": interview_session_id,
+        "events": timeline,
+        "event_count": len(timeline),
+    }
+
+
+# ── Token Validation Helper ──────────────────────────────────────────────────
+
+def _validate_ws_token(token: str) -> dict | None:
+    """Validate a JWT token for WebSocket auth. Returns payload or None."""
+    return decode_token(token)
 
 
 # ── Text Interview WebSocket ──────────────────────────────────────────────────
@@ -228,22 +361,40 @@ async def ai_interview_websocket(
 ):
     """
     Real-time text-based AI interview via WebSocket.
-    
+
     Protocol: See module docstring.
+    Supports reconnection and token refresh (P3).
     """
     await websocket.accept()
 
+    store = _get_store()
+
     # ── Auth ──────────────────────────────────────────────────────────────
-    payload = decode_token(token)
+    payload = _validate_ws_token(token)
     if not payload:
         await websocket.send_json({"type": "error", "message": "Invalid token"})
         await websocket.close(code=4001)
         return
 
-    # ── Get or Create Runner ──────────────────────────────────────────────
-    runner = _active_runners.get(interview_session_id)
+    # ── Get or Restore Runner ─────────────────────────────────────────────
+    runner = None
+
+    # 1. Try Redis checkpoint first (P2 - resume)
+    state = store.load_state(interview_session_id)
+    if state:
+        meta = store.load_meta(interview_session_id) or {}
+        if meta.get("status") not in ("completed", "error"):
+            runner = InterviewGraphRunner(
+                session_id=interview_session_id,
+                initial_state=state,
+                platform_session_id=meta.get("platform_session_id", session_id),
+                state_store=store,
+            )
+            runner._initialized = state.get("phase", "analyzing") != "analyzing"
+            logger.info("Restored runner from Redis", extra={"session": interview_session_id})
+
+    # 2. Fallback: create on-the-fly from session data
     if not runner:
-        # Try to create session on the fly (if /start was skipped)
         session_data = load_session(session_id) if session_id else None
         if not session_data:
             await websocket.send_json({"type": "error", "message": "Interview session not found"})
@@ -262,8 +413,18 @@ async def ai_interview_websocket(
             resume_raw_text=resume_raw,
             resume_parsed=resume_parsed,
         )
-        runner = InterviewGraphRunner(session_id=new_interview_id, initial_state=initial_state)
-        _active_runners[new_interview_id] = runner
+        runner = InterviewGraphRunner(
+            session_id=new_interview_id,
+            initial_state=initial_state,
+            platform_session_id=session_id,
+            state_store=store,
+        )
+        store.save_state(new_interview_id, runner.state)
+        store.save_meta(new_interview_id, {
+            "platform_session_id": session_id,
+            "status": "created",
+            "created_at": time.time(),
+        })
         interview_session_id = new_interview_id
 
     try:
@@ -292,6 +453,29 @@ async def ai_interview_websocket(
                 "is_follow_up": False,
                 "timestamp": time.time(),
             })
+        else:
+            # Resuming: send current state summary (P2)
+            state = runner.get_state()
+            current_q = state.get("current_question", {})
+            await websocket.send_json({
+                "type": "session_restored",
+                "session_id": interview_session_id,
+                "phase": state.get("phase"),
+                "questions_asked": state.get("questions_asked", 0),
+                "max_questions": state.get("max_questions", 12),
+                "current_stage": state.get("current_stage", {}).get("name", ""),
+                "timestamp": time.time(),
+            })
+            # Re-send the last question
+            if current_q:
+                await websocket.send_json({
+                    "type": "question",
+                    "text": current_q.get("question", ""),
+                    "question_id": current_q.get("id", ""),
+                    "stage": state.get("current_stage", {}).get("name", ""),
+                    "is_follow_up": False,
+                    "timestamp": time.time(),
+                })
 
         # ── Main Interview Loop ───────────────────────────────────────────
         while True:
@@ -307,6 +491,17 @@ async def ai_interview_websocket(
             # Ping
             if msg_type == "ping":
                 await websocket.send_json({"type": "pong", "timestamp": time.time()})
+                continue
+
+            # Token refresh (P3)
+            if msg_type == "refresh_token":
+                new_token = msg.get("token", "")
+                new_payload = _validate_ws_token(new_token)
+                if new_payload:
+                    payload = new_payload  # Update in-place
+                    await websocket.send_json({"type": "token_refreshed", "timestamp": time.time()})
+                else:
+                    await websocket.send_json({"type": "error", "message": "Invalid refresh token"})
                 continue
 
             # End interview
@@ -325,6 +520,7 @@ async def ai_interview_websocket(
             if msg_type == "set_system_design_mode":
                 enabled = msg.get("enabled", False)
                 runner.state["is_system_design_mode"] = bool(enabled)
+                runner._checkpoint()
                 await websocket.send_json({
                     "type": "system_design_mode_changed",
                     "enabled": bool(enabled),
@@ -394,12 +590,49 @@ async def ai_interview_websocket(
                     })
                 continue
 
+    except GeminiUnavailableError as e:
+        logger.error(
+            "Gemini API not configured",
+            extra={"error": str(e), "session": interview_session_id}
+        )
+        try:
+            await websocket.send_json({
+                "type": "error",
+                "message": str(e),
+                "error_code": "GEMINI_UNAVAILABLE",
+            })
+            await websocket.close(code=4003)
+        except Exception:
+            pass
+        return
+
+    except RuntimeError as e:
+        logger.error(
+            "Gemini call failed",
+            extra={"error": str(e), "session": interview_session_id}
+        )
+        try:
+            await websocket.send_json({
+                "type": "error",
+                "message": f"AI model error: {e}",
+                "error_code": "GEMINI_ERROR",
+            })
+        except Exception:
+            pass
+
     except WebSocketDisconnect:
         logger.info(
             "AI interview WebSocket disconnected",
             extra={"session": interview_session_id}
         )
-        # Save partial results on disconnect
+        # Save partial results on disconnect — state is already checkpointed
+        # Update status to "paused" for resume support
+        store.save_meta(interview_session_id, {
+            **(store.load_meta(interview_session_id) or {}),
+            "status": "paused",
+            "paused_at": time.time(),
+            "platform_session_id": session_id,
+        })
         if session_id:
             try:
                 await _save_interview_result(session_id, interview_session_id, runner)
@@ -412,7 +645,11 @@ async def ai_interview_websocket(
             extra={"error": str(e), "session": interview_session_id}
         )
         try:
-            await websocket.send_json({"type": "error", "message": "An error occurred"})
+            await websocket.send_json({
+                "type": "error",
+                "message": f"Interview error: {e}",
+                "error_code": "INTERNAL_ERROR",
+            })
         except Exception:
             pass
 
@@ -435,28 +672,41 @@ async def voice_interview_websocket(
 ):
     """
     Real-time voice interview via WebSocket.
-    
+
     Receives binary audio chunks, returns binary TTS audio + JSON metadata.
+    Supports reconnection and state recovery (P2/P3).
     """
     await websocket.accept()
 
-    payload = decode_token(token)
+    payload = _validate_ws_token(token)
     if not payload:
         await websocket.send_json({"type": "error", "message": "Invalid token"})
         await websocket.close(code=4001)
         return
 
-    runner = _active_runners.get(interview_session_id)
+    store = _get_store()
+
+    # Try to restore from Redis checkpoint (P2)
+    runner = None
+    state = store.load_state(interview_session_id)
+    if state:
+        meta = store.load_meta(interview_session_id) or {}
+        if meta.get("status") not in ("completed", "error"):
+            runner = InterviewGraphRunner(
+                session_id=interview_session_id,
+                initial_state=state,
+                platform_session_id=meta.get("platform_session_id", session_id),
+                state_store=store,
+            )
+            runner._initialized = state.get("phase", "analyzing") != "analyzing"
+
     if not runner:
         await websocket.send_json({"type": "error", "message": "Interview session not found"})
         await websocket.close(code=4002)
         return
 
     # Get or create voice pipeline
-    pipeline = _voice_pipelines.get(interview_session_id)
-    if not pipeline:
-        pipeline = VoicePipeline.from_settings()
-        _voice_pipelines[interview_session_id] = pipeline
+    pipeline = VoicePipeline.from_settings()
 
     try:
         # Initialize if needed
@@ -483,6 +733,26 @@ async def voice_interview_websocket(
             })
             if first_q_audio:
                 await websocket.send_bytes(first_q_audio)
+        else:
+            # Resuming: re-send last question (P2)
+            state = runner.get_state()
+            current_q = state.get("current_question", {})
+            if current_q:
+                resume_audio = await pipeline.tts.synthesize(
+                    f"Welcome back. Let's continue. {current_q.get('question', '')}"
+                )
+                await websocket.send_json({
+                    "type": "session_restored",
+                    "session_id": interview_session_id,
+                    "questions_asked": state.get("questions_asked", 0),
+                })
+                await websocket.send_json({
+                    "type": "question",
+                    "text": current_q.get("question", ""),
+                    "question_id": current_q.get("id", ""),
+                })
+                if resume_audio:
+                    await websocket.send_bytes(resume_audio)
 
         # Main voice loop
         audio_buffer = bytearray()
@@ -504,6 +774,15 @@ async def voice_interview_websocket(
                     continue
 
                 msg_type = msg.get("type", "")
+
+                # Token refresh (P3)
+                if msg_type == "refresh_token":
+                    new_token = msg.get("token", "")
+                    new_payload = _validate_ws_token(new_token)
+                    if new_payload:
+                        payload = new_payload
+                        await websocket.send_json({"type": "token_refreshed"})
+                    continue
 
                 if msg_type == "audio_end":
                     # Process buffered audio
@@ -573,17 +852,47 @@ async def voice_interview_websocket(
                     })
                     break
 
+    except GeminiUnavailableError as e:
+        logger.error("Gemini API not configured (voice)", extra={"error": str(e)})
+        try:
+            await websocket.send_json({
+                "type": "error",
+                "message": str(e),
+                "error_code": "GEMINI_UNAVAILABLE",
+            })
+            await websocket.close(code=4003)
+        except Exception:
+            pass
+
+    except RuntimeError as e:
+        logger.error("Gemini call failed (voice)", extra={"error": str(e)})
+        try:
+            await websocket.send_json({
+                "type": "error",
+                "message": f"AI model error: {e}",
+                "error_code": "GEMINI_ERROR",
+            })
+        except Exception:
+            pass
+
     except WebSocketDisconnect:
         logger.info("Voice interview disconnected", extra={"session": interview_session_id})
+        # Mark as paused for resume (P2)
+        store.save_meta(interview_session_id, {
+            **(store.load_meta(interview_session_id) or {}),
+            "status": "paused",
+            "paused_at": time.time(),
+        })
     except Exception as e:
         logger.error("Voice interview error", extra={"error": str(e)})
-    finally:
-        _voice_pipelines.pop(interview_session_id, None)
-        if websocket.client_state == WebSocketState.CONNECTED:
-            try:
-                await websocket.close()
-            except Exception:
-                pass
+        try:
+            await websocket.send_json({
+                "type": "error",
+                "message": f"Interview error: {e}",
+                "error_code": "INTERNAL_ERROR",
+            })
+        except Exception:
+            pass
 
 
 # ── Helper Functions ──────────────────────────────────────────────────────────
@@ -599,7 +908,7 @@ async def _save_interview_result(
 
     try:
         state = runner.get_state()
-        report = runner.get_final_report()
+        report = runner.get_final_report() or state.get("final_report", {})
         session_data = load_session(platform_session_id)
 
         if not session_data:
@@ -633,6 +942,6 @@ async def _save_interview_result(
 
 
 def cleanup_session(interview_session_id: str) -> None:
-    """Clean up an interview session from memory."""
-    _active_runners.pop(interview_session_id, None)
-    _voice_pipelines.pop(interview_session_id, None)
+    """Clean up an interview session from Redis."""
+    store = _get_store()
+    store.delete_state(interview_session_id)

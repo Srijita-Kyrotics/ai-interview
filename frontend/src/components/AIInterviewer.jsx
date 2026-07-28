@@ -169,6 +169,8 @@ export default function AIInterviewer({ sessionId, token, role, company, onCompl
   const [finalReport, setFinalReport] = useState(null);
   const [error, setError] = useState(null);
   const [latency, setLatency] = useState(null);
+  const [resumableSession, setResumableSession] = useState(null); // P2: Resume support
+  const [reconnectAttempts, setReconnectAttempts] = useState(0); // P3: Reconnect tracking
 
   // ── Code Editor State ──────────────────────────────────────────────
   const [code, setCode] = useState('');
@@ -206,11 +208,126 @@ export default function AIInterviewer({ sessionId, token, role, company, onCompl
   const mediaRecorderRef = useRef(null);
   const audioChunksRef = useRef([]);
   const audioContextRef = useRef(null);
+  const tokenRefreshRef = useRef(null); // P3: Token refresh timer
+  const reconnectTimerRef = useRef(null); // P3: Reconnect timer
 
   // ── Auto-scroll ──────────────────────────────────────────────────────
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [messages, isThinking]);
+
+  // ── P2: Check for resumable session on mount ──────────────────────────
+  useEffect(() => {
+    const checkResumable = async () => {
+      if (!sessionId || !token) return;
+      try {
+        // Look for any active interview sessions for this platform session
+        const res = await fetch(`${API_BASE}/ai-interview/start`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            Authorization: `Bearer ${token}`,
+          },
+          body: JSON.stringify({
+            session_id: sessionId,
+            role: role || 'Software Engineer',
+            company: company || 'the company',
+            max_questions: 12,
+            voice_enabled: voiceMode,
+          }),
+        });
+        if (res.ok) {
+          const data = await res.json();
+          if (data.status === 'resumable') {
+            setResumableSession(data.interview_session_id);
+          }
+        }
+      } catch {
+        // Ignore — will start fresh
+      }
+    };
+    checkResumable();
+  }, [sessionId, token, role, company, voiceMode]);
+
+  // ── P3: Token Refresh ───────────────────────────────────────────────
+  const refreshToken = useCallback(async () => {
+    if (!interviewSessionId || !token) return;
+    try {
+      const res = await fetch(`${API_BASE}/ai-interview/refresh-token?interview_session_id=${interviewSessionId}`, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      if (res.ok) {
+        const data = await res.json();
+        // Send new token to WebSocket
+        if (wsRef.current?.readyState === WebSocket.OPEN) {
+          wsRef.current.send(JSON.stringify({
+            type: 'refresh_token',
+            token: data.token,
+          }));
+        }
+      }
+    } catch {
+      // Token refresh failed — will reconnect on next disconnect
+    }
+  }, [interviewSessionId, token]);
+
+  // Start token refresh interval (every 20 minutes for 24h expiry)
+  useEffect(() => {
+    if (phase === 'interviewing' || phase === 'opening') {
+      tokenRefreshRef.current = setInterval(refreshToken, 20 * 60 * 1000);
+      return () => clearInterval(tokenRefreshRef.current);
+    }
+  }, [phase, refreshToken]);
+
+  // ── P3: Auto-reconnect on disconnect ────────────────────────────────
+  const reconnectWs = useCallback(() => {
+    if (!interviewSessionId || !token || !sessionId) return;
+    if (reconnectAttempts >= 5) {
+      setError('Connection lost. Please refresh the page.');
+      setPhase('error');
+      return;
+    }
+
+    setReconnectAttempts(prev => prev + 1);
+    setPhase('opening');
+
+    const wsUrl = `${WS_BASE}/ai-interview/ws?token=${token}&interview_session_id=${interviewSessionId}&session_id=${sessionId}`;
+    const ws = new WebSocket(wsUrl);
+    wsRef.current = ws;
+    ws.binaryType = 'arraybuffer';
+
+    ws.onopen = () => {
+      console.log('[AIInterviewer] WebSocket reconnected');
+      setReconnectAttempts(0);
+    };
+
+    ws.onmessage = (event) => {
+      if (typeof event.data === 'string') {
+        handleWsMessage(JSON.parse(event.data));
+      } else {
+        handleAudioResponse(event.data);
+      }
+    };
+
+    ws.onerror = () => {
+      // Will trigger onclose
+    };
+
+    ws.onclose = () => {
+      if (phase !== 'completed' && phase !== 'error') {
+        // Auto-reconnect after delay
+        reconnectTimerRef.current = setTimeout(reconnectWs, 2000 * (reconnectAttempts + 1));
+      }
+    };
+  }, [interviewSessionId, token, sessionId, reconnectAttempts, phase, handleWsMessage, handleAudioResponse]);
+
+  // Cleanup reconnect timer
+  useEffect(() => {
+    return () => {
+      clearTimeout(reconnectTimerRef.current);
+      clearInterval(tokenRefreshRef.current);
+    };
+  }, []);
 
   // ── Start Interview ──────────────────────────────────────────────────
   const startInterview = useCallback(async () => {
@@ -270,8 +387,13 @@ export default function AIInterviewer({ sessionId, token, role, company, onCompl
 
       ws.onclose = () => {
         console.log('[AIInterviewer] WebSocket closed');
-        if (phase !== 'completed') {
-          setPhase(p => p === 'completed' ? p : 'idle');
+        if (phase !== 'completed' && phase !== 'error') {
+          // P3: Auto-reconnect after brief delay
+          reconnectTimerRef.current = setTimeout(() => {
+            if (wsRef.current === ws) {
+              reconnectWs();
+            }
+          }, 2000);
         }
       };
 
@@ -297,6 +419,19 @@ export default function AIInterviewer({ sessionId, token, role, company, onCompl
         if (msg.opening_text) {
           addMessage({ role: 'interviewer', text: msg.opening_text, ts: Date.now() / 1000 });
         }
+        break;
+
+      case 'session_restored': // P2: Session restored from checkpoint
+        setPhase('interviewing');
+        setIsThinking(false);
+        setProgress({ current: msg.questions_asked || 0, total: msg.max_questions || 12 });
+        setCurrentStage(msg.current_stage || '');
+        addMessage({
+          role: 'interviewer',
+          text: `Session restored. Continuing from question ${msg.questions_asked || 0}...`,
+          ts: Date.now() / 1000,
+          isTransition: true,
+        });
         break;
 
       case 'question':
@@ -463,6 +598,8 @@ export default function AIInterviewer({ sessionId, token, role, company, onCompl
     return () => {
       wsRef.current?.close();
       audioContextRef.current?.close();
+      clearTimeout(reconnectTimerRef.current);
+      clearInterval(tokenRefreshRef.current);
     };
   }, []);
 
@@ -546,8 +683,20 @@ export default function AIInterviewer({ sessionId, token, role, company, onCompl
           {error && <div className="aii-error">{error}</div>}
           {proctorError && <div className="aii-error">Proctoring Error: {proctorError}</div>}
 
+          {/* P2: Resume Interview Button */}
+          {resumableSession && (
+            <button
+              className="aii-start-btn"
+              style={{ background: 'rgba(99,102,241,0.2)', borderColor: '#6366f1', marginBottom: '12px' }}
+              onClick={startInterview}
+            >
+              <span>Resume Interview</span>
+              <span className="aii-start-btn__arrow">→</span>
+            </button>
+          )}
+
           <button className="aii-start-btn" onClick={startInterview}>
-            <span>Begin Interview</span>
+            <span>{resumableSession ? 'Start New Interview' : 'Begin Interview'}</span>
             <span className="aii-start-btn__arrow">→</span>
           </button>
         </div>

@@ -99,6 +99,17 @@ class AnswerEvaluation(TypedDict):
 
 # ── Feature 1: Claim Verification Engine ────────────────────────────────────
 
+class EvidenceNode(TypedDict):
+    """A single piece of evidence supporting or refuting a claim."""
+    evidence_id: str
+    question_id: str
+    question_text: str
+    answer_excerpt: str           # Relevant portion of the candidate's answer
+    supports_claim: bool          # True = supports, False = refutes
+    strength: str                 # "strong" | "moderate" | "weak"
+    reasoning: str                # Why this evidence supports/refutes
+
+
 class ResumeClaim(TypedDict):
     claim_id: str
     claim_text: str              # e.g. "Expert in React", "Built scalable microservices at Acme"
@@ -107,6 +118,7 @@ class ResumeClaim(TypedDict):
     verification_status: str     # "UNVERIFIED" | "PARTIALLY_VERIFIED" | "VERIFIED" | "FAILED_VERIFICATION"
     verification_evidence: list[str]  # Interview moments that support/refute
     asked_question_ids: list[str]     # Questions used to verify this claim
+    evidence_nodes: NotRequired[list[EvidenceNode]]  # P5: Structured evidence chain
 
 
 # ── Feature 2: Topic Mastery Tracking ───────────────────────────────────────
@@ -193,6 +205,8 @@ class FinalReport(TypedDict):
     generated_at: float
     # Feature 1: Claim verification summary
     claim_verification_summary: NotRequired[list[dict]]
+    # P5: Evidence graph summary
+    evidence_graph_summary: NotRequired[dict[str, list[dict]]]
     # Feature 2: Topic mastery summary
     topic_mastery_summary: NotRequired[list[dict]]
     # Feature 5: Code evolution summary
@@ -237,6 +251,9 @@ class InterviewState(TypedDict):
 
     # ── Feature 1: Claim Verification ────────────────────────────────────
     resume_claims: NotRequired[list[ResumeClaim]]
+
+    # ── P5: Evidence Graph ──────────────────────────────────────────────
+    evidence_graph: NotRequired[dict[str, list[EvidenceNode]]]  # claim_id → evidence chain
 
     # ── Feature 2: Topic Mastery ─────────────────────────────────────────
     topic_mastery: NotRequired[dict[str, TopicMastery]]
@@ -320,6 +337,7 @@ def make_initial_state(
         ),
         # Feature 1-7: Initialize empty
         resume_claims=[],
+        evidence_graph={},
         topic_mastery={},
         candidate_facts=[],
         difficulty_level=DifficultyLevel(

@@ -12,6 +12,9 @@ Node execution order:
   follow_up_generator_node→ Decides whether to follow up or advance
   scoring_node            → Computes aggregate scores
   report_generator_node   → Generates the final hiring report
+
+LLM calls go through the provider abstraction layer (llm_providers.py).
+Nodes do not know which LLM provider is being used.
 """
 
 from __future__ import annotations
@@ -21,8 +24,6 @@ import logging
 import time
 import uuid
 from typing import Any
-
-import google.generativeai as genai
 
 from app.ai_interviewer.state import (
     InterviewState,
@@ -72,43 +73,49 @@ from app.config import settings
 
 logger = logging.getLogger("ai_interview.nodes")
 
-# ── Gemini Helper ─────────────────────────────────────────────────────────────
+# ── LLM Provider Abstraction ──────────────────────────────────────────────────
+# Nodes call _call_llm_json() which routes through the provider registry.
+# The registry handles failover, retry, and circuit breaking.
 
-def _make_model(system_instruction: str) -> genai.GenerativeModel:
-    genai.configure(api_key=settings.gemini_api_key)
-    return genai.GenerativeModel(
-        settings.gemini_model,
-        system_instruction=system_instruction,
-        generation_config=genai.GenerationConfig(
-            temperature=0.7,
-            max_output_tokens=2048,
-            response_mime_type="application/json",
-        ),
+class GeminiUnavailableError(Exception):
+    """Raised when no LLM provider is configured or all providers are unavailable."""
+    pass
+
+
+async def _call_llm_json(system: str, prompt: str) -> dict:
+    """
+    Call an LLM with a JSON response, return parsed dict.
+
+    Routes through the provider registry which handles:
+    - Provider selection (Gemini > OpenAI > Claude)
+    - Automatic failover on errors
+    - Retry with exponential backoff
+    - Circuit breaker protection
+
+    Raises GeminiUnavailableError if no providers are available.
+    Raises RuntimeError if all providers fail.
+    """
+    from app.ai_interviewer.llm_providers import (
+        get_llm_registry,
+        LLMProviderUnavailableError,
+        LLMProviderError,
     )
 
+    registry = get_llm_registry()
 
-async def _call_gemini_json(
-    system: str,
-    prompt: str,
-    fallback: dict,
-) -> dict:
-    """Call Gemini with a JSON response, return parsed dict or fallback."""
+    if not registry.available_providers:
+        raise GeminiUnavailableError(
+            "No LLM providers are configured. "
+            "Obi requires at least one LLM API key to function. "
+            "Set GEMINI_API_KEY, OPENAI_API_KEY, or CLAUDE_API_KEY."
+        )
+
     try:
-        model = _make_model(system)
-        response = await model.generate_content_async(prompt)
-        text = response.text.strip()
-        # Strip markdown fences if present
-        if text.startswith("```"):
-            text = text.split("```")[1]
-            if text.startswith("json"):
-                text = text[4:]
-        return json.loads(text)
-    except json.JSONDecodeError as e:
-        logger.error("Gemini JSON parse failed", extra={"error": str(e)})
-        return fallback
-    except Exception as e:
-        logger.error("Gemini call failed", extra={"error": str(e)})
-        return fallback
+        return await registry.generate_json(system, prompt)
+    except LLMProviderUnavailableError as e:
+        raise GeminiUnavailableError(str(e)) from e
+    except LLMProviderError as e:
+        raise RuntimeError(f"LLM call failed: {e}") from e
 
 
 # ══════════════════════════════════════════════════════════════════════════════
@@ -144,51 +151,23 @@ async def resume_analyzer_node(state: InterviewState) -> dict:
         resume_text=enriched_text[:8000],  # Gemini context limit
     )
 
-    fallback_analysis: ResumeAnalysis = {
-        "candidate_name": parsed.get("name", "Candidate"),
-        "years_experience": 0,
-        "seniority_level": "mid",
-        "strong_areas": parsed.get("skills", [])[:3],
-        "weak_areas": [],
-        "red_flags": [],
-        "skills": [{"skill": s, "confidence": "medium", "claimed_depth": "intermediate",
-                    "needs_verification": True, "follow_up_priority": 5}
-                   for s in parsed.get("skills", [])[:5]],
-        "projects": [{"name": p.get("name", ""), "technologies": [],
-                      "claimed_impact": p.get("description", ""),
-                      "unclear_points": [], "deep_dive_questions": []}
-                     for p in parsed.get("projects", [])[:3]],
-        "technologies": parsed.get("skills", []),
-        "education": parsed.get("education", []),
-        "certifications": parsed.get("certifications", []),
-        "experience_entries": [{"role": e.get("role", ""), "company": e.get("company", ""),
-                                "duration": e.get("duration", ""), "key_claims": []}
-                               for e in parsed.get("experience", [])],
-        "summary": parsed.get("summary", ""),
-        "raw_text": resume_text[:1000],
-    }
+    result = await _call_llm_json(RESUME_ANALYZER_SYSTEM, prompt)
 
-    result = await _call_gemini_json(
-        RESUME_ANALYZER_SYSTEM,
-        prompt,
-        fallback_analysis,
-    )
-
-    # Normalize
+    # Normalize — Gemini must return all required fields, no silent fallbacks
     analysis: ResumeAnalysis = {
-        "candidate_name": result.get("candidate_name", fallback_analysis["candidate_name"]),
+        "candidate_name": result.get("candidate_name", parsed.get("name", "Candidate")),
         "years_experience": int(result.get("years_experience", 0)),
         "seniority_level": result.get("seniority_level", "mid"),
         "strong_areas": result.get("strong_areas", []),
         "weak_areas": result.get("weak_areas", []),
         "red_flags": result.get("red_flags", []),
-        "skills": result.get("skills", fallback_analysis["skills"]),
-        "projects": result.get("projects", fallback_analysis["projects"]),
-        "technologies": result.get("technologies", fallback_analysis["technologies"]),
-        "education": result.get("education", fallback_analysis["education"]),
-        "certifications": result.get("certifications", fallback_analysis["certifications"]),
-        "experience_entries": result.get("experience_entries", fallback_analysis["experience_entries"]),
-        "summary": result.get("summary", fallback_analysis["summary"]),
+        "skills": result.get("skills", []),
+        "projects": result.get("projects", []),
+        "technologies": result.get("technologies", parsed.get("skills", [])),
+        "education": result.get("education", parsed.get("education", [])),
+        "certifications": result.get("certifications", parsed.get("certifications", [])),
+        "experience_entries": result.get("experience_entries", []),
+        "summary": result.get("summary", ""),
         "raw_text": resume_text[:1000],
     }
 
@@ -206,10 +185,9 @@ async def resume_analyzer_node(state: InterviewState) -> dict:
         resume_analysis=json.dumps(result, indent=2)[:4000],
         role=state["role"],
     )
-    claim_result = await _call_gemini_json(
+    claim_result = await _call_llm_json(
         CLAIM_EXTRACTOR_SYSTEM,
         claim_prompt,
-        {"claims": []},
     )
 
     resume_claims: list[ResumeClaim] = []
@@ -279,57 +257,10 @@ async def interview_planner_node(state: InterviewState) -> dict:
         max_questions=state["max_questions"],
     )
 
-    # Fallback plan
-    fallback_plan: InterviewPlan = {
-        "stages": [
-            {
-                "id": "warmup",
-                "name": "Warm-Up & Background",
-                "description": "Establish rapport and confirm background",
-                "topics": ["background", "experience"],
-                "target_questions": 2,
-                "completed": False,
-            },
-            {
-                "id": "technical",
-                "name": "Technical Deep Dive",
-                "description": "Probe technical skills and project experience",
-                "topics": analysis.get("technologies", ["general"])[:4],
-                "target_questions": 5,
-                "completed": False,
-            },
-            {
-                "id": "problem_solving",
-                "name": "Problem Solving",
-                "description": "Scenario-based technical challenges",
-                "topics": ["system design", "problem solving"],
-                "target_questions": 3,
-                "completed": False,
-            },
-            {
-                "id": "behavioral",
-                "name": "Behavioral & Culture",
-                "description": "Teamwork, conflict, growth",
-                "topics": ["teamwork", "failure", "growth"],
-                "target_questions": 2,
-                "completed": False,
-            },
-        ],
-        "total_questions": state["max_questions"],
-        "focus_areas": analysis.get("strong_areas", [])[:3],
-        "opening_strategy": "Start with a broad background question to warm up",
-        "closing_strategy": "End with a behavioral question about learning from failure",
-        "estimated_duration_minutes": 45,
-    }
+    result = await _call_llm_json(INTERVIEW_PLANNER_SYSTEM, prompt)
 
-    result = await _call_gemini_json(
-        INTERVIEW_PLANNER_SYSTEM,
-        prompt,
-        fallback_plan,
-    )
-
-    # Normalize stages
-    raw_stages = result.get("stages", fallback_plan["stages"])
+    # Normalize stages — Gemini must return stages, no silent fallback
+    raw_stages = result.get("stages", [])
     stages: list[InterviewStage] = []
     for s in raw_stages:
         stages.append(InterviewStage(
@@ -344,9 +275,9 @@ async def interview_planner_node(state: InterviewState) -> dict:
     plan: InterviewPlan = {
         "stages": stages,
         "total_questions": int(result.get("total_questions", state["max_questions"])),
-        "focus_areas": result.get("focus_areas", fallback_plan["focus_areas"]),
-        "opening_strategy": result.get("opening_strategy", fallback_plan["opening_strategy"]),
-        "closing_strategy": result.get("closing_strategy", fallback_plan["closing_strategy"]),
+        "focus_areas": result.get("focus_areas", []),
+        "opening_strategy": result.get("opening_strategy", ""),
+        "closing_strategy": result.get("closing_strategy", ""),
         "estimated_duration_minutes": int(result.get("estimated_duration_minutes", 45)),
     }
 
@@ -480,25 +411,12 @@ async def question_generator_node(state: InterviewState) -> dict:
             "or the target role. Focus on architecture, scalability, tradeoffs."
         )
 
-    fallback_question = {
-        "question_text": f"Can you walk me through one of your most challenging projects?",
-        "intent": "deep_dive",
-        "topic": "projects",
-        "rationale": "Fallback: general project deep-dive",
-        "difficulty": "medium",
-        "expected_answer_signals": ["specific project details", "technical challenges", "outcomes"],
-    }
-
-    result = await _call_gemini_json(
-        QUESTION_GENERATOR_SYSTEM,
-        prompt,
-        fallback_question,
-    )
+    result = await _call_llm_json(QUESTION_GENERATOR_SYSTEM, prompt)
 
     question_id = str(uuid.uuid4())
     question_record = QuestionRecord(
         id=question_id,
-        question=result.get("question_text", fallback_question["question_text"]),
+        question=result.get("question_text", ""),
         stage=current_stage.get("id", "general"),
         topic=result.get("topic", "general"),
         asked_at=time.time(),
@@ -588,26 +506,7 @@ async def answer_analyzer_node(state: InterviewState) -> dict:
         resume_context=resume_context,
     )
 
-    fallback_eval: AnswerEvaluation = {
-        "question_id": current_question.get("id", ""),
-        "technical_accuracy": 5,
-        "depth": 5,
-        "clarity": 5,
-        "confidence": 5,
-        "completeness": 5,
-        "communication_quality": 5,
-        "missing_points": [],
-        "positive_signals": [],
-        "red_flags": [],
-        "suggested_follow_ups": [],
-        "overall_quality": "average",
-    }
-
-    result = await _call_gemini_json(
-        ANSWER_ANALYZER_SYSTEM,
-        prompt,
-        fallback_eval,
-    )
+    result = await _call_llm_json(ANSWER_ANALYZER_SYSTEM, prompt)
 
     evaluation: AnswerEvaluation = {
         "question_id": current_question.get("id", ""),
@@ -662,10 +561,9 @@ async def answer_analyzer_node(state: InterviewState) -> dict:
         existing_facts=json.dumps(facts_for_check[:20], indent=2) if facts_for_check else "No previous facts recorded.",
     )
 
-    contradiction_result = await _call_gemini_json(
+    contradiction_result = await _call_llm_json(
         CONTRADICTION_DETECTOR_SYSTEM,
         contradiction_prompt,
-        {"new_facts": [], "contradictions": []},
     )
 
     # Process new facts
@@ -767,20 +665,9 @@ async def follow_up_generator_node(state: InterviewState) -> dict:
     difficulty_hint = DIFFICULTY_GUIDANCE.get(current_diff, DIFFICULTY_GUIDANCE["intermediate"])
     prompt += f"\n\nDIFFICULTY GUIDANCE (current level: {current_diff}):\n{difficulty_hint}"
 
-    fallback_follow_up = {
-        "follow_up_question": "Could you elaborate on that? Specifically, what were the technical challenges you faced?",
-        "why_this_question": "Answer was vague, need more specifics",
-        "escalation_level": 1,
-        "is_challenging": False,
-    }
+    result = await _call_llm_json(FOLLOW_UP_GENERATOR_SYSTEM, prompt)
 
-    result = await _call_gemini_json(
-        FOLLOW_UP_GENERATOR_SYSTEM,
-        prompt,
-        fallback_follow_up,
-    )
-
-    follow_up_text = result.get("follow_up_question", fallback_follow_up["follow_up_question"])
+    follow_up_text = result.get("follow_up_question", "")
 
     # Create a new question record for the follow-up
     question_id = str(uuid.uuid4())
@@ -1024,31 +911,15 @@ async def report_generator_node(state: InterviewState) -> dict:
         overall_score=scores.get("overall_score", 50),
     )
 
-    fallback_report_data = {
-        "strengths": analysis.get("strong_areas", ["Unable to determine"]),
-        "weaknesses": analysis.get("weak_areas", ["Unable to determine"]),
-        "areas_for_improvement": ["Further technical depth in core areas"],
-        "detailed_summary": "Interview data was insufficient for a detailed assessment.",
-        "recommendation": scores.get("recommendation", "Lean Reject"),
-        "recommendation_rationale": "Based on aggregate interview scores.",
-        "standout_moments": [],
-        "risk_factors": [],
-        "suggested_onboarding_focus": [],
-    }
-
-    result = await _call_gemini_json(
-        REPORT_GENERATOR_SYSTEM,
-        prompt,
-        fallback_report_data,
-    )
+    result = await _call_llm_json(REPORT_GENERATOR_SYSTEM, prompt)
 
     report: FinalReport = {
         "candidate_name": analysis.get("candidate_name", "Candidate"),
         "session_id": state["session_id"],
         "interview_duration_seconds": duration_secs,
         "scores": scores,
-        "strengths": result.get("strengths", fallback_report_data["strengths"]),
-        "weaknesses": result.get("weaknesses", fallback_report_data["weaknesses"]),
+        "strengths": result.get("strengths", []),
+        "weaknesses": result.get("weaknesses", []),
         "areas_for_improvement": result.get("areas_for_improvement", []),
         "detailed_summary": result.get("detailed_summary", ""),
         "question_records": list(questions),
@@ -1142,13 +1013,12 @@ async def stage_advance_node(state: InterviewState) -> dict:
         next_stage=next_stage.get("name", ""),
         candidate_name=analysis.get("candidate_name", ""),
     )
-    result = await _call_gemini_json(
+    result = await _call_llm_json(
         "You are a professional interviewer transitioning between topics.",
         prompt,
-        {"transition_text": f"Great, let's move on to {next_stage['name']}."},
     )
 
-    transition_text = result.get("transition_text", f"Great, let's shift to {next_stage['name']}.")
+    transition_text = result.get("transition_text", "")
 
     transcript_entry = {
         "role": "interviewer",
@@ -1192,10 +1062,9 @@ async def opening_node(state: InterviewState) -> dict:
         first_topic=first_stage.get("topics", ["your background"])[0],
     )
 
-    result = await _call_gemini_json(
+    result = await _call_llm_json(
         "You are a professional technical interviewer opening the interview.",
         prompt,
-        {"opening_text": f"Hi! I'm Alex, a Senior Engineer here. I'll be conducting your {state['role']} interview today. Let's start — can you tell me a bit about yourself and what you've been working on recently?"},
     )
 
     opening_text = result.get("opening_text", "")
@@ -1233,10 +1102,9 @@ async def closing_node(state: InterviewState) -> dict:
         positives=", ".join(memory.get("positive_moments", [])[:2]),
     )
 
-    result = await _call_gemini_json(
+    result = await _call_llm_json(
         "You are a professional technical interviewer closing the interview.",
         prompt,
-        {"closing_text": "Thank you so much for your time today. It was great chatting with you. Our team will be in touch about next steps soon. Good luck!"},
     )
 
     closing_text = result.get("closing_text", "")
@@ -1300,11 +1168,7 @@ async def claim_verifier_node(state: InterviewState) -> dict:
             previous_evidence=previous_evidence,
         )
 
-        result = await _call_gemini_json(
-            CLAIM_VERIFIER_SYSTEM,
-            prompt,
-            {"verification_status": "UNVERIFIED", "evidence": "", "confidence": "low", "reasoning": ""},
-        )
+        result = await _call_llm_json(CLAIM_VERIFIER_SYSTEM, prompt)
 
         new_status = result.get("verification_status", "UNVERIFIED")
         evidence = result.get("evidence", "")
@@ -1395,11 +1259,7 @@ async def interview_replanner_node(state: InterviewState) -> dict:
         difficulty_level=difficulty_level.get("level", "intermediate"),
     )
 
-    result = await _call_gemini_json(
-        INTERVIEW_REPLANNER_SYSTEM,
-        prompt,
-        {"replanned_stages": [], "rationale": "No changes needed"},
-    )
+    result = await _call_llm_json(INTERVIEW_REPLANNER_SYSTEM, prompt)
 
     # Apply replanning — update stage topics if provided
     replanned_stages = result.get("replanned_stages", [])
@@ -1494,25 +1354,7 @@ async def system_design_evaluator_node(state: InterviewState) -> dict:
         company=state.get("company", "the company"),
     )
 
-    fallback_eval = {
-        "requirements_clarification": 5,
-        "api_design": 5,
-        "database_design": 5,
-        "scalability": 5,
-        "caching_strategy": 5,
-        "tradeoff_analysis": 5,
-        "failure_handling": 5,
-        "overall_system_design_score": 5,
-        "strengths": [],
-        "weaknesses": [],
-        "missing_components": [],
-    }
-
-    result = await _call_gemini_json(
-        SYSTEM_DESIGN_EVALUATOR_SYSTEM,
-        prompt,
-        fallback_eval,
-    )
+    result = await _call_llm_json(SYSTEM_DESIGN_EVALUATOR_SYSTEM, prompt)
 
     # Store system design scores in state
     system_design_scores = {
