@@ -19,7 +19,7 @@ pytest-asyncio==0.24.0
 
 # ── AI Interviewer: LangGraph ──────────────────────────────────────────────
 langgraph==0.2.67
-langgraph-checkpoint==2.0.6
+langgraph-checkpoint>=2.0.10,<3.0.0
 typing-extensions>=4.12.0
 
 # ── P1: Redis for persistent interview state ────────────────────────────────

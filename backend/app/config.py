@@ -53,7 +53,6 @@ class Settings(BaseSettings):
     deepgram_api_key: str = Field("", alias="DEEPGRAM_API_KEY")
     elevenlabs_api_key: str = Field("", alias="ELEVENLABS_API_KEY")
     elevenlabs_voice_id: str = Field("21m00Tcm4TlvDq8ikWAM", alias="ELEVENLABS_VOICE_ID")
-    openai_api_key: str = Field("", alias="OPENAI_API_KEY")
     groq_api_key: str = Field("", alias="GROQ_API_KEY")
 
     # ── AI Interviewer: LangGraph ─────────────────────────────────────────
