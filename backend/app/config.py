@@ -135,6 +135,10 @@ class Settings(BaseSettings):
         return [o.strip() for o in self.allowed_origins.split(",") if o.strip()]
 
     @property
+    def base_dir(self) -> Path:
+        return BASE_DIR
+
+    @property
     def shared_dir_path(self) -> Path:
         if self.shared_dir:
             return Path(self.shared_dir)

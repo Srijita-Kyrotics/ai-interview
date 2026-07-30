@@ -667,7 +667,7 @@ Return ONLY valid JSON:
 # FEATURE 4: DIFFICULTY-AWARE QUESTION HINTS
 # ─────────────────────────────────────────────────────────────────────────────
 
-DIFFICULTY_GUIDANCE = {{
+DIFFICULTY_GUIDANCE = {
     "beginner": "The candidate is struggling. Ask simpler, more direct questions. "
                 "Focus on fundamentals and basic concepts. Give them a chance to "
                 "demonstrate foundational knowledge without getting overwhelmed.",
@@ -680,7 +680,7 @@ DIFFICULTY_GUIDANCE = {{
     "expert": "The candidate is excelling. Ask the hardest questions you can. "
               "Focus on system internals, advanced patterns, rare edge cases, "
               "and topics that separate senior from staff-level engineers."
-}}
+}
 
 # ─────────────────────────────────────────────────────────────────────────────
 # FEATURE 6: INTERVIEW REPLANNER PROMPT
