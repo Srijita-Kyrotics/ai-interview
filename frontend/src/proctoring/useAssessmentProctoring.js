@@ -393,7 +393,7 @@ export function useAssessmentProctoring({
           const tf = await import('@tensorflow/tfjs')
           await tf.ready()
           const cocoSsd = await import('@tensorflow-models/coco-ssd')
-          window.objectModel = await cocoSsd.load()
+          window.objectModel = await cocoSsd.load({ modelUrl: '/models/ssd_mobilenet_v2/model.json' })
         }
         objectModelRef.current = window.objectModel
         return objectModelRef.current
