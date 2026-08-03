@@ -50,7 +50,7 @@ import logging
 import time
 import uuid
 
-from fastapi import APIRouter, Depends, HTTPException, Query, WebSocket, WebSocketDisconnect
+from fastapi import APIRouter, Depends, Header, HTTPException, Query, WebSocket, WebSocketDisconnect
 from pydantic import BaseModel
 from starlette.websockets import WebSocketState
 
@@ -102,7 +102,14 @@ class ResumeInterviewRequest(BaseModel):
 
 # ── Dependency: Auth ──────────────────────────────────────────────────────────
 
-def get_current_user(token: str = Query(default="")) -> dict:
+def get_current_user(
+    authorization: str | None = Header(None),
+    token: str = Query(default=""),
+) -> dict:
+    # Accept the JWT from the Authorization: Bearer header (app-wide convention)
+    # or from the ?token= query string (legacy / WS-style callers).
+    if authorization and authorization.startswith("Bearer "):
+        token = authorization[len("Bearer "):]
     payload = decode_token(token)
     if not payload:
         raise HTTPException(status_code=401, detail="Invalid or expired token")

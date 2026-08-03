@@ -34,7 +34,13 @@ async function readTotalQuestions(page) {
 test('full interview flow: resume -> aptitude -> coding -> technical -> report', async ({ page }) => {
   const pageErrors = []
   const cspErrors = []
+  const startFailures = []
   page.on('pageerror', (err) => pageErrors.push(err))
+  page.on('response', (resp) => {
+    if (resp.url().includes('/ai-interview/start') && resp.status() >= 400) {
+      startFailures.push(`${resp.status()} ${resp.url()}`)
+    }
+  })
   page.on('console', (msg) => {
     if (msg.type() === 'error' && msg.text().includes('Content Security Policy')) {
       cspErrors.push(msg.text())
@@ -104,6 +110,13 @@ test('full interview flow: resume -> aptitude -> coding -> technical -> report',
   await expect(page.getByRole('heading', { name: 'AI Technical Interviewer' })).toBeVisible()
   await expect(page.getByRole('heading', { name: 'Something went wrong' })).toHaveCount(0)
 
+  // ── Begin Interview: /ai-interview/start must NOT 401 (auth regression) ──
+  await page.getByRole('button', { name: 'Begin Interview' }).click()
+  await expect(
+    page.locator('.aii-init-message, .aii-error-card')
+  ).toBeVisible({ timeout: 15000 })
+  await expect(page.getByRole('heading', { name: 'Something went wrong' })).toHaveCount(0)
+
   // ── Report renders from the session ──────────────────────────────────
   await page.goto('/report')
   await expect(page.getByRole('heading', { name: 'Candidate readiness summary' })).toBeVisible({ timeout: 30000 })
@@ -111,4 +124,5 @@ test('full interview flow: resume -> aptitude -> coding -> technical -> report',
 
   expect(pageErrors, `page errors:\n${pageErrors.map((e) => e.message).join('\n')}`).toEqual([])
   expect(cspErrors, `CSP violations:\n${cspErrors.join('\n')}`).toEqual([])
+  expect(startFailures, `/ai-interview/start non-2xx:\n${startFailures.join('\n')}`).toEqual([])
 })
