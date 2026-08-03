@@ -23,8 +23,8 @@ class TestUploadResume:
             files={"file": ("image.png", b"binary", "image/png")},
             headers=headers,
         )
-        assert resp.status_code == 200
-        assert "error" in resp.json()
+        assert resp.status_code == 400
+        assert "error" in resp.json() or "detail" in resp.json()
 
     def test_upload_requires_auth(self, client):
         resp = client.post(
@@ -35,29 +35,35 @@ class TestUploadResume:
 
 
 class TestSelectCompany:
-    def test_select_valid_companies(self, client, seed_session):
-        sid = seed_session()
+    def test_select_valid_companies(self, client, auth_header, seed_user, seed_session):
+        seed_user(email="pick@test.com")
+        headers = auth_header("pick@test.com")
+        sid = seed_session(user_id="pick@test.com")
         resp = client.post("/select-company", json={
             "session_id": sid,
             "companies": ["Google", "Microsoft"],
-        })
+        }, headers=headers)
         assert resp.status_code == 200
         assert "rounds" in resp.json()
 
-    def test_select_empty_companies(self, client, seed_session):
-        sid = seed_session()
+    def test_select_empty_companies(self, client, auth_header, seed_user, seed_session):
+        seed_user(email="pick@test.com")
+        headers = auth_header("pick@test.com")
+        sid = seed_session(user_id="pick@test.com")
         resp = client.post("/select-company", json={
             "session_id": sid,
             "companies": [],
-        })
+        }, headers=headers)
         assert resp.status_code == 200
 
-    def test_select_invalid_companies(self, client, seed_session):
-        sid = seed_session()
+    def test_select_invalid_companies(self, client, auth_header, seed_user, seed_session):
+        seed_user(email="pick@test.com")
+        headers = auth_header("pick@test.com")
+        sid = seed_session(user_id="pick@test.com")
         resp = client.post("/select-company", json={
             "session_id": sid,
             "companies": ["NonExistentCompany123"],
-        })
+        }, headers=headers)
         assert resp.status_code == 200
         data = resp.json()
         # Should return error or empty rounds

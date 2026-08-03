@@ -151,18 +151,22 @@ function FormattedText({ text }) {
 function getNextStage(type) {
   if (type === 'aptitude') return 'coding'
   if (type === 'coding') return 'technical'
-  if (type === 'technical') return 'hr'
   return 'report'
 }
 
-function RoundPage({ title, items, type, state, setState, proctoring, setProctoring }) {
+function RoundPage({ title, items: itemsProp, pool, build, type, state, setState, proctoring, setProctoring }) {
   const navigate = useNavigate()
+  const [items] = useState(() => {
+    if (build) return build(pool || [])
+    return Array.isArray(itemsProp) ? itemsProp : []
+  })
   const [idx, setIdx] = useState(0)
   const [answer, setAnswer] = useState('')
   const [selectedMCQ, setSelectedMCQ] = useState('')
   const [timeLeft, setTimeLeft] = useState(roundDurations[type] || 10 * 60)
   const [hasPermissions, setHasPermissions] = useState(false)
   const [isStarted, setIsStarted] = useState(false)
+  const [skipProctoring, setSkipProctoring] = useState(false)
   const [proctorError, setProctorError] = useState('')
   const [userStream, setUserStream] = useState(null)
   const [screenStream, setScreenStream] = useState(null)
@@ -184,7 +188,7 @@ function RoundPage({ title, items, type, state, setState, proctoring, setProctor
   const submittingRef = useRef(false)
   const submitRef = useRef(null)
   const proctor = useAssessmentProctoring({
-    active: isStarted,
+    active: isStarted && !skipProctoring,
     round: type,
     sessionId: state.sessionId,
     navigate,
@@ -289,14 +293,15 @@ function RoundPage({ title, items, type, state, setState, proctoring, setProctor
     }
   }
 
-  const beginTest = async () => {
+  const beginTest = async (skip = false) => {
     try {
-      await proctor.requestFullscreen()
+      if (!skip) await proctor.requestFullscreen()
       const res = await api.post('/start-round', { session_id: state.sessionId, company: state.company, round_key: type })
       if (!res.ok && res.error) {
         setProctorError(res.error)
         return
       }
+      setSkipProctoring(skip)
       setTimeLeft(duration)
       setIsStarted(true)
       setRunStatus('')
@@ -462,6 +467,9 @@ function RoundPage({ title, items, type, state, setState, proctoring, setProctor
               <button className="btn primary" type="button" onClick={beginTest}>Begin Test</button>
             </>
           )}
+          <button className="btn ghost" type="button" onClick={() => beginTest(true)} style={{ marginTop: '16px' }}>
+            Skip Proctoring (Test Mode)
+          </button>
         </div>
       </section>
     )
@@ -534,6 +542,20 @@ function RoundPage({ title, items, type, state, setState, proctoring, setProctor
                 <ul>
                   {current.examples.map((item, index) => <li key={index}>{item}</li>)}
                 </ul>
+              </div>
+            ) : null}
+
+            {type === 'coding' && current.testCases?.length ? (
+              <div className="question-examples">
+                <strong>Test Cases</strong>
+                <div className="test-results">
+                  {current.testCases.map((tc, i) => (
+                    <div key={i} className="test-row">
+                      <span>Input: {tc.input.replace(/\n$/, '')}</span>
+                      <strong>Expected: {tc.expected}</strong>
+                    </div>
+                  ))}
+                </div>
               </div>
             ) : null}
           </div>

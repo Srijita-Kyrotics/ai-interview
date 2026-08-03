@@ -189,7 +189,7 @@ export default function AIInterviewer({ sessionId, token, role, company, onCompl
   const [userStream, setUserStream] = useState(null);
   const [screenStream, setScreenStream] = useState(null);
 
-  const [hasPermissions, isStarted, proctorError, warnings, infractions] = useAssessmentProctoring({
+  const proctor = useAssessmentProctoring({
     active: phase === 'interviewing' || phase === 'opening' || phase === 'initializing',
     round: 'technical',
     sessionId,
@@ -201,6 +201,9 @@ export default function AIInterviewer({ sessionId, token, role, company, onCompl
     webcamStream: userStream,
     screenStream
   });
+  const proctorError = proctor.status.assessmentStatus === 'Terminated Due To Malpractice'
+    ? proctor.status.terminatedReason || 'Assessment terminated due to malpractice.'
+    : '';
 
   // ── Refs ────────────────────────────────────────────────────────────
   const wsRef = useRef(null);
@@ -804,6 +807,7 @@ export default function AIInterviewer({ sessionId, token, role, company, onCompl
   // ── Interview Room ────────────────────────────────────────────────────
   return (
     <div className="aii-container aii-container--active">
+      <ProctoringModal modal={proctor.modal} onClose={proctor.dismissModal} />
       {/* Header */}
       <div className="aii-header">
         <div className="aii-header__interviewer">

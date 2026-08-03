@@ -2,15 +2,16 @@ from __future__ import annotations
 
 import json
 import re
-import time
 import uuid
 from typing import Any
 
 import google.generativeai as genai
 import httpx
-from fastapi import APIRouter, Depends, File, HTTPException, Request, UploadFile
+from fastapi import APIRouter, Depends, File, HTTPException, UploadFile
 from pydantic import BaseModel
 
+from app.auth_routes import get_current_user, require_admin, require_candidate, require_recruiter
+from app.code_executor import execute_local, normalize_output
 from app.config import settings
 from app.db import (
     cache_get,
@@ -28,7 +29,6 @@ from app.db import (
 )
 from app.helpers import default_scores, sanitize_for_ai
 from app.resume_parser import extract_text_from_pdf_content, parse_resume_text
-from app.auth_routes import get_current_user, require_admin, require_candidate, require_recruiter
 
 router = APIRouter()
 
@@ -388,18 +388,42 @@ def submit_answer(payload: SubmitAnswerRequest):
 
 
 @router.post("/submit-code")
-def submit_code(payload: SubmitCodeRequest):
+async def submit_code(payload: SubmitCodeRequest, user: dict[str, Any] = Depends(require_candidate)):
+    if not _check_rate_limit(f"code:{user['email']}", settings.code_rate_limit, settings.code_rate_window):
+        raise HTTPException(status_code=429, detail="Too many code execution requests. Please wait.")
     state = load_session(payload.session_id)
     if not state:
         return {"error": "No active session"}
+    if state.get("user_id", "") != user["email"] and user["role"] not in ("recruiter", "admin"):
+        raise HTTPException(status_code=403, detail="Not your session")
+
+    if payload.code == "[Skipped]":
+        run = {"ok": True, "score": 0, "results": []}
+    else:
+        try:
+            question = CODING_QUESTIONS[payload.question_index]
+        except (IndexError, TypeError):
+            question = None
+        question_id = question.get("id") if question else payload.question_index + 1
+        run = await simulate_code_run(question_id, payload.language, payload.code)
+
     state["codingSubmissions"].append({
         "roundKey": payload.round_key,
         "questionIndex": payload.question_index,
         "language": payload.language,
         "code": payload.code,
+        "score": run.get("score", 0),
+        "results": run.get("results", []),
     })
+
+    graded = [s for s in state["codingSubmissions"] if s.get("code") != "[Skipped]"]
+    if graded:
+        state.setdefault("scores", default_scores())["coding"] = round(
+            sum(s.get("score", 0) for s in graded) / len(graded)
+        )
+
     save_session(payload.session_id, state)
-    return {"ok": True}
+    return {"ok": True, "score": run.get("score", 0), "results": run.get("results", [])}
 
 
 @router.get("/rounds/{company}")
@@ -426,96 +450,133 @@ def get_questions(round_type: str):
     return datasets[round_type]
 
 
+async def _run_local_test_cases(language: str, code: str, test_cases: list[dict[str, Any]]) -> tuple[list[dict[str, Any]], int]:
+    """Run every test case through the local execution engine."""
+    results: list[dict[str, Any]] = []
+    passed = 0
+    for case in test_cases:
+        expected = case.get("expected", "")
+        result = await execute_local(language, code, str(case.get("input", "")))
+
+        if result.get("ok") is False and result.get("error"):
+            output = result["error"]
+            status = "failed"
+        elif result.get("missing_runtime"):
+            output = result.get("error") or f"Local runtime not available for {language}"
+            status = "failed"
+        elif result.get("timed_out"):
+            output = result.get("stderr") or "Execution timed out."
+            status = "failed"
+        elif result.get("stderr"):
+            output = result["stderr"]
+            status = "failed"
+        else:
+            output = result.get("stdout", "")
+            if normalize_output(output) == normalize_output(expected):
+                status = "passed"
+                passed += 1
+            else:
+                status = "failed"
+
+        results.append({"input": case.get("input"), "expected": expected, "output": output, "status": status})
+    return results, passed
+
+
+async def _run_judge0_test_cases(
+    language: str, code: str, test_cases: list[dict[str, Any]]
+) -> tuple[list[dict[str, Any]], int, bool]:
+    """Run every test case through the Judge0 API.
+
+    Returns ``(results, passed, api_usable)`` where ``api_usable`` is False if
+    the Judge0 service itself failed (auth, rate limit, network), so the caller
+    can fall back to local execution.
+    """
+    results: list[dict[str, Any]] = []
+    passed = 0
+    api_usable = True
+
+    judge0_host = settings.judge0_host
+    language_ids = settings.judge0_language_ids
+    headers = {
+        "x-rapidapi-key": settings.judge0_api_key,
+        "x-rapidapi-host": judge0_host,
+        "Content-Type": "application/json",
+    }
+
+    async with httpx.AsyncClient() as client:
+        for case in test_cases:
+            expected = case.get("expected", "")
+            payload = {
+                "language_id": language_ids[language],
+                "source_code": code,
+                "stdin": str(case.get("input", "")),
+                "expected_output": expected,
+            }
+
+            try:
+                response = await client.post(
+                    f"https://{judge0_host}/submissions?base64_encoded=false&wait=true",
+                    json=payload,
+                    headers=headers,
+                    timeout=settings.judge0_timeout,
+                )
+            except Exception as e:
+                api_usable = False
+                results.append({
+                    "input": case.get("input"),
+                    "expected": expected,
+                    "output": f"Judge0 unavailable, falling back to local execution. ({e})",
+                    "status": "failed",
+                })
+                continue
+
+            if response.status_code != 200:
+                api_usable = False
+                results.append({
+                    "input": case.get("input"),
+                    "expected": expected,
+                    "output": f"Judge0 API error {response.status_code}, falling back to local execution.",
+                    "status": "failed",
+                })
+                continue
+
+            data = response.json()
+            stdout = data.get("stdout") or ""
+            stderr = data.get("stderr") or ""
+            compile_output = data.get("compile_output") or ""
+            actual_output = stdout.strip() if stdout else (stderr or compile_output).strip()
+
+            status_id = data.get("status", {}).get("id")
+            if status_id == 3:
+                status = "passed"
+                passed += 1
+            else:
+                status = "failed"
+
+            results.append({
+                "input": case.get("input"),
+                "expected": expected,
+                "output": actual_output or "No output",
+                "status": status,
+            })
+
+    return results, passed, api_usable
+
+
 async def simulate_code_run(question_id: int, language: str, code: str) -> dict[str, Any]:
     question = next((q for q in CODING_QUESTIONS if q.get("id") == question_id), None)
     if not question:
         return {"ok": False, "error": "Coding question not found."}
 
     test_cases = question.get("testCases", [])
-    results = []
-    passed = 0
 
-    judge0_key = settings.judge0_api_key
-    judge0_host = settings.judge0_host
-    language_ids = settings.judge0_language_ids
-
-    if not judge0_key or language not in language_ids:
-        heuristic = code.lower()
-        for case in test_cases:
-            expected = case.get("expected", "")
-            output = ""
-            status = "failed"
-
-            keywords = case.get("pass_keywords", [])
-            if keywords and any(kw.lower() in heuristic for kw in keywords):
-                output = expected
-                status = "passed"
-            else:
-                output = "Runtime output did not match expected result."
-
-            if status == "passed":
-                passed += 1
-            results.append({"input": case.get("input"), "expected": expected, "output": output, "status": status})
+    use_judge0 = bool(settings.judge0_api_key) and language in settings.judge0_language_ids
+    if use_judge0:
+        results, passed, api_usable = await _run_judge0_test_cases(language, code, test_cases)
+        if not api_usable:
+            results, passed = await _run_local_test_cases(language, code, test_cases)
     else:
-        async with httpx.AsyncClient() as client:
-            headers = {
-                "x-rapidapi-key": judge0_key,
-                "x-rapidapi-host": judge0_host,
-                "Content-Type": "application/json"
-            }
-
-            for case in test_cases:
-                expected = case.get("expected", "")
-                payload = {
-                    "language_id": language_ids[language],
-                    "source_code": code,
-                    "stdin": str(case.get("input", "")),
-                    "expected_output": expected
-                }
-
-                try:
-                    response = await client.post(
-                        f"https://{judge0_host}/submissions?base64_encoded=false&wait=true",
-                        json=payload,
-                        headers=headers,
-                        timeout=settings.judge0_timeout
-                    )
-
-                    if response.status_code == 200:
-                        data = response.json()
-                        stdout = data.get("stdout") or ""
-                        stderr = data.get("stderr") or ""
-                        compile_output = data.get("compile_output") or ""
-
-                        actual_output = stdout.strip() if stdout else (stderr or compile_output).strip()
-
-                        status_id = data.get("status", {}).get("id")
-                        if status_id == 3:
-                            status = "passed"
-                            passed += 1
-                        else:
-                            status = "failed"
-
-                        results.append({
-                            "input": case.get("input"),
-                            "expected": expected,
-                            "output": actual_output or "No output",
-                            "status": status
-                        })
-                    else:
-                        results.append({
-                            "input": case.get("input"),
-                            "expected": expected,
-                            "output": f"API Error {response.status_code}",
-                            "status": "failed"
-                        })
-                except Exception as e:
-                    results.append({
-                        "input": case.get("input"),
-                        "expected": expected,
-                        "output": f"Execution Error: {str(e)}",
-                        "status": "failed"
-                    })
+        results, passed = await _run_local_test_cases(language, code, test_cases)
 
     score = round((passed / len(test_cases)) * 100) if test_cases else 0
     return {
@@ -526,7 +587,7 @@ async def simulate_code_run(question_id: int, language: str, code: str) -> dict[
         "passed": passed,
         "total": len(test_cases),
         "score": score,
-        "console": "Code executed successfully." if results else "No test cases available."
+        "console": "Code executed successfully." if results else "No test cases available.",
     }
 
 

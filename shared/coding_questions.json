@@ -11,20 +11,22 @@
       "csharp": "// C#\npublic class Solution {\n  public static object Solve() {\n    // Your code here\n    return null;\n  }\n}"
     },
     "examples": [
-      "Example: see problem statement"
+      "Input: hello  =>  Output: olleh",
+      "Input: A man, a plan  =>  Output: nalp a ,nam A",
+      "Input: racecar  =>  Output: racecar"
     ],
     "testCases": [
       {
-        "input": "sample_input_1",
-        "expected": "expected_output_1"
+        "input": "hello\n",
+        "expected": "olleh"
       },
       {
-        "input": "sample_input_2",
-        "expected": "expected_output_2"
+        "input": "A man, a plan\n",
+        "expected": "nalp a ,nam A"
       },
       {
-        "input": "sample_input_3",
-        "expected": "expected_output_3"
+        "input": "racecar\n",
+        "expected": "racecar"
       }
     ]
   },
@@ -40,20 +42,22 @@
       "csharp": "// C#\npublic class Solution {\n  public static object Solve() {\n    // Your code here\n    return null;\n  }\n}"
     },
     "examples": [
-      "Example: see problem statement"
+      "Input: 2 7 11 15 9  =>  Output: 0 1",
+      "Input: 3 2 4 6  =>  Output: 1 2",
+      "Input: -1 -2 -3 -4 -5 -8  =>  Output: 2 4"
     ],
     "testCases": [
       {
-        "input": "sample_input_1",
-        "expected": "expected_output_1"
+        "input": "2 7 11 15\n9\n",
+        "expected": "0 1"
       },
       {
-        "input": "sample_input_2",
-        "expected": "expected_output_2"
+        "input": "3 2 4\n6\n",
+        "expected": "1 2"
       },
       {
-        "input": "sample_input_3",
-        "expected": "expected_output_3"
+        "input": "-1 -2 -3 -4 -5\n-8\n",
+        "expected": "2 4"
       }
     ]
   },
@@ -69,20 +73,22 @@
       "csharp": "// C#\npublic class Solution {\n  public static object Solve() {\n    // Your code here\n    return null;\n  }\n}"
     },
     "examples": [
-      "Example: see problem statement"
+      "Input: ()  =>  Output: true",
+      "Input: ()[]{}  =>  Output: true",
+      "Input: (]  =>  Output: false"
     ],
     "testCases": [
       {
-        "input": "sample_input_1",
-        "expected": "expected_output_1"
+        "input": "()\n",
+        "expected": "true"
       },
       {
-        "input": "sample_input_2",
-        "expected": "expected_output_2"
+        "input": "()[]{}\n",
+        "expected": "true"
       },
       {
-        "input": "sample_input_3",
-        "expected": "expected_output_3"
+        "input": "(]\n",
+        "expected": "false"
       }
     ]
   },
@@ -98,20 +104,22 @@
       "csharp": "// C#\npublic class Solution {\n  public static object Solve() {\n    // Your code here\n    return null;\n  }\n}"
     },
     "examples": [
-      "Example: see problem statement"
+      "Input: 2  =>  Output: 1",
+      "Input: 3  =>  Output: 2",
+      "Input: 10  =>  Output: 55"
     ],
     "testCases": [
       {
-        "input": "sample_input_1",
-        "expected": "expected_output_1"
+        "input": "2\n",
+        "expected": "1"
       },
       {
-        "input": "sample_input_2",
-        "expected": "expected_output_2"
+        "input": "3\n",
+        "expected": "2"
       },
       {
-        "input": "sample_input_3",
-        "expected": "expected_output_3"
+        "input": "10\n",
+        "expected": "55"
       }
     ]
   },
@@ -127,20 +135,22 @@
       "csharp": "// C#\npublic class Solution {\n  public static object Solve() {\n    // Your code here\n    return null;\n  }\n}"
     },
     "examples": [
-      "Example: see problem statement"
+      "Input: 1 3 5 2 4 6  =>  Output: 1 2 3 4 5 6",
+      "Input: 0 10 1 2  =>  Output: 0 1 2 10",
+      "Input: 1 2 3  =>  Output: 1 2 3"
     ],
     "testCases": [
       {
-        "input": "sample_input_1",
-        "expected": "expected_output_1"
+        "input": "1 3 5\n2 4 6\n",
+        "expected": "1 2 3 4 5 6"
       },
       {
-        "input": "sample_input_2",
-        "expected": "expected_output_2"
+        "input": "0 10\n1 2\n",
+        "expected": "0 1 2 10"
       },
       {
-        "input": "sample_input_3",
-        "expected": "expected_output_3"
+        "input": "1 2 3\n\n",
+        "expected": "1 2 3"
       }
     ]
   },
@@ -156,20 +166,22 @@
       "csharp": "// C#\npublic class Solution {\n  public static object Solve() {\n    // Your code here\n    return null;\n  }\n}"
     },
     "examples": [
-      "Example: see problem statement"
+      "Input: A man, a plan, a canal: Panama  =>  Output: true",
+      "Input: race a car  =>  Output: false",
+      "Input: 0P  =>  Output: false"
     ],
     "testCases": [
       {
-        "input": "sample_input_1",
-        "expected": "expected_output_1"
+        "input": "A man, a plan, a canal: Panama\n",
+        "expected": "true"
       },
       {
-        "input": "sample_input_2",
-        "expected": "expected_output_2"
+        "input": "race a car\n",
+        "expected": "false"
       },
       {
-        "input": "sample_input_3",
-        "expected": "expected_output_3"
+        "input": "0P\n",
+        "expected": "false"
       }
     ]
   },
@@ -185,20 +197,22 @@
       "csharp": "// C#\npublic class Solution {\n  public static object Solve() {\n    // Your code here\n    return null;\n  }\n}"
     },
     "examples": [
-      "Example: see problem statement"
+      "Input: 0  =>  Output: 1",
+      "Input: 5  =>  Output: 120",
+      "Input: 10  =>  Output: 3628800"
     ],
     "testCases": [
       {
-        "input": "sample_input_1",
-        "expected": "expected_output_1"
+        "input": "0\n",
+        "expected": "1"
       },
       {
-        "input": "sample_input_2",
-        "expected": "expected_output_2"
+        "input": "5\n",
+        "expected": "120"
       },
       {
-        "input": "sample_input_3",
-        "expected": "expected_output_3"
+        "input": "10\n",
+        "expected": "3628800"
       }
     ]
   },
@@ -214,20 +228,22 @@
       "csharp": "// C#\npublic class Solution {\n  public static object Solve() {\n    // Your code here\n    return null;\n  }\n}"
     },
     "examples": [
-      "Example: see problem statement"
+      "Input: hello  =>  Output: 2",
+      "Input: HELLO world  =>  Output: 3",
+      "Input: rhythm  =>  Output: 0"
     ],
     "testCases": [
       {
-        "input": "sample_input_1",
-        "expected": "expected_output_1"
+        "input": "hello\n",
+        "expected": "2"
       },
       {
-        "input": "sample_input_2",
-        "expected": "expected_output_2"
+        "input": "HELLO world\n",
+        "expected": "3"
       },
       {
-        "input": "sample_input_3",
-        "expected": "expected_output_3"
+        "input": "rhythm\n",
+        "expected": "0"
       }
     ]
   },
@@ -243,20 +259,22 @@
       "csharp": "// C#\npublic class Solution {\n  public static object Solve() {\n    // Your code here\n    return null;\n  }\n}"
     },
     "examples": [
-      "Example: see problem statement"
+      "Input: 3 7 2 9 4  =>  Output: 9",
+      "Input: -5 -1 -3  =>  Output: -1",
+      "Input: 7  =>  Output: 7"
     ],
     "testCases": [
       {
-        "input": "sample_input_1",
-        "expected": "expected_output_1"
+        "input": "3 7 2 9 4\n",
+        "expected": "9"
       },
       {
-        "input": "sample_input_2",
-        "expected": "expected_output_2"
+        "input": "-5 -1 -3\n",
+        "expected": "-1"
       },
       {
-        "input": "sample_input_3",
-        "expected": "expected_output_3"
+        "input": "7\n",
+        "expected": "7"
       }
     ]
   },
@@ -272,20 +290,22 @@
       "csharp": "// C#\npublic class Solution {\n  public static object Solve() {\n    // Your code here\n    return null;\n  }\n}"
     },
     "examples": [
-      "Example: see problem statement"
+      "Input: 5 1 4 2 8  =>  Output: 1 2 4 5 8",
+      "Input: 1 2 3  =>  Output: 1 2 3",
+      "Input: 9 3 5 1 7 2  =>  Output: 1 2 3 5 7 9"
     ],
     "testCases": [
       {
-        "input": "sample_input_1",
-        "expected": "expected_output_1"
+        "input": "5 1 4 2 8\n",
+        "expected": "1 2 4 5 8"
       },
       {
-        "input": "sample_input_2",
-        "expected": "expected_output_2"
+        "input": "1 2 3\n",
+        "expected": "1 2 3"
       },
       {
-        "input": "sample_input_3",
-        "expected": "expected_output_3"
+        "input": "9 3 5 1 7 2\n",
+        "expected": "1 2 3 5 7 9"
       }
     ]
   },
@@ -301,20 +321,22 @@
       "csharp": "// C#\npublic class Solution {\n  public static object Solve() {\n    // Your code here\n    return null;\n  }\n}"
     },
     "examples": [
-      "Example: see problem statement"
+      "Input: 5 8 2 9 9  =>  Output: 3",
+      "Input: 5 8 2 9 7  =>  Output: -1",
+      "Input: 1 1  =>  Output: 0"
     ],
     "testCases": [
       {
-        "input": "sample_input_1",
-        "expected": "expected_output_1"
+        "input": "5 8 2 9\n9\n",
+        "expected": "3"
       },
       {
-        "input": "sample_input_2",
-        "expected": "expected_output_2"
+        "input": "5 8 2 9\n7\n",
+        "expected": "-1"
       },
       {
-        "input": "sample_input_3",
-        "expected": "expected_output_3"
+        "input": "1\n1\n",
+        "expected": "0"
       }
     ]
   },
@@ -330,20 +352,22 @@
       "csharp": "// C#\npublic class Solution {\n  public static object Solve() {\n    // Your code here\n    return null;\n  }\n}"
     },
     "examples": [
-      "Example: see problem statement"
+      "Input: 1 1 2  =>  Output: 2",
+      "Input: 0 0 1 1 1 2 2 3 3 4  =>  Output: 5",
+      "Input: 5  =>  Output: 1"
     ],
     "testCases": [
       {
-        "input": "sample_input_1",
-        "expected": "expected_output_1"
+        "input": "1 1 2\n",
+        "expected": "2"
       },
       {
-        "input": "sample_input_2",
-        "expected": "expected_output_2"
+        "input": "0 0 1 1 1 2 2 3 3 4\n",
+        "expected": "5"
       },
       {
-        "input": "sample_input_3",
-        "expected": "expected_output_3"
+        "input": "5\n",
+        "expected": "1"
       }
     ]
   },
@@ -359,20 +383,22 @@
       "csharp": "// C#\npublic class Solution {\n  public static object Solve() {\n    // Your code here\n    return null;\n  }\n}"
     },
     "examples": [
-      "Example: see problem statement"
+      "Input: 1 2 3  =>  Output: 1 2 4",
+      "Input: 9  =>  Output: 1 0",
+      "Input: 9 9 9  =>  Output: 1 0 0 0"
     ],
     "testCases": [
       {
-        "input": "sample_input_1",
-        "expected": "expected_output_1"
+        "input": "1 2 3\n",
+        "expected": "1 2 4"
       },
       {
-        "input": "sample_input_2",
-        "expected": "expected_output_2"
+        "input": "9\n",
+        "expected": "1 0"
       },
       {
-        "input": "sample_input_3",
-        "expected": "expected_output_3"
+        "input": "9 9 9\n",
+        "expected": "1 0 0 0"
       }
     ]
   },
@@ -388,20 +414,22 @@
       "csharp": "// C#\npublic class Solution {\n  public static object Solve() {\n    // Your code here\n    return null;\n  }\n}"
     },
     "examples": [
-      "Example: see problem statement"
+      "Input: 2 2 1  =>  Output: 1",
+      "Input: 4 1 2 1 2  =>  Output: 4",
+      "Input: 7  =>  Output: 7"
     ],
     "testCases": [
       {
-        "input": "sample_input_1",
-        "expected": "expected_output_1"
+        "input": "2 2 1\n",
+        "expected": "1"
       },
       {
-        "input": "sample_input_2",
-        "expected": "expected_output_2"
+        "input": "4 1 2 1 2\n",
+        "expected": "4"
       },
       {
-        "input": "sample_input_3",
-        "expected": "expected_output_3"
+        "input": "7\n",
+        "expected": "7"
       }
     ]
   },
@@ -417,20 +445,22 @@
       "csharp": "// C#\npublic class Solution {\n  public static object Solve() {\n    // Your code here\n    return null;\n  }\n}"
     },
     "examples": [
-      "Example: see problem statement"
+      "Input: 7 1 5 3 6 4  =>  Output: 5",
+      "Input: 7 6 4 3 1  =>  Output: 0",
+      "Input: 2 4 1  =>  Output: 2"
     ],
     "testCases": [
       {
-        "input": "sample_input_1",
-        "expected": "expected_output_1"
+        "input": "7 1 5 3 6 4\n",
+        "expected": "5"
       },
       {
-        "input": "sample_input_2",
-        "expected": "expected_output_2"
+        "input": "7 6 4 3 1\n",
+        "expected": "0"
       },
       {
-        "input": "sample_input_3",
-        "expected": "expected_output_3"
+        "input": "2 4 1\n",
+        "expected": "2"
       }
     ]
   },
@@ -446,20 +476,22 @@
       "csharp": "// C#\npublic class Solution {\n  public static object Solve() {\n    // Your code here\n    return null;\n  }\n}"
     },
     "examples": [
-      "Example: see problem statement"
+      "Input: 3 2 3  =>  Output: 3",
+      "Input: 2 2 1 1 1 2 2  =>  Output: 2",
+      "Input: 6 6 6 1  =>  Output: 6"
     ],
     "testCases": [
       {
-        "input": "sample_input_1",
-        "expected": "expected_output_1"
+        "input": "3 2 3\n",
+        "expected": "3"
       },
       {
-        "input": "sample_input_2",
-        "expected": "expected_output_2"
+        "input": "2 2 1 1 1 2 2\n",
+        "expected": "2"
       },
       {
-        "input": "sample_input_3",
-        "expected": "expected_output_3"
+        "input": "6 6 6 1\n",
+        "expected": "6"
       }
     ]
   },
@@ -475,20 +507,22 @@
       "csharp": "// C#\npublic class Solution {\n  public static object Solve() {\n    // Your code here\n    return null;\n  }\n}"
     },
     "examples": [
-      "Example: see problem statement"
+      "Input: 1 2 3 1  =>  Output: true",
+      "Input: 1 2 3 4  =>  Output: false",
+      "Input: 1 1 1 3 3 4 3 2 4 2  =>  Output: true"
     ],
     "testCases": [
       {
-        "input": "sample_input_1",
-        "expected": "expected_output_1"
+        "input": "1 2 3 1\n",
+        "expected": "true"
       },
       {
-        "input": "sample_input_2",
-        "expected": "expected_output_2"
+        "input": "1 2 3 4\n",
+        "expected": "false"
       },
       {
-        "input": "sample_input_3",
-        "expected": "expected_output_3"
+        "input": "1 1 1 3 3 4 3 2 4 2\n",
+        "expected": "true"
       }
     ]
   },
@@ -504,20 +538,22 @@
       "csharp": "// C#\npublic class Solution {\n  public static object Solve() {\n    // Your code here\n    return null;\n  }\n}"
     },
     "examples": [
-      "Example: see problem statement"
+      "Input: 3 0 1  =>  Output: 2",
+      "Input: 0 1  =>  Output: 2",
+      "Input: 9 6 4 2 3 5 7 0 1  =>  Output: 8"
     ],
     "testCases": [
       {
-        "input": "sample_input_1",
-        "expected": "expected_output_1"
+        "input": "3 0 1\n",
+        "expected": "2"
       },
       {
-        "input": "sample_input_2",
-        "expected": "expected_output_2"
+        "input": "0 1\n",
+        "expected": "2"
       },
       {
-        "input": "sample_input_3",
-        "expected": "expected_output_3"
+        "input": "9 6 4 2 3 5 7 0 1\n",
+        "expected": "8"
       }
     ]
   },
@@ -533,20 +569,21 @@
       "csharp": "// C#\npublic class Solution {\n  public static object Solve() {\n    // Your code here\n    return null;\n  }\n}"
     },
     "examples": [
-      "Example: see problem statement"
+      "Input: 1 2 2 1 2 2  =>  Output: 2",
+      "Input: 4 9 5 9 4 9 8 4  =>  Output: 4 9"
     ],
     "testCases": [
       {
-        "input": "sample_input_1",
-        "expected": "expected_output_1"
+        "input": "1 2 2 1\n2 2\n",
+        "expected": "2"
       },
       {
-        "input": "sample_input_2",
-        "expected": "expected_output_2"
+        "input": "4 9 5\n9 4 9 8 4\n",
+        "expected": "4 9"
       },
       {
-        "input": "sample_input_3",
-        "expected": "expected_output_3"
+        "input": "1 2 3\n4 5 6\n",
+        "expected": ""
       }
     ]
   },
@@ -562,20 +599,22 @@
       "csharp": "// C#\npublic class Solution {\n  public static object Solve() {\n    // Your code here\n    return null;\n  }\n}"
     },
     "examples": [
-      "Example: see problem statement"
+      "Input: 0 1 0 3 12  =>  Output: 1 3 12 0 0",
+      "Input: 0  =>  Output: 0",
+      "Input: 0 0 1  =>  Output: 1 0 0"
     ],
     "testCases": [
       {
-        "input": "sample_input_1",
-        "expected": "expected_output_1"
+        "input": "0 1 0 3 12\n",
+        "expected": "1 3 12 0 0"
       },
       {
-        "input": "sample_input_2",
-        "expected": "expected_output_2"
+        "input": "0\n",
+        "expected": "0"
       },
       {
-        "input": "sample_input_3",
-        "expected": "expected_output_3"
+        "input": "0 0 1\n",
+        "expected": "1 0 0"
       }
     ]
   },
@@ -591,20 +630,22 @@
       "csharp": "// C#\npublic class Solution {\n  public static object Solve() {\n    // Your code here\n    return null;\n  }\n}"
     },
     "examples": [
-      "Example: see problem statement"
+      "Input: 1 2 3 4 5 6 7 3  =>  Output: 5 6 7 1 2 3 4",
+      "Input: -1 -100 3 99 2  =>  Output: 3 99 -1 -100",
+      "Input: 1 2 3  =>  Output: 2 1"
     ],
     "testCases": [
       {
-        "input": "sample_input_1",
-        "expected": "expected_output_1"
+        "input": "1 2 3 4 5 6 7\n3\n",
+        "expected": "5 6 7 1 2 3 4"
       },
       {
-        "input": "sample_input_2",
-        "expected": "expected_output_2"
+        "input": "-1 -100 3 99\n2\n",
+        "expected": "3 99 -1 -100"
       },
       {
-        "input": "sample_input_3",
-        "expected": "expected_output_3"
+        "input": "1 2\n3\n",
+        "expected": "2 1"
       }
     ]
   },
@@ -620,20 +661,22 @@
       "csharp": "// C#\npublic class Solution {\n  public static object Solve() {\n    // Your code here\n    return null;\n  }\n}"
     },
     "examples": [
-      "Example: see problem statement"
+      "Input: -2 1 -3 4 -1 2 1 -5 4  =>  Output: 6",
+      "Input: 1  =>  Output: 1",
+      "Input: 5 4 -1 7 8  =>  Output: 23"
     ],
     "testCases": [
       {
-        "input": "sample_input_1",
-        "expected": "expected_output_1"
+        "input": "-2 1 -3 4 -1 2 1 -5 4\n",
+        "expected": "6"
       },
       {
-        "input": "sample_input_2",
-        "expected": "expected_output_2"
+        "input": "1\n",
+        "expected": "1"
       },
       {
-        "input": "sample_input_3",
-        "expected": "expected_output_3"
+        "input": "5 4 -1 7 8\n",
+        "expected": "23"
       }
     ]
   },
@@ -649,20 +692,22 @@
       "csharp": "// C#\npublic class Solution {\n  public static object Solve() {\n    // Your code here\n    return null;\n  }\n}"
     },
     "examples": [
-      "Example: see problem statement"
+      "Input: 1 3 5 6 5  =>  Output: 2",
+      "Input: 1 3 5 6 2  =>  Output: 1",
+      "Input: 1 3 5 6 7  =>  Output: 4"
     ],
     "testCases": [
       {
-        "input": "sample_input_1",
-        "expected": "expected_output_1"
+        "input": "1 3 5 6\n5\n",
+        "expected": "2"
       },
       {
-        "input": "sample_input_2",
-        "expected": "expected_output_2"
+        "input": "1 3 5 6\n2\n",
+        "expected": "1"
       },
       {
-        "input": "sample_input_3",
-        "expected": "expected_output_3"
+        "input": "1 3 5 6\n7\n",
+        "expected": "4"
       }
     ]
   },
@@ -678,20 +723,22 @@
       "csharp": "// C#\npublic class Solution {\n  public static object Solve() {\n    // Your code here\n    return null;\n  }\n}"
     },
     "examples": [
-      "Example: see problem statement"
+      "Input: Hello World  =>  Output: 5",
+      "Input: fly me   to   the moon  =>  Output: 4",
+      "Input: luffy is still joyboy  =>  Output: 6"
     ],
     "testCases": [
       {
-        "input": "sample_input_1",
-        "expected": "expected_output_1"
+        "input": "Hello World\n",
+        "expected": "5"
       },
       {
-        "input": "sample_input_2",
-        "expected": "expected_output_2"
+        "input": "   fly me   to   the moon  \n",
+        "expected": "4"
       },
       {
-        "input": "sample_input_3",
-        "expected": "expected_output_3"
+        "input": "luffy is still joyboy\n",
+        "expected": "6"
       }
     ]
   },
@@ -707,20 +754,22 @@
       "csharp": "// C#\npublic class Solution {\n  public static object Solve() {\n    // Your code here\n    return null;\n  }\n}"
     },
     "examples": [
-      "Example: see problem statement"
+      "Input: III  =>  Output: 3",
+      "Input: LVIII  =>  Output: 58",
+      "Input: MCMXCIV  =>  Output: 1994"
     ],
     "testCases": [
       {
-        "input": "sample_input_1",
-        "expected": "expected_output_1"
+        "input": "III\n",
+        "expected": "3"
       },
       {
-        "input": "sample_input_2",
-        "expected": "expected_output_2"
+        "input": "LVIII\n",
+        "expected": "58"
       },
       {
-        "input": "sample_input_3",
-        "expected": "expected_output_3"
+        "input": "MCMXCIV\n",
+        "expected": "1994"
       }
     ]
   },
@@ -736,20 +785,21 @@
       "csharp": "// C#\npublic class Solution {\n  public static object Solve() {\n    // Your code here\n    return null;\n  }\n}"
     },
     "examples": [
-      "Example: see problem statement"
+      "Input: flower flow flight  =>  Output: fl",
+      "Input: same same same  =>  Output: same"
     ],
     "testCases": [
       {
-        "input": "sample_input_1",
-        "expected": "expected_output_1"
+        "input": "flower flow flight\n",
+        "expected": "fl"
       },
       {
-        "input": "sample_input_2",
-        "expected": "expected_output_2"
+        "input": "dog racecar car\n",
+        "expected": ""
       },
       {
-        "input": "sample_input_3",
-        "expected": "expected_output_3"
+        "input": "same same same\n",
+        "expected": "same"
       }
     ]
   },
@@ -765,20 +815,22 @@
       "csharp": "// C#\npublic class Solution {\n  public static object Solve() {\n    // Your code here\n    return null;\n  }\n}"
     },
     "examples": [
-      "Example: see problem statement"
+      "Input: 3 2 2 3 3  =>  Output: 2",
+      "Input: 0 1 2 2 3 0 4 2 2  =>  Output: 5",
+      "Input: 1 2 3 9  =>  Output: 3"
     ],
     "testCases": [
       {
-        "input": "sample_input_1",
-        "expected": "expected_output_1"
+        "input": "3 2 2 3\n3\n",
+        "expected": "2"
       },
       {
-        "input": "sample_input_2",
-        "expected": "expected_output_2"
+        "input": "0 1 2 2 3 0 4 2\n2\n",
+        "expected": "5"
       },
       {
-        "input": "sample_input_3",
-        "expected": "expected_output_3"
+        "input": "1 2 3\n9\n",
+        "expected": "3"
       }
     ]
   },
@@ -794,20 +846,22 @@
       "csharp": "// C#\npublic class Solution {\n  public static object Solve() {\n    // Your code here\n    return null;\n  }\n}"
     },
     "examples": [
-      "Example: see problem statement"
+      "Input: abcd abcde  =>  Output: e",
+      "Input: y  =>  Output: y",
+      "Input: a aa  =>  Output: a"
     ],
     "testCases": [
       {
-        "input": "sample_input_1",
-        "expected": "expected_output_1"
+        "input": "abcd\nabcde\n",
+        "expected": "e"
       },
       {
-        "input": "sample_input_2",
-        "expected": "expected_output_2"
+        "input": "\ny\n",
+        "expected": "y"
       },
       {
-        "input": "sample_input_3",
-        "expected": "expected_output_3"
+        "input": "a\naa\n",
+        "expected": "a"
       }
     ]
   },
@@ -823,20 +877,22 @@
       "csharp": "// C#\npublic class Solution {\n  public static object Solve() {\n    // Your code here\n    return null;\n  }\n}"
     },
     "examples": [
-      "Example: see problem statement"
+      "Input: 11  =>  Output: 3",
+      "Input: 128  =>  Output: 1",
+      "Input: 2147483645  =>  Output: 30"
     ],
     "testCases": [
       {
-        "input": "sample_input_1",
-        "expected": "expected_output_1"
+        "input": "11\n",
+        "expected": "3"
       },
       {
-        "input": "sample_input_2",
-        "expected": "expected_output_2"
+        "input": "128\n",
+        "expected": "1"
       },
       {
-        "input": "sample_input_3",
-        "expected": "expected_output_3"
+        "input": "2147483645\n",
+        "expected": "30"
       }
     ]
   },
@@ -852,20 +908,22 @@
       "csharp": "// C#\npublic class Solution {\n  public static object Solve() {\n    // Your code here\n    return null;\n  }\n}"
     },
     "examples": [
-      "Example: see problem statement"
+      "Input: 1  =>  Output: true",
+      "Input: 16  =>  Output: true",
+      "Input: 3  =>  Output: false"
     ],
     "testCases": [
       {
-        "input": "sample_input_1",
-        "expected": "expected_output_1"
+        "input": "1\n",
+        "expected": "true"
       },
       {
-        "input": "sample_input_2",
-        "expected": "expected_output_2"
+        "input": "16\n",
+        "expected": "true"
       },
       {
-        "input": "sample_input_3",
-        "expected": "expected_output_3"
+        "input": "3\n",
+        "expected": "false"
       }
     ]
   },
@@ -881,20 +939,22 @@
       "csharp": "// C#\npublic class Solution {\n  public static object Solve() {\n    // Your code here\n    return null;\n  }\n}"
     },
     "examples": [
-      "Example: see problem statement"
+      "Input: 43261596  =>  Output: 964176192",
+      "Input: 4294967293  =>  Output: 3221225471",
+      "Input: 1  =>  Output: 2147483648"
     ],
     "testCases": [
       {
-        "input": "sample_input_1",
-        "expected": "expected_output_1"
+        "input": "43261596\n",
+        "expected": "964176192"
       },
       {
-        "input": "sample_input_2",
-        "expected": "expected_output_2"
+        "input": "4294967293\n",
+        "expected": "3221225471"
       },
       {
-        "input": "sample_input_3",
-        "expected": "expected_output_3"
+        "input": "1\n",
+        "expected": "2147483648"
       }
     ]
   },
@@ -910,20 +970,22 @@
       "csharp": "// C#\npublic class Solution {\n  public static object Solve() {\n    // Your code here\n    return null;\n  }\n}"
     },
     "examples": [
-      "Example: see problem statement"
+      "Input: 11 1  =>  Output: 100",
+      "Input: 1010 1011  =>  Output: 10101",
+      "Input: 0 0  =>  Output: 0"
     ],
     "testCases": [
       {
-        "input": "sample_input_1",
-        "expected": "expected_output_1"
+        "input": "11 1\n",
+        "expected": "100"
       },
       {
-        "input": "sample_input_2",
-        "expected": "expected_output_2"
+        "input": "1010 1011\n",
+        "expected": "10101"
       },
       {
-        "input": "sample_input_3",
-        "expected": "expected_output_3"
+        "input": "0 0\n",
+        "expected": "0"
       }
     ]
   },
@@ -939,20 +1001,22 @@
       "csharp": "// C#\npublic class Solution {\n  public static object Solve() {\n    // Your code here\n    return null;\n  }\n}"
     },
     "examples": [
-      "Example: see problem statement"
+      "Input: 19  =>  Output: true",
+      "Input: 2  =>  Output: false",
+      "Input: 7  =>  Output: true"
     ],
     "testCases": [
       {
-        "input": "sample_input_1",
-        "expected": "expected_output_1"
+        "input": "19\n",
+        "expected": "true"
       },
       {
-        "input": "sample_input_2",
-        "expected": "expected_output_2"
+        "input": "2\n",
+        "expected": "false"
       },
       {
-        "input": "sample_input_3",
-        "expected": "expected_output_3"
+        "input": "7\n",
+        "expected": "true"
       }
     ]
   },
@@ -968,20 +1032,22 @@
       "csharp": "// C#\npublic class Solution {\n  public static object Solve() {\n    // Your code here\n    return null;\n  }\n}"
     },
     "examples": [
-      "Example: see problem statement"
+      "Input: anagram nagaram  =>  Output: true",
+      "Input: rat car  =>  Output: false",
+      "Input: aacc ccac  =>  Output: false"
     ],
     "testCases": [
       {
-        "input": "sample_input_1",
-        "expected": "expected_output_1"
+        "input": "anagram nagaram\n",
+        "expected": "true"
       },
       {
-        "input": "sample_input_2",
-        "expected": "expected_output_2"
+        "input": "rat car\n",
+        "expected": "false"
       },
       {
-        "input": "sample_input_3",
-        "expected": "expected_output_3"
+        "input": "aacc ccac\n",
+        "expected": "false"
       }
     ]
   },
@@ -997,20 +1063,22 @@
       "csharp": "// C#\npublic class Solution {\n  public static object Solve() {\n    // Your code here\n    return null;\n  }\n}"
     },
     "examples": [
-      "Example: see problem statement"
+      "Input: leetcode  =>  Output: 0",
+      "Input: loveleetcode  =>  Output: 2",
+      "Input: aabb  =>  Output: -1"
     ],
     "testCases": [
       {
-        "input": "sample_input_1",
-        "expected": "expected_output_1"
+        "input": "leetcode\n",
+        "expected": "0"
       },
       {
-        "input": "sample_input_2",
-        "expected": "expected_output_2"
+        "input": "loveleetcode\n",
+        "expected": "2"
       },
       {
-        "input": "sample_input_3",
-        "expected": "expected_output_3"
+        "input": "aabb\n",
+        "expected": "-1"
       }
     ]
   },
@@ -1026,20 +1094,22 @@
       "csharp": "// C#\npublic class Solution {\n  public static object Solve() {\n    // Your code here\n    return null;\n  }\n}"
     },
     "examples": [
-      "Example: see problem statement"
+      "Input: aa aab  =>  Output: true",
+      "Input: a b  =>  Output: false",
+      "Input: aa ab  =>  Output: false"
     ],
     "testCases": [
       {
-        "input": "sample_input_1",
-        "expected": "expected_output_1"
+        "input": "aa aab\n",
+        "expected": "true"
       },
       {
-        "input": "sample_input_2",
-        "expected": "expected_output_2"
+        "input": "a b\n",
+        "expected": "false"
       },
       {
-        "input": "sample_input_3",
-        "expected": "expected_output_3"
+        "input": "aa ab\n",
+        "expected": "false"
       }
     ]
   },
@@ -1055,20 +1125,22 @@
       "csharp": "// C#\npublic class Solution {\n  public static object Solve() {\n    // Your code here\n    return null;\n  }\n}"
     },
     "examples": [
-      "Example: see problem statement"
+      "Input: aba  =>  Output: true",
+      "Input: abca  =>  Output: true",
+      "Input: abc  =>  Output: false"
     ],
     "testCases": [
       {
-        "input": "sample_input_1",
-        "expected": "expected_output_1"
+        "input": "aba\n",
+        "expected": "true"
       },
       {
-        "input": "sample_input_2",
-        "expected": "expected_output_2"
+        "input": "abca\n",
+        "expected": "true"
       },
       {
-        "input": "sample_input_3",
-        "expected": "expected_output_3"
+        "input": "abc\n",
+        "expected": "false"
       }
     ]
   },
@@ -1084,20 +1156,22 @@
       "csharp": "// C#\npublic class Solution {\n  public static object Solve() {\n    // Your code here\n    return null;\n  }\n}"
     },
     "examples": [
-      "Example: see problem statement"
+      "Input: 3 9 20 null null 15 7  =>  Output: 3",
+      "Input: 1 null 2  =>  Output: 2",
+      "Input: 1 2  =>  Output: 2"
     ],
     "testCases": [
       {
-        "input": "sample_input_1",
-        "expected": "expected_output_1"
+        "input": "3 9 20 null null 15 7\n",
+        "expected": "3"
       },
       {
-        "input": "sample_input_2",
-        "expected": "expected_output_2"
+        "input": "1 null 2\n",
+        "expected": "2"
       },
       {
-        "input": "sample_input_3",
-        "expected": "expected_output_3"
+        "input": "1 2\n",
+        "expected": "2"
       }
     ]
   },
@@ -1113,20 +1187,22 @@
       "csharp": "// C#\npublic class Solution {\n  public static object Solve() {\n    // Your code here\n    return null;\n  }\n}"
     },
     "examples": [
-      "Example: see problem statement"
+      "Input: 1 2 3 1 2 3  =>  Output: true",
+      "Input: 1 2 1 null 2  =>  Output: false",
+      "Input: 1 2 1 1 1 2  =>  Output: false"
     ],
     "testCases": [
       {
-        "input": "sample_input_1",
-        "expected": "expected_output_1"
+        "input": "1 2 3\n1 2 3\n",
+        "expected": "true"
       },
       {
-        "input": "sample_input_2",
-        "expected": "expected_output_2"
+        "input": "1 2\n1 null 2\n",
+        "expected": "false"
       },
       {
-        "input": "sample_input_3",
-        "expected": "expected_output_3"
+        "input": "1 2 1\n1 1 2\n",
+        "expected": "false"
       }
     ]
   },
@@ -1142,20 +1218,22 @@
       "csharp": "// C#\npublic class Solution {\n  public static object Solve() {\n    // Your code here\n    return null;\n  }\n}"
     },
     "examples": [
-      "Example: see problem statement"
+      "Input: 4 2 7 1 3 6 9  =>  Output: 4 7 2 9 6 3 1",
+      "Input: 2 1 3  =>  Output: 2 3 1",
+      "Input: 1 2  =>  Output: 1 null 2"
     ],
     "testCases": [
       {
-        "input": "sample_input_1",
-        "expected": "expected_output_1"
+        "input": "4 2 7 1 3 6 9\n",
+        "expected": "4 7 2 9 6 3 1"
       },
       {
-        "input": "sample_input_2",
-        "expected": "expected_output_2"
+        "input": "2 1 3\n",
+        "expected": "2 3 1"
       },
       {
-        "input": "sample_input_3",
-        "expected": "expected_output_3"
+        "input": "1 2\n",
+        "expected": "1 null 2"
       }
     ]
   },
@@ -1171,20 +1249,22 @@
       "csharp": "// C#\npublic class Solution {\n  public static object Solve() {\n    // Your code here\n    return null;\n  }\n}"
     },
     "examples": [
-      "Example: see problem statement"
+      "Input: 1 2 3 4 5  =>  Output: 3",
+      "Input: 1 2  =>  Output: 1",
+      "Input: 1  =>  Output: 0"
     ],
     "testCases": [
       {
-        "input": "sample_input_1",
-        "expected": "expected_output_1"
+        "input": "1 2 3 4 5\n",
+        "expected": "3"
       },
       {
-        "input": "sample_input_2",
-        "expected": "expected_output_2"
+        "input": "1 2\n",
+        "expected": "1"
       },
       {
-        "input": "sample_input_3",
-        "expected": "expected_output_3"
+        "input": "1\n",
+        "expected": "0"
       }
     ]
   },
@@ -1200,20 +1280,22 @@
       "csharp": "// C#\npublic class Solution {\n  public static object Solve() {\n    // Your code here\n    return null;\n  }\n}"
     },
     "examples": [
-      "Example: see problem statement"
+      "Input: 3 4 5 1 2 4 1 2  =>  Output: true",
+      "Input: 3 4 5 1 2 null null null null 0 4 1 2  =>  Output: false",
+      "Input: 1 1  =>  Output: true"
     ],
     "testCases": [
       {
-        "input": "sample_input_1",
-        "expected": "expected_output_1"
+        "input": "3 4 5 1 2\n4 1 2\n",
+        "expected": "true"
       },
       {
-        "input": "sample_input_2",
-        "expected": "expected_output_2"
+        "input": "3 4 5 1 2 null null null null 0\n4 1 2\n",
+        "expected": "false"
       },
       {
-        "input": "sample_input_3",
-        "expected": "expected_output_3"
+        "input": "1\n1\n",
+        "expected": "true"
       }
     ]
   },
@@ -1229,20 +1311,22 @@
       "csharp": "// C#\npublic class Solution {\n  public static object Solve() {\n    // Your code here\n    return null;\n  }\n}"
     },
     "examples": [
-      "Example: see problem statement"
+      "Input: 3 9 20 null null 15 7  =>  Output: true",
+      "Input: 1 2 2 3 3 null null 4 4  =>  Output: false",
+      "Input: 1 2 3  =>  Output: true"
     ],
     "testCases": [
       {
-        "input": "sample_input_1",
-        "expected": "expected_output_1"
+        "input": "3 9 20 null null 15 7\n",
+        "expected": "true"
       },
       {
-        "input": "sample_input_2",
-        "expected": "expected_output_2"
+        "input": "1 2 2 3 3 null null 4 4\n",
+        "expected": "false"
       },
       {
-        "input": "sample_input_3",
-        "expected": "expected_output_3"
+        "input": "1 2 3\n",
+        "expected": "true"
       }
     ]
   },
@@ -1258,20 +1342,22 @@
       "csharp": "// C#\npublic class Solution {\n  public static object Solve() {\n    // Your code here\n    return null;\n  }\n}"
     },
     "examples": [
-      "Example: see problem statement"
+      "Input: push -2 push 0 push -3 getMin pop top getMin  =>  Output: -3 0 -2",
+      "Input: push 1 push 2 top getMin pop top  =>  Output: 2 1 1",
+      "Input: push 5 getMin push 4 getMin pop getMin  =>  Output: 5 4 5"
     ],
     "testCases": [
       {
-        "input": "sample_input_1",
-        "expected": "expected_output_1"
+        "input": "push -2\npush 0\npush -3\ngetMin\npop\ntop\ngetMin\n",
+        "expected": "-3\n0\n-2"
       },
       {
-        "input": "sample_input_2",
-        "expected": "expected_output_2"
+        "input": "push 1\npush 2\ntop\ngetMin\npop\ntop\n",
+        "expected": "2\n1\n1"
       },
       {
-        "input": "sample_input_3",
-        "expected": "expected_output_3"
+        "input": "push 5\ngetMin\npush 4\ngetMin\npop\ngetMin\n",
+        "expected": "5\n4\n5"
       }
     ]
   },
@@ -1287,20 +1373,22 @@
       "csharp": "// C#\npublic class Solution {\n  public static object Solve() {\n    // Your code here\n    return null;\n  }\n}"
     },
     "examples": [
-      "Example: see problem statement"
+      "Input: push 1 push 2 peek pop empty  =>  Output: 1 1 false",
+      "Input: push 10 push 20 pop peek push 30 pop  =>  Output: 10 20 20",
+      "Input: empty push 7 empty pop empty  =>  Output: true false 7 true"
     ],
     "testCases": [
       {
-        "input": "sample_input_1",
-        "expected": "expected_output_1"
+        "input": "push 1\npush 2\npeek\npop\nempty\n",
+        "expected": "1\n1\nfalse"
       },
       {
-        "input": "sample_input_2",
-        "expected": "expected_output_2"
+        "input": "push 10\npush 20\npop\npeek\npush 30\npop\n",
+        "expected": "10\n20\n20"
       },
       {
-        "input": "sample_input_3",
-        "expected": "expected_output_3"
+        "input": "empty\npush 7\nempty\npop\nempty\n",
+        "expected": "true\nfalse\n7\ntrue"
       }
     ]
   },
@@ -1316,20 +1404,22 @@
       "csharp": "// C#\npublic class Solution {\n  public static object Solve() {\n    // Your code here\n    return null;\n  }\n}"
     },
     "examples": [
-      "Example: see problem statement"
+      "Input: 3 2 0 -4 1  =>  Output: true",
+      "Input: 1 2 0  =>  Output: true",
+      "Input: 1 -1  =>  Output: false"
     ],
     "testCases": [
       {
-        "input": "sample_input_1",
-        "expected": "expected_output_1"
+        "input": "3 2 0 -4\n1\n",
+        "expected": "true"
       },
       {
-        "input": "sample_input_2",
-        "expected": "expected_output_2"
+        "input": "1 2\n0\n",
+        "expected": "true"
       },
       {
-        "input": "sample_input_3",
-        "expected": "expected_output_3"
+        "input": "1\n-1\n",
+        "expected": "false"
       }
     ]
   },
@@ -1345,20 +1435,22 @@
       "csharp": "// C#\npublic class Solution {\n  public static object Solve() {\n    // Your code here\n    return null;\n  }\n}"
     },
     "examples": [
-      "Example: see problem statement"
+      "Input: 1 2 4 1 3 4  =>  Output: 1 1 2 3 4 4",
+      "Input: 1 3 5 2 4 6  =>  Output: 1 2 3 4 5 6",
+      "Input: 0  =>  Output: 0"
     ],
     "testCases": [
       {
-        "input": "sample_input_1",
-        "expected": "expected_output_1"
+        "input": "1 2 4\n1 3 4\n",
+        "expected": "1 1 2 3 4 4"
       },
       {
-        "input": "sample_input_2",
-        "expected": "expected_output_2"
+        "input": "1 3 5\n2 4 6\n",
+        "expected": "1 2 3 4 5 6"
       },
       {
-        "input": "sample_input_3",
-        "expected": "expected_output_3"
+        "input": "\n0\n",
+        "expected": "0"
       }
     ]
   },
@@ -1374,20 +1466,22 @@
       "csharp": "// C#\npublic class Solution {\n  public static object Solve() {\n    // Your code here\n    return null;\n  }\n}"
     },
     "examples": [
-      "Example: see problem statement"
+      "Input: 1 2 3 4 5  =>  Output: 3",
+      "Input: 1 2 3 4 5 6  =>  Output: 4",
+      "Input: 1  =>  Output: 1"
     ],
     "testCases": [
       {
-        "input": "sample_input_1",
-        "expected": "expected_output_1"
+        "input": "1 2 3 4 5\n",
+        "expected": "3"
       },
       {
-        "input": "sample_input_2",
-        "expected": "expected_output_2"
+        "input": "1 2 3 4 5 6\n",
+        "expected": "4"
       },
       {
-        "input": "sample_input_3",
-        "expected": "expected_output_3"
+        "input": "1\n",
+        "expected": "1"
       }
     ]
   },
@@ -1403,20 +1497,21 @@
       "csharp": "// C#\npublic class Solution {\n  public static object Solve() {\n    // Your code here\n    return null;\n  }\n}"
     },
     "examples": [
-      "Example: see problem statement"
+      "Input: 1 2 3 4 5 2  =>  Output: 1 2 3 5",
+      "Input: 1 2 3 3  =>  Output: 2 3"
     ],
     "testCases": [
       {
-        "input": "sample_input_1",
-        "expected": "expected_output_1"
+        "input": "1 2 3 4 5\n2\n",
+        "expected": "1 2 3 5"
       },
       {
-        "input": "sample_input_2",
-        "expected": "expected_output_2"
+        "input": "1 2 3\n3\n",
+        "expected": "2 3"
       },
       {
-        "input": "sample_input_3",
-        "expected": "expected_output_3"
+        "input": "1\n1\n",
+        "expected": ""
       }
     ]
   },
@@ -1432,20 +1527,21 @@
       "csharp": "// C#\npublic class Solution {\n  public static object Solve() {\n    // Your code here\n    return null;\n  }\n}"
     },
     "examples": [
-      "Example: see problem statement"
+      "Input: 1 2 3 4 5  =>  Output: 5 4 3 2 1",
+      "Input: 1 2  =>  Output: 2 1"
     ],
     "testCases": [
       {
-        "input": "sample_input_1",
-        "expected": "expected_output_1"
+        "input": "1 2 3 4 5\n",
+        "expected": "5 4 3 2 1"
       },
       {
-        "input": "sample_input_2",
-        "expected": "expected_output_2"
+        "input": "1 2\n",
+        "expected": "2 1"
       },
       {
-        "input": "sample_input_3",
-        "expected": "expected_output_3"
+        "input": "\n",
+        "expected": ""
       }
     ]
   },
@@ -1461,20 +1557,21 @@
       "csharp": "// C#\npublic class Solution {\n  public static object Solve() {\n    // Your code here\n    return null;\n  }\n}"
     },
     "examples": [
-      "Example: see problem statement"
+      "Input: -1 0 1 2 -1 -4  =>  Output: -1 -1 2 -1 0 1",
+      "Input: 0 0 0  =>  Output: 0 0 0"
     ],
     "testCases": [
       {
-        "input": "sample_input_1",
-        "expected": "expected_output_1"
+        "input": "-1 0 1 2 -1 -4\n",
+        "expected": "-1 -1 2\n-1 0 1"
       },
       {
-        "input": "sample_input_2",
-        "expected": "expected_output_2"
+        "input": "0 1 1\n",
+        "expected": ""
       },
       {
-        "input": "sample_input_3",
-        "expected": "expected_output_3"
+        "input": "0 0 0\n",
+        "expected": "0 0 0"
       }
     ]
   },
@@ -1490,20 +1587,22 @@
       "csharp": "// C#\npublic class Solution {\n  public static object Solve() {\n    // Your code here\n    return null;\n  }\n}"
     },
     "examples": [
-      "Example: see problem statement"
+      "Input: 1 8 6 2 5 4 8 3 7  =>  Output: 49",
+      "Input: 1 1  =>  Output: 1",
+      "Input: 4 3 2 1 4  =>  Output: 16"
     ],
     "testCases": [
       {
-        "input": "sample_input_1",
-        "expected": "expected_output_1"
+        "input": "1 8 6 2 5 4 8 3 7\n",
+        "expected": "49"
       },
       {
-        "input": "sample_input_2",
-        "expected": "expected_output_2"
+        "input": "1 1\n",
+        "expected": "1"
       },
       {
-        "input": "sample_input_3",
-        "expected": "expected_output_3"
+        "input": "4 3 2 1 4\n",
+        "expected": "16"
       }
     ]
   },
@@ -1519,20 +1618,21 @@
       "csharp": "// C#\npublic class Solution {\n  public static object Solve() {\n    // Your code here\n    return null;\n  }\n}"
     },
     "examples": [
-      "Example: see problem statement"
+      "Input: eat tea tan ate nat bat  =>  Output: ate eat tea bat nat tan",
+      "Input: a  =>  Output: a"
     ],
     "testCases": [
       {
-        "input": "sample_input_1",
-        "expected": "expected_output_1"
+        "input": "eat tea tan ate nat bat\n",
+        "expected": "ate eat tea\nbat\nnat tan"
       },
       {
-        "input": "sample_input_2",
-        "expected": "expected_output_2"
+        "input": "\n",
+        "expected": ""
       },
       {
-        "input": "sample_input_3",
-        "expected": "expected_output_3"
+        "input": "a\n",
+        "expected": "a"
       }
     ]
   },
@@ -1548,20 +1648,22 @@
       "csharp": "// C#\npublic class Solution {\n  public static object Solve() {\n    // Your code here\n    return null;\n  }\n}"
     },
     "examples": [
-      "Example: see problem statement"
+      "Input: abcabcbb  =>  Output: 3",
+      "Input: bbbbb  =>  Output: 1",
+      "Input: pwwkew  =>  Output: 3"
     ],
     "testCases": [
       {
-        "input": "sample_input_1",
-        "expected": "expected_output_1"
+        "input": "abcabcbb\n",
+        "expected": "3"
       },
       {
-        "input": "sample_input_2",
-        "expected": "expected_output_2"
+        "input": "bbbbb\n",
+        "expected": "1"
       },
       {
-        "input": "sample_input_3",
-        "expected": "expected_output_3"
+        "input": "pwwkew\n",
+        "expected": "3"
       }
     ]
   },
@@ -1577,20 +1679,22 @@
       "csharp": "// C#\npublic class Solution {\n  public static object Solve() {\n    // Your code here\n    return null;\n  }\n}"
     },
     "examples": [
-      "Example: see problem statement"
+      "Input: babad  =>  Output: aba",
+      "Input: cbbd  =>  Output: bb",
+      "Input: a  =>  Output: a"
     ],
     "testCases": [
       {
-        "input": "sample_input_1",
-        "expected": "expected_output_1"
+        "input": "babad\n",
+        "expected": "aba"
       },
       {
-        "input": "sample_input_2",
-        "expected": "expected_output_2"
+        "input": "cbbd\n",
+        "expected": "bb"
       },
       {
-        "input": "sample_input_3",
-        "expected": "expected_output_3"
+        "input": "a\n",
+        "expected": "a"
       }
     ]
   },
@@ -1606,20 +1710,22 @@
       "csharp": "// C#\npublic class Solution {\n  public static object Solve() {\n    // Your code here\n    return null;\n  }\n}"
     },
     "examples": [
-      "Example: see problem statement"
+      "Input: PAYPALISHIRING 3  =>  Output: PAHNAPLSIIGYIR",
+      "Input: PAYPALISHIRING 4  =>  Output: PINALSIGYAHRPI",
+      "Input: A 1  =>  Output: A"
     ],
     "testCases": [
       {
-        "input": "sample_input_1",
-        "expected": "expected_output_1"
+        "input": "PAYPALISHIRING\n3\n",
+        "expected": "PAHNAPLSIIGYIR"
       },
       {
-        "input": "sample_input_2",
-        "expected": "expected_output_2"
+        "input": "PAYPALISHIRING\n4\n",
+        "expected": "PINALSIGYAHRPI"
       },
       {
-        "input": "sample_input_3",
-        "expected": "expected_output_3"
+        "input": "A\n1\n",
+        "expected": "A"
       }
     ]
   },
@@ -1635,20 +1741,22 @@
       "csharp": "// C#\npublic class Solution {\n  public static object Solve() {\n    // Your code here\n    return null;\n  }\n}"
     },
     "examples": [
-      "Example: see problem statement"
+      "Input: 3  =>  Output: III",
+      "Input: 58  =>  Output: LVIII",
+      "Input: 1994  =>  Output: MCMXCIV"
     ],
     "testCases": [
       {
-        "input": "sample_input_1",
-        "expected": "expected_output_1"
+        "input": "3\n",
+        "expected": "III"
       },
       {
-        "input": "sample_input_2",
-        "expected": "expected_output_2"
+        "input": "58\n",
+        "expected": "LVIII"
       },
       {
-        "input": "sample_input_3",
-        "expected": "expected_output_3"
+        "input": "1994\n",
+        "expected": "MCMXCIV"
       }
     ]
   },
@@ -1664,20 +1772,22 @@
       "csharp": "// C#\npublic class Solution {\n  public static object Solve() {\n    // Your code here\n    return null;\n  }\n}"
     },
     "examples": [
-      "Example: see problem statement"
+      "Input: 23  =>  Output: ad ae af bd be bf cd ce cf",
+      "Input: 2  =>  Output: a b c",
+      "Input: 79  =>  Output: pw px py pz qw qx qy qz rw rx ry rz sw sx sy sz"
     ],
     "testCases": [
       {
-        "input": "sample_input_1",
-        "expected": "expected_output_1"
+        "input": "23\n",
+        "expected": "ad\nae\naf\nbd\nbe\nbf\ncd\nce\ncf"
       },
       {
-        "input": "sample_input_2",
-        "expected": "expected_output_2"
+        "input": "2\n",
+        "expected": "a\nb\nc"
       },
       {
-        "input": "sample_input_3",
-        "expected": "expected_output_3"
+        "input": "79\n",
+        "expected": "pw\npx\npy\npz\nqw\nqx\nqy\nqz\nrw\nrx\nry\nrz\nsw\nsx\nsy\nsz"
       }
     ]
   },
@@ -1693,20 +1803,22 @@
       "csharp": "// C#\npublic class Solution {\n  public static object Solve() {\n    // Your code here\n    return null;\n  }\n}"
     },
     "examples": [
-      "Example: see problem statement"
+      "Input: 3  =>  Output: ((())) (()()) (())() ()(()) ()()()",
+      "Input: 2  =>  Output: (()) ()()",
+      "Input: 1  =>  Output: ()"
     ],
     "testCases": [
       {
-        "input": "sample_input_1",
-        "expected": "expected_output_1"
+        "input": "3\n",
+        "expected": "((()))\n(()())\n(())()\n()(())\n()()()"
       },
       {
-        "input": "sample_input_2",
-        "expected": "expected_output_2"
+        "input": "2\n",
+        "expected": "(())\n()()"
       },
       {
-        "input": "sample_input_3",
-        "expected": "expected_output_3"
+        "input": "1\n",
+        "expected": "()"
       }
     ]
   },
@@ -1722,20 +1834,22 @@
       "csharp": "// C#\npublic class Solution {\n  public static object Solve() {\n    // Your code here\n    return null;\n  }\n}"
     },
     "examples": [
-      "Example: see problem statement"
+      "Input: 4 5 6 7 0 1 2 0  =>  Output: 4",
+      "Input: 4 5 6 7 0 1 2 3  =>  Output: -1",
+      "Input: 1 0  =>  Output: -1"
     ],
     "testCases": [
       {
-        "input": "sample_input_1",
-        "expected": "expected_output_1"
+        "input": "4 5 6 7 0 1 2\n0\n",
+        "expected": "4"
       },
       {
-        "input": "sample_input_2",
-        "expected": "expected_output_2"
+        "input": "4 5 6 7 0 1 2\n3\n",
+        "expected": "-1"
       },
       {
-        "input": "sample_input_3",
-        "expected": "expected_output_3"
+        "input": "1\n0\n",
+        "expected": "-1"
       }
     ]
   },
@@ -1751,20 +1865,22 @@
       "csharp": "// C#\npublic class Solution {\n  public static object Solve() {\n    // Your code here\n    return null;\n  }\n}"
     },
     "examples": [
-      "Example: see problem statement"
+      "Input: 3 4 5 1 2  =>  Output: 1",
+      "Input: 4 5 6 7 0 1 2  =>  Output: 0",
+      "Input: 11 13 15 17  =>  Output: 11"
     ],
     "testCases": [
       {
-        "input": "sample_input_1",
-        "expected": "expected_output_1"
+        "input": "3 4 5 1 2\n",
+        "expected": "1"
       },
       {
-        "input": "sample_input_2",
-        "expected": "expected_output_2"
+        "input": "4 5 6 7 0 1 2\n",
+        "expected": "0"
       },
       {
-        "input": "sample_input_3",
-        "expected": "expected_output_3"
+        "input": "11 13 15 17\n",
+        "expected": "11"
       }
     ]
   },
@@ -1780,20 +1896,21 @@
       "csharp": "// C#\npublic class Solution {\n  public static object Solve() {\n    // Your code here\n    return null;\n  }\n}"
     },
     "examples": [
-      "Example: see problem statement"
+      "Input: 2 3 6 7 7  =>  Output: 2 2 3 7",
+      "Input: 2 3 5 8  =>  Output: 2 2 2 2 2 3 3 3 5"
     ],
     "testCases": [
       {
-        "input": "sample_input_1",
-        "expected": "expected_output_1"
+        "input": "2 3 6 7\n7\n",
+        "expected": "2 2 3\n7"
       },
       {
-        "input": "sample_input_2",
-        "expected": "expected_output_2"
+        "input": "2 3 5\n8\n",
+        "expected": "2 2 2 2\n2 3 3\n3 5"
       },
       {
-        "input": "sample_input_3",
-        "expected": "expected_output_3"
+        "input": "2\n1\n",
+        "expected": ""
       }
     ]
   },
@@ -1809,20 +1926,22 @@
       "csharp": "// C#\npublic class Solution {\n  public static object Solve() {\n    // Your code here\n    return null;\n  }\n}"
     },
     "examples": [
-      "Example: see problem statement"
+      "Input: 1 2 3  =>  Output: 1 2 3 1 3 2 2 1 3 2 3 1 3 1 2 3 2 1",
+      "Input: 0 1  =>  Output: 0 1 1 0",
+      "Input: 1  =>  Output: 1"
     ],
     "testCases": [
       {
-        "input": "sample_input_1",
-        "expected": "expected_output_1"
+        "input": "1 2 3\n",
+        "expected": "1 2 3\n1 3 2\n2 1 3\n2 3 1\n3 1 2\n3 2 1"
       },
       {
-        "input": "sample_input_2",
-        "expected": "expected_output_2"
+        "input": "0 1\n",
+        "expected": "0 1\n1 0"
       },
       {
-        "input": "sample_input_3",
-        "expected": "expected_output_3"
+        "input": "1\n",
+        "expected": "1"
       }
     ]
   },
@@ -1838,20 +1957,22 @@
       "csharp": "// C#\npublic class Solution {\n  public static object Solve() {\n    // Your code here\n    return null;\n  }\n}"
     },
     "examples": [
-      "Example: see problem statement"
+      "Input: 1 2 3  =>  Output: 1 1 2 1 2 3 1 3 2 2 3 3",
+      "Input: 0  =>  Output: 0",
+      "Input: 1 2  =>  Output: 1 1 2 2"
     ],
     "testCases": [
       {
-        "input": "sample_input_1",
-        "expected": "expected_output_1"
+        "input": "1 2 3\n",
+        "expected": "\n1\n1 2\n1 2 3\n1 3\n2\n2 3\n3"
       },
       {
-        "input": "sample_input_2",
-        "expected": "expected_output_2"
+        "input": "0\n",
+        "expected": "\n0"
       },
       {
-        "input": "sample_input_3",
-        "expected": "expected_output_3"
+        "input": "1 2\n",
+        "expected": "\n1\n1 2\n2"
       }
     ]
   },
@@ -1867,20 +1988,22 @@
       "csharp": "// C#\npublic class Solution {\n  public static object Solve() {\n    // Your code here\n    return null;\n  }\n}"
     },
     "examples": [
-      "Example: see problem statement"
+      "Input: ABCE SFCS ADEE ABCCED  =>  Output: true",
+      "Input: ABCE SFCS ADEE ABCB  =>  Output: false",
+      "Input: A A  =>  Output: true"
     ],
     "testCases": [
       {
-        "input": "sample_input_1",
-        "expected": "expected_output_1"
+        "input": "ABCE\nSFCS\nADEE\nABCCED\n",
+        "expected": "true"
       },
       {
-        "input": "sample_input_2",
-        "expected": "expected_output_2"
+        "input": "ABCE\nSFCS\nADEE\nABCB\n",
+        "expected": "false"
       },
       {
-        "input": "sample_input_3",
-        "expected": "expected_output_3"
+        "input": "A\nA\n",
+        "expected": "true"
       }
     ]
   },
@@ -1896,20 +2019,22 @@
       "csharp": "// C#\npublic class Solution {\n  public static object Solve() {\n    // Your code here\n    return null;\n  }\n}"
     },
     "examples": [
-      "Example: see problem statement"
+      "Input: 12  =>  Output: 2",
+      "Input: 226  =>  Output: 3",
+      "Input: 06  =>  Output: 0"
     ],
     "testCases": [
       {
-        "input": "sample_input_1",
-        "expected": "expected_output_1"
+        "input": "12\n",
+        "expected": "2"
       },
       {
-        "input": "sample_input_2",
-        "expected": "expected_output_2"
+        "input": "226\n",
+        "expected": "3"
       },
       {
-        "input": "sample_input_3",
-        "expected": "expected_output_3"
+        "input": "06\n",
+        "expected": "0"
       }
     ]
   },
@@ -1925,20 +2050,22 @@
       "csharp": "// C#\npublic class Solution {\n  public static object Solve() {\n    // Your code here\n    return null;\n  }\n}"
     },
     "examples": [
-      "Example: see problem statement"
+      "Input: 2  =>  Output: 2",
+      "Input: 3  =>  Output: 3",
+      "Input: 4  =>  Output: 5"
     ],
     "testCases": [
       {
-        "input": "sample_input_1",
-        "expected": "expected_output_1"
+        "input": "2\n",
+        "expected": "2"
       },
       {
-        "input": "sample_input_2",
-        "expected": "expected_output_2"
+        "input": "3\n",
+        "expected": "3"
       },
       {
-        "input": "sample_input_3",
-        "expected": "expected_output_3"
+        "input": "4\n",
+        "expected": "5"
       }
     ]
   },
@@ -1954,20 +2081,22 @@
       "csharp": "// C#\npublic class Solution {\n  public static object Solve() {\n    // Your code here\n    return null;\n  }\n}"
     },
     "examples": [
-      "Example: see problem statement"
+      "Input: 3 7  =>  Output: 28",
+      "Input: 3 2  =>  Output: 3",
+      "Input: 1 1  =>  Output: 1"
     ],
     "testCases": [
       {
-        "input": "sample_input_1",
-        "expected": "expected_output_1"
+        "input": "3 7\n",
+        "expected": "28"
       },
       {
-        "input": "sample_input_2",
-        "expected": "expected_output_2"
+        "input": "3 2\n",
+        "expected": "3"
       },
       {
-        "input": "sample_input_3",
-        "expected": "expected_output_3"
+        "input": "1 1\n",
+        "expected": "1"
       }
     ]
   },
@@ -1983,20 +2112,22 @@
       "csharp": "// C#\npublic class Solution {\n  public static object Solve() {\n    // Your code here\n    return null;\n  }\n}"
     },
     "examples": [
-      "Example: see problem statement"
+      "Input: 1 3 1 1 5 1 4 2 1  =>  Output: 7",
+      "Input: 1 2 3 4 5 6  =>  Output: 12",
+      "Input: 1  =>  Output: 1"
     ],
     "testCases": [
       {
-        "input": "sample_input_1",
-        "expected": "expected_output_1"
+        "input": "1 3 1\n1 5 1\n4 2 1\n",
+        "expected": "7"
       },
       {
-        "input": "sample_input_2",
-        "expected": "expected_output_2"
+        "input": "1 2 3\n4 5 6\n",
+        "expected": "12"
       },
       {
-        "input": "sample_input_3",
-        "expected": "expected_output_3"
+        "input": "1\n",
+        "expected": "1"
       }
     ]
   },
@@ -2012,20 +2143,22 @@
       "csharp": "// C#\npublic class Solution {\n  public static object Solve() {\n    // Your code here\n    return null;\n  }\n}"
     },
     "examples": [
-      "Example: see problem statement"
+      "Input: 2 0 2 1 1 0  =>  Output: 0 0 1 1 2 2",
+      "Input: 2 0 1  =>  Output: 0 1 2",
+      "Input: 1 0  =>  Output: 0 1"
     ],
     "testCases": [
       {
-        "input": "sample_input_1",
-        "expected": "expected_output_1"
+        "input": "2 0 2 1 1 0\n",
+        "expected": "0 0 1 1 2 2"
       },
       {
-        "input": "sample_input_2",
-        "expected": "expected_output_2"
+        "input": "2 0 1\n",
+        "expected": "0 1 2"
       },
       {
-        "input": "sample_input_3",
-        "expected": "expected_output_3"
+        "input": "1 0\n",
+        "expected": "0 1"
       }
     ]
   },
@@ -2041,20 +2174,22 @@
       "csharp": "// C#\npublic class Solution {\n  public static object Solve() {\n    // Your code here\n    return null;\n  }\n}"
     },
     "examples": [
-      "Example: see problem statement"
+      "Input: 1 2 3  =>  Output: 1 3 2",
+      "Input: 3 2 1  =>  Output: 1 2 3",
+      "Input: 1 1 5  =>  Output: 1 5 1"
     ],
     "testCases": [
       {
-        "input": "sample_input_1",
-        "expected": "expected_output_1"
+        "input": "1 2 3\n",
+        "expected": "1 3 2"
       },
       {
-        "input": "sample_input_2",
-        "expected": "expected_output_2"
+        "input": "3 2 1\n",
+        "expected": "1 2 3"
       },
       {
-        "input": "sample_input_3",
-        "expected": "expected_output_3"
+        "input": "1 1 5\n",
+        "expected": "1 5 1"
       }
     ]
   },
@@ -2070,20 +2205,22 @@
       "csharp": "// C#\npublic class Solution {\n  public static object Solve() {\n    // Your code here\n    return null;\n  }\n}"
     },
     "examples": [
-      "Example: see problem statement"
+      "Input: 1 3 5 7 10 11 16 20 23 30 34 60 3  =>  Output: true",
+      "Input: 1 3 5 7 10 11 16 20 23 30 34 60 13  =>  Output: false",
+      "Input: 1 1  =>  Output: true"
     ],
     "testCases": [
       {
-        "input": "sample_input_1",
-        "expected": "expected_output_1"
+        "input": "1 3 5 7\n10 11 16 20\n23 30 34 60\n3\n",
+        "expected": "true"
       },
       {
-        "input": "sample_input_2",
-        "expected": "expected_output_2"
+        "input": "1 3 5 7\n10 11 16 20\n23 30 34 60\n13\n",
+        "expected": "false"
       },
       {
-        "input": "sample_input_3",
-        "expected": "expected_output_3"
+        "input": "1\n1\n",
+        "expected": "true"
       }
     ]
   },
@@ -2099,20 +2236,22 @@
       "csharp": "// C#\npublic class Solution {\n  public static object Solve() {\n    // Your code here\n    return null;\n  }\n}"
     },
     "examples": [
-      "Example: see problem statement"
+      "Input: 1 2 3 1  =>  Output: 2",
+      "Input: 1 2 1 3 5 6 4  =>  Output: 5",
+      "Input: 1  =>  Output: 0"
     ],
     "testCases": [
       {
-        "input": "sample_input_1",
-        "expected": "expected_output_1"
+        "input": "1 2 3 1\n",
+        "expected": "2"
       },
       {
-        "input": "sample_input_2",
-        "expected": "expected_output_2"
+        "input": "1 2 1 3 5 6 4\n",
+        "expected": "5"
       },
       {
-        "input": "sample_input_3",
-        "expected": "expected_output_3"
+        "input": "1\n",
+        "expected": "0"
       }
     ]
   },
@@ -2128,20 +2267,22 @@
       "csharp": "// C#\npublic class Solution {\n  public static object Solve() {\n    // Your code here\n    return null;\n  }\n}"
     },
     "examples": [
-      "Example: see problem statement"
+      "Input: 3 2 1 5 6 4 2  =>  Output: 5",
+      "Input: 3 2 3 1 2 4 5 5 6 4  =>  Output: 4",
+      "Input: 1 1  =>  Output: 1"
     ],
     "testCases": [
       {
-        "input": "sample_input_1",
-        "expected": "expected_output_1"
+        "input": "3 2 1 5 6 4\n2\n",
+        "expected": "5"
       },
       {
-        "input": "sample_input_2",
-        "expected": "expected_output_2"
+        "input": "3 2 3 1 2 4 5 5 6\n4\n",
+        "expected": "4"
       },
       {
-        "input": "sample_input_3",
-        "expected": "expected_output_3"
+        "input": "1\n1\n",
+        "expected": "1"
       }
     ]
   },
@@ -2157,20 +2298,22 @@
       "csharp": "// C#\npublic class Solution {\n  public static object Solve() {\n    // Your code here\n    return null;\n  }\n}"
     },
     "examples": [
-      "Example: see problem statement"
+      "Input: 1 1 1 2 2 3 2  =>  Output: 1 2",
+      "Input: 1 2 2  =>  Output: 1 2",
+      "Input: 5 5 5 5 1  =>  Output: 5"
     ],
     "testCases": [
       {
-        "input": "sample_input_1",
-        "expected": "expected_output_1"
+        "input": "1 1 1 2 2 3\n2\n",
+        "expected": "1 2"
       },
       {
-        "input": "sample_input_2",
-        "expected": "expected_output_2"
+        "input": "1 2\n2\n",
+        "expected": "1 2"
       },
       {
-        "input": "sample_input_3",
-        "expected": "expected_output_3"
+        "input": "5 5 5 5\n1\n",
+        "expected": "5"
       }
     ]
   },
@@ -2186,20 +2329,22 @@
       "csharp": "// C#\npublic class Solution {\n  public static object Solve() {\n    // Your code here\n    return null;\n  }\n}"
     },
     "examples": [
-      "Example: see problem statement"
+      "Input: 1 2 3 4  =>  Output: 24 12 8 6",
+      "Input: -1 1 0 -3 3  =>  Output: 0 0 9 0 0",
+      "Input: 2 3  =>  Output: 3 2"
     ],
     "testCases": [
       {
-        "input": "sample_input_1",
-        "expected": "expected_output_1"
+        "input": "1 2 3 4\n",
+        "expected": "24 12 8 6"
       },
       {
-        "input": "sample_input_2",
-        "expected": "expected_output_2"
+        "input": "-1 1 0 -3 3\n",
+        "expected": "0 0 9 0 0"
       },
       {
-        "input": "sample_input_3",
-        "expected": "expected_output_3"
+        "input": "2 3\n",
+        "expected": "3 2"
       }
     ]
   },
@@ -2215,20 +2360,22 @@
       "csharp": "// C#\npublic class Solution {\n  public static object Solve() {\n    // Your code here\n    return null;\n  }\n}"
     },
     "examples": [
-      "Example: see problem statement"
+      "Input: 2 3 -2 4  =>  Output: 6",
+      "Input: -2 0 -1  =>  Output: 0",
+      "Input: -2 3 -4  =>  Output: 24"
     ],
     "testCases": [
       {
-        "input": "sample_input_1",
-        "expected": "expected_output_1"
+        "input": "2 3 -2 4\n",
+        "expected": "6"
       },
       {
-        "input": "sample_input_2",
-        "expected": "expected_output_2"
+        "input": "-2 0 -1\n",
+        "expected": "0"
       },
       {
-        "input": "sample_input_3",
-        "expected": "expected_output_3"
+        "input": "-2 3 -4\n",
+        "expected": "24"
       }
     ]
   },
@@ -2244,20 +2391,22 @@
       "csharp": "// C#\npublic class Solution {\n  public static object Solve() {\n    // Your code here\n    return null;\n  }\n}"
     },
     "examples": [
-      "Example: see problem statement"
+      "Input: 1 2 3 1  =>  Output: 4",
+      "Input: 2 7 9 3 1  =>  Output: 12",
+      "Input: 2 1  =>  Output: 2"
     ],
     "testCases": [
       {
-        "input": "sample_input_1",
-        "expected": "expected_output_1"
+        "input": "1 2 3 1\n",
+        "expected": "4"
       },
       {
-        "input": "sample_input_2",
-        "expected": "expected_output_2"
+        "input": "2 7 9 3 1\n",
+        "expected": "12"
       },
       {
-        "input": "sample_input_3",
-        "expected": "expected_output_3"
+        "input": "2 1\n",
+        "expected": "2"
       }
     ]
   },
@@ -2273,20 +2422,22 @@
       "csharp": "// C#\npublic class Solution {\n  public static object Solve() {\n    // Your code here\n    return null;\n  }\n}"
     },
     "examples": [
-      "Example: see problem statement"
+      "Input: 1 2 5 11  =>  Output: 3",
+      "Input: 2 3  =>  Output: -1",
+      "Input: 1 0  =>  Output: 0"
     ],
     "testCases": [
       {
-        "input": "sample_input_1",
-        "expected": "expected_output_1"
+        "input": "1 2 5\n11\n",
+        "expected": "3"
       },
       {
-        "input": "sample_input_2",
-        "expected": "expected_output_2"
+        "input": "2\n3\n",
+        "expected": "-1"
       },
       {
-        "input": "sample_input_3",
-        "expected": "expected_output_3"
+        "input": "1\n0\n",
+        "expected": "0"
       }
     ]
   },
@@ -2302,20 +2453,22 @@
       "csharp": "// C#\npublic class Solution {\n  public static object Solve() {\n    // Your code here\n    return null;\n  }\n}"
     },
     "examples": [
-      "Example: see problem statement"
+      "Input: leetcode leet code  =>  Output: true",
+      "Input: applepenapple apple pen  =>  Output: true",
+      "Input: catsandog cats dog sand and cat  =>  Output: false"
     ],
     "testCases": [
       {
-        "input": "sample_input_1",
-        "expected": "expected_output_1"
+        "input": "leetcode\nleet code\n",
+        "expected": "true"
       },
       {
-        "input": "sample_input_2",
-        "expected": "expected_output_2"
+        "input": "applepenapple\napple pen\n",
+        "expected": "true"
       },
       {
-        "input": "sample_input_3",
-        "expected": "expected_output_3"
+        "input": "catsandog\ncats dog sand and cat\n",
+        "expected": "false"
       }
     ]
   },
@@ -2331,20 +2484,22 @@
       "csharp": "// C#\npublic class Solution {\n  public static object Solve() {\n    // Your code here\n    return null;\n  }\n}"
     },
     "examples": [
-      "Example: see problem statement"
+      "Input: 2 put 1 1 put 2 2 get 1 put 3 3 get 2 put 4 4 get 1 get 3 get 4  =>  Output: 1 -1 -1 3 4",
+      "Input: 1 put 1 1 get 1 put 2 2 get 1 get 2  =>  Output: 1 -1 2",
+      "Input: 2 put 1 1 put 2 2 put 3 3 get 2 get 3  =>  Output: 2 3"
     ],
     "testCases": [
       {
-        "input": "sample_input_1",
-        "expected": "expected_output_1"
+        "input": "2\nput 1 1\nput 2 2\nget 1\nput 3 3\nget 2\nput 4 4\nget 1\nget 3\nget 4\n",
+        "expected": "1\n-1\n-1\n3\n4"
       },
       {
-        "input": "sample_input_2",
-        "expected": "expected_output_2"
+        "input": "1\nput 1 1\nget 1\nput 2 2\nget 1\nget 2\n",
+        "expected": "1\n-1\n2"
       },
       {
-        "input": "sample_input_3",
-        "expected": "expected_output_3"
+        "input": "2\nput 1 1\nput 2 2\nput 3 3\nget 2\nget 3\n",
+        "expected": "2\n3"
       }
     ]
   },
@@ -2360,20 +2515,22 @@
       "csharp": "// C#\npublic class Solution {\n  public static object Solve() {\n    // Your code here\n    return null;\n  }\n}"
     },
     "examples": [
-      "Example: see problem statement"
+      "Input: insert apple search apple search app startsWith app insert app search app  =>  Output: true false true true",
+      "Input: insert a startsWith a startsWith b  =>  Output: true false",
+      "Input: search abc insert abc search abc startsWith abc  =>  Output: false true true"
     ],
     "testCases": [
       {
-        "input": "sample_input_1",
-        "expected": "expected_output_1"
+        "input": "insert apple\nsearch apple\nsearch app\nstartsWith app\ninsert app\nsearch app\n",
+        "expected": "true\nfalse\ntrue\ntrue"
       },
       {
-        "input": "sample_input_2",
-        "expected": "expected_output_2"
+        "input": "insert a\nstartsWith a\nstartsWith b\n",
+        "expected": "true\nfalse"
       },
       {
-        "input": "sample_input_3",
-        "expected": "expected_output_3"
+        "input": "search abc\ninsert abc\nsearch abc\nstartsWith abc\n",
+        "expected": "false\ntrue\ntrue"
       }
     ]
   },
@@ -2389,20 +2546,22 @@
       "csharp": "// C#\npublic class Solution {\n  public static object Solve() {\n    // Your code here\n    return null;\n  }\n}"
     },
     "examples": [
-      "Example: see problem statement"
+      "Input: 11000 11000 00100 00011  =>  Output: 3",
+      "Input: 111 010 111  =>  Output: 1",
+      "Input: 000 000  =>  Output: 0"
     ],
     "testCases": [
       {
-        "input": "sample_input_1",
-        "expected": "expected_output_1"
+        "input": "11000\n11000\n00100\n00011\n",
+        "expected": "3"
       },
       {
-        "input": "sample_input_2",
-        "expected": "expected_output_2"
+        "input": "111\n010\n111\n",
+        "expected": "1"
       },
       {
-        "input": "sample_input_3",
-        "expected": "expected_output_3"
+        "input": "000\n000\n",
+        "expected": "0"
       }
     ]
   },
@@ -2418,20 +2577,22 @@
       "csharp": "// C#\npublic class Solution {\n  public static object Solve() {\n    // Your code here\n    return null;\n  }\n}"
     },
     "examples": [
-      "Example: see problem statement"
+      "Input: 4 1 2 4 2 1 3 3 2 4 4 1 3  =>  Output: 1 2 4 2 1 3 3 2 4 4 1 3",
+      "Input: 2 1 2 2 1  =>  Output: 1 2 2 1",
+      "Input: 1 1  =>  Output: 1"
     ],
     "testCases": [
       {
-        "input": "sample_input_1",
-        "expected": "expected_output_1"
+        "input": "4\n1 2 4\n2 1 3\n3 2 4\n4 1 3\n",
+        "expected": "1 2 4\n2 1 3\n3 2 4\n4 1 3"
       },
       {
-        "input": "sample_input_2",
-        "expected": "expected_output_2"
+        "input": "2\n1 2\n2 1\n",
+        "expected": "1 2\n2 1"
       },
       {
-        "input": "sample_input_3",
-        "expected": "expected_output_3"
+        "input": "1\n1\n",
+        "expected": "1"
       }
     ]
   },
@@ -2447,20 +2608,22 @@
       "csharp": "// C#\npublic class Solution {\n  public static object Solve() {\n    // Your code here\n    return null;\n  }\n}"
     },
     "examples": [
-      "Example: see problem statement"
+      "Input: 2 1 0  =>  Output: true",
+      "Input: 2 1 0 0 1  =>  Output: false",
+      "Input: 4 1 0 2 0 3 1 3 2  =>  Output: true"
     ],
     "testCases": [
       {
-        "input": "sample_input_1",
-        "expected": "expected_output_1"
+        "input": "2\n1 0\n",
+        "expected": "true"
       },
       {
-        "input": "sample_input_2",
-        "expected": "expected_output_2"
+        "input": "2\n1 0\n0 1\n",
+        "expected": "false"
       },
       {
-        "input": "sample_input_3",
-        "expected": "expected_output_3"
+        "input": "4\n1 0\n2 0\n3 1\n3 2\n",
+        "expected": "true"
       }
     ]
   },
@@ -2476,20 +2639,22 @@
       "csharp": "// C#\npublic class Solution {\n  public static object Solve() {\n    // Your code here\n    return null;\n  }\n}"
     },
     "examples": [
-      "Example: see problem statement"
+      "Input: 1 2 2 3 5 3 2 3 4 4 2 4 5 3 1 6 7 1 4 5 5 1 1 2 4  =>  Output: 0 4 1 3 1 4 2 2 3 0 3 1 4 0",
+      "Input: 1 1 1 1  =>  Output: 0 0 0 1 1 0 1 1",
+      "Input: 1 2 3  =>  Output: 0 0 0 1 0 2"
     ],
     "testCases": [
       {
-        "input": "sample_input_1",
-        "expected": "expected_output_1"
+        "input": "1 2 2 3 5\n3 2 3 4 4\n2 4 5 3 1\n6 7 1 4 5\n5 1 1 2 4\n",
+        "expected": "0 4\n1 3\n1 4\n2 2\n3 0\n3 1\n4 0"
       },
       {
-        "input": "sample_input_2",
-        "expected": "expected_output_2"
+        "input": "1 1\n1 1\n",
+        "expected": "0 0\n0 1\n1 0\n1 1"
       },
       {
-        "input": "sample_input_3",
-        "expected": "expected_output_3"
+        "input": "1 2 3\n",
+        "expected": "0 0\n0 1\n0 2"
       }
     ]
   },
@@ -2505,20 +2670,22 @@
       "csharp": "// C#\npublic class Solution {\n  public static object Solve() {\n    // Your code here\n    return null;\n  }\n}"
     },
     "examples": [
-      "Example: see problem statement"
+      "Input: 3 9 20 null null 15 7  =>  Output: 3 9 20 15 7",
+      "Input: 1  =>  Output: 1",
+      "Input: 1 2 null 3  =>  Output: 1 2 3"
     ],
     "testCases": [
       {
-        "input": "sample_input_1",
-        "expected": "expected_output_1"
+        "input": "3 9 20 null null 15 7\n",
+        "expected": "3\n9 20\n15 7"
       },
       {
-        "input": "sample_input_2",
-        "expected": "expected_output_2"
+        "input": "1\n",
+        "expected": "1"
       },
       {
-        "input": "sample_input_3",
-        "expected": "expected_output_3"
+        "input": "1 2 null 3\n",
+        "expected": "1\n2\n3"
       }
     ]
   },
@@ -2534,20 +2701,22 @@
       "csharp": "// C#\npublic class Solution {\n  public static object Solve() {\n    // Your code here\n    return null;\n  }\n}"
     },
     "examples": [
-      "Example: see problem statement"
+      "Input: 2 1 3  =>  Output: true",
+      "Input: 5 1 4 null null 3 6  =>  Output: false",
+      "Input: 1  =>  Output: true"
     ],
     "testCases": [
       {
-        "input": "sample_input_1",
-        "expected": "expected_output_1"
+        "input": "2 1 3\n",
+        "expected": "true"
       },
       {
-        "input": "sample_input_2",
-        "expected": "expected_output_2"
+        "input": "5 1 4 null null 3 6\n",
+        "expected": "false"
       },
       {
-        "input": "sample_input_3",
-        "expected": "expected_output_3"
+        "input": "1\n",
+        "expected": "true"
       }
     ]
   },
@@ -2563,20 +2732,22 @@
       "csharp": "// C#\npublic class Solution {\n  public static object Solve() {\n    // Your code here\n    return null;\n  }\n}"
     },
     "examples": [
-      "Example: see problem statement"
+      "Input: 3 1 4 null 2 1  =>  Output: 1",
+      "Input: 5 3 6 2 4 null null 1 3  =>  Output: 3",
+      "Input: 1 1  =>  Output: 1"
     ],
     "testCases": [
       {
-        "input": "sample_input_1",
-        "expected": "expected_output_1"
+        "input": "3 1 4 null 2\n1\n",
+        "expected": "1"
       },
       {
-        "input": "sample_input_2",
-        "expected": "expected_output_2"
+        "input": "5 3 6 2 4 null null 1\n3\n",
+        "expected": "3"
       },
       {
-        "input": "sample_input_3",
-        "expected": "expected_output_3"
+        "input": "1\n1\n",
+        "expected": "1"
       }
     ]
   },
@@ -2592,20 +2763,22 @@
       "csharp": "// C#\npublic class Solution {\n  public static object Solve() {\n    // Your code here\n    return null;\n  }\n}"
     },
     "examples": [
-      "Example: see problem statement"
+      "Input: 6 2 8 0 4 7 9 null null 3 5 2 8  =>  Output: 6",
+      "Input: 6 2 8 0 4 7 9 null null 3 5 2 4  =>  Output: 2",
+      "Input: 2 1 2 1  =>  Output: 2"
     ],
     "testCases": [
       {
-        "input": "sample_input_1",
-        "expected": "expected_output_1"
+        "input": "6 2 8 0 4 7 9 null null 3 5\n2\n8\n",
+        "expected": "6"
       },
       {
-        "input": "sample_input_2",
-        "expected": "expected_output_2"
+        "input": "6 2 8 0 4 7 9 null null 3 5\n2\n4\n",
+        "expected": "2"
       },
       {
-        "input": "sample_input_3",
-        "expected": "expected_output_3"
+        "input": "2 1\n2\n1\n",
+        "expected": "2"
       }
     ]
   },
@@ -2621,20 +2794,22 @@
       "csharp": "// C#\npublic class Solution {\n  public static object Solve() {\n    // Your code here\n    return null;\n  }\n}"
     },
     "examples": [
-      "Example: see problem statement"
+      "Input: 1 2 3 null null 4 5  =>  Output: 1 2 3 null null 4 5",
+      "Input: 1 2 null 3  =>  Output: 1 2 null 3",
+      "Input: 1  =>  Output: 1"
     ],
     "testCases": [
       {
-        "input": "sample_input_1",
-        "expected": "expected_output_1"
+        "input": "1 2 3 null null 4 5\n",
+        "expected": "1 2 3 null null 4 5"
       },
       {
-        "input": "sample_input_2",
-        "expected": "expected_output_2"
+        "input": "1 2 null 3\n",
+        "expected": "1 2 null 3"
       },
       {
-        "input": "sample_input_3",
-        "expected": "expected_output_3"
+        "input": "1\n",
+        "expected": "1"
       }
     ]
   },
@@ -2650,20 +2825,22 @@
       "csharp": "// C#\npublic class Solution {\n  public static object Solve() {\n    // Your code here\n    return null;\n  }\n}"
     },
     "examples": [
-      "Example: see problem statement"
+      "Input: 1 2 5 3 4 null 6  =>  Output: 1 2 3 4 5 6",
+      "Input: 1 2 null 3  =>  Output: 1 2 3",
+      "Input: 1 null 2  =>  Output: 1 2"
     ],
     "testCases": [
       {
-        "input": "sample_input_1",
-        "expected": "expected_output_1"
+        "input": "1 2 5 3 4 null 6\n",
+        "expected": "1 2 3 4 5 6"
       },
       {
-        "input": "sample_input_2",
-        "expected": "expected_output_2"
+        "input": "1 2 null 3\n",
+        "expected": "1 2 3"
       },
       {
-        "input": "sample_input_3",
-        "expected": "expected_output_3"
+        "input": "1 null 2\n",
+        "expected": "1 2"
       }
     ]
   },
@@ -2679,20 +2856,22 @@
       "csharp": "// C#\npublic class Solution {\n  public static object Solve() {\n    // Your code here\n    return null;\n  }\n}"
     },
     "examples": [
-      "Example: see problem statement"
+      "Input: 1 3 2 5 3 null 9  =>  Output: 4",
+      "Input: 1 3 2 5  =>  Output: 2",
+      "Input: 1 3 2 5 null null 9 6 null null null null null null 7  =>  Output: 8"
     ],
     "testCases": [
       {
-        "input": "sample_input_1",
-        "expected": "expected_output_1"
+        "input": "1 3 2 5 3 null 9\n",
+        "expected": "4"
       },
       {
-        "input": "sample_input_2",
-        "expected": "expected_output_2"
+        "input": "1 3 2 5\n",
+        "expected": "2"
       },
       {
-        "input": "sample_input_3",
-        "expected": "expected_output_3"
+        "input": "1 3 2 5 null null 9 6 null null null null null null 7\n",
+        "expected": "8"
       }
     ]
   },
@@ -2708,20 +2887,22 @@
       "csharp": "// C#\npublic class Solution {\n  public static object Solve() {\n    // Your code here\n    return null;\n  }\n}"
     },
     "examples": [
-      "Example: see problem statement"
+      "Input: 1 1 1 2  =>  Output: 2",
+      "Input: 1 2 3 3  =>  Output: 2",
+      "Input: 1 -1 0 0  =>  Output: 3"
     ],
     "testCases": [
       {
-        "input": "sample_input_1",
-        "expected": "expected_output_1"
+        "input": "1 1 1\n2\n",
+        "expected": "2"
       },
       {
-        "input": "sample_input_2",
-        "expected": "expected_output_2"
+        "input": "1 2 3\n3\n",
+        "expected": "2"
       },
       {
-        "input": "sample_input_3",
-        "expected": "expected_output_3"
+        "input": "1 -1 0\n0\n",
+        "expected": "3"
       }
     ]
   },
@@ -2737,20 +2918,22 @@
       "csharp": "// C#\npublic class Solution {\n  public static object Solve() {\n    // Your code here\n    return null;\n  }\n}"
     },
     "examples": [
-      "Example: see problem statement"
+      "Input: 1 3 -1 -3 5 3 6 7 3  =>  Output: 3 3 5 5 6 7",
+      "Input: 1 1  =>  Output: 1",
+      "Input: 1 -1 1  =>  Output: 1 -1"
     ],
     "testCases": [
       {
-        "input": "sample_input_1",
-        "expected": "expected_output_1"
+        "input": "1 3 -1 -3 5 3 6 7\n3\n",
+        "expected": "3 3 5 5 6 7"
       },
       {
-        "input": "sample_input_2",
-        "expected": "expected_output_2"
+        "input": "1\n1\n",
+        "expected": "1"
       },
       {
-        "input": "sample_input_3",
-        "expected": "expected_output_3"
+        "input": "1 -1\n1\n",
+        "expected": "1 -1"
       }
     ]
   },
@@ -2766,20 +2949,22 @@
       "csharp": "// C#\npublic class Solution {\n  public static object Solve() {\n    // Your code here\n    return null;\n  }\n}"
     },
     "examples": [
-      "Example: see problem statement"
+      "Input: cbaebabacd abc  =>  Output: 0 6",
+      "Input: abab ab  =>  Output: 0 1 2",
+      "Input: abc cba  =>  Output: 0"
     ],
     "testCases": [
       {
-        "input": "sample_input_1",
-        "expected": "expected_output_1"
+        "input": "cbaebabacd\nabc\n",
+        "expected": "0 6"
       },
       {
-        "input": "sample_input_2",
-        "expected": "expected_output_2"
+        "input": "abab\nab\n",
+        "expected": "0 1 2"
       },
       {
-        "input": "sample_input_3",
-        "expected": "expected_output_3"
+        "input": "abc\ncba\n",
+        "expected": "0"
       }
     ]
   },
@@ -2795,20 +2980,22 @@
       "csharp": "// C#\npublic class Solution {\n  public static object Solve() {\n    // Your code here\n    return null;\n  }\n}"
     },
     "examples": [
-      "Example: see problem statement"
+      "Input: 10 9 2 5 3 7 101 18  =>  Output: 4",
+      "Input: 0 1 0 3 2 3  =>  Output: 4",
+      "Input: 7 7 7 7  =>  Output: 1"
     ],
     "testCases": [
       {
-        "input": "sample_input_1",
-        "expected": "expected_output_1"
+        "input": "10 9 2 5 3 7 101 18\n",
+        "expected": "4"
       },
       {
-        "input": "sample_input_2",
-        "expected": "expected_output_2"
+        "input": "0 1 0 3 2 3\n",
+        "expected": "4"
       },
       {
-        "input": "sample_input_3",
-        "expected": "expected_output_3"
+        "input": "7 7 7 7\n",
+        "expected": "1"
       }
     ]
   },
@@ -2824,20 +3011,22 @@
       "csharp": "// C#\npublic class Solution {\n  public static object Solve() {\n    // Your code here\n    return null;\n  }\n}"
     },
     "examples": [
-      "Example: see problem statement"
+      "Input: horse ros  =>  Output: 3",
+      "Input: intention execution  =>  Output: 5",
+      "Input: a b  =>  Output: 1"
     ],
     "testCases": [
       {
-        "input": "sample_input_1",
-        "expected": "expected_output_1"
+        "input": "horse\nros\n",
+        "expected": "3"
       },
       {
-        "input": "sample_input_2",
-        "expected": "expected_output_2"
+        "input": "intention\nexecution\n",
+        "expected": "5"
       },
       {
-        "input": "sample_input_3",
-        "expected": "expected_output_3"
+        "input": "a\nb\n",
+        "expected": "1"
       }
     ]
   },
@@ -2853,20 +3042,22 @@
       "csharp": "// C#\npublic class Solution {\n  public static object Solve() {\n    // Your code here\n    return null;\n  }\n}"
     },
     "examples": [
-      "Example: see problem statement"
+      "Input: 3 9 20 null null 15 7  =>  Output: 3 20 9 15 7",
+      "Input: 1  =>  Output: 1",
+      "Input: 1 2 3 4 null null 5  =>  Output: 1 3 2 4 5"
     ],
     "testCases": [
       {
-        "input": "sample_input_1",
-        "expected": "expected_output_1"
+        "input": "3 9 20 null null 15 7\n",
+        "expected": "3\n20 9\n15 7"
       },
       {
-        "input": "sample_input_2",
-        "expected": "expected_output_2"
+        "input": "1\n",
+        "expected": "1"
       },
       {
-        "input": "sample_input_3",
-        "expected": "expected_output_3"
+        "input": "1 2 3 4 null null 5\n",
+        "expected": "1\n3 2\n4 5"
       }
     ]
   },
@@ -2882,20 +3073,22 @@
       "csharp": "// C#\npublic class Solution {\n  public static object Solve() {\n    // Your code here\n    return null;\n  }\n}"
     },
     "examples": [
-      "Example: see problem statement"
+      "Input: 3 9 20 15 7 9 3 15 20 7  =>  Output: 3 9 20 null null 15 7",
+      "Input: -1 -1  =>  Output: -1",
+      "Input: 1 2 3 2 1 3  =>  Output: 1 2 3"
     ],
     "testCases": [
       {
-        "input": "sample_input_1",
-        "expected": "expected_output_1"
+        "input": "3 9 20 15 7\n9 3 15 20 7\n",
+        "expected": "3 9 20 null null 15 7"
       },
       {
-        "input": "sample_input_2",
-        "expected": "expected_output_2"
+        "input": "-1\n-1\n",
+        "expected": "-1"
       },
       {
-        "input": "sample_input_3",
-        "expected": "expected_output_3"
+        "input": "1 2 3\n2 1 3\n",
+        "expected": "1 2 3"
       }
     ]
   },
@@ -2911,20 +3104,22 @@
       "csharp": "// C#\npublic class Solution {\n  public static object Solve() {\n    // Your code here\n    return null;\n  }\n}"
     },
     "examples": [
-      "Example: see problem statement"
+      "Input: 1 2 3 4 5 6 7 8 9  =>  Output: 7 4 1 8 5 2 9 6 3",
+      "Input: 5 1 9 11 2 4 8 10 13 3 6 7 15 14 12 16  =>  Output: 15 13 2 5 14 3 4 1 12 6 8 9 16 7 10 11",
+      "Input: 1  =>  Output: 1"
     ],
     "testCases": [
       {
-        "input": "sample_input_1",
-        "expected": "expected_output_1"
+        "input": "1 2 3\n4 5 6\n7 8 9\n",
+        "expected": "7 4 1\n8 5 2\n9 6 3"
       },
       {
-        "input": "sample_input_2",
-        "expected": "expected_output_2"
+        "input": "5 1 9 11\n2 4 8 10\n13 3 6 7\n15 14 12 16\n",
+        "expected": "15 13 2 5\n14 3 4 1\n12 6 8 9\n16 7 10 11"
       },
       {
-        "input": "sample_input_3",
-        "expected": "expected_output_3"
+        "input": "1\n",
+        "expected": "1"
       }
     ]
   },
@@ -2940,20 +3135,22 @@
       "csharp": "// C#\npublic class Solution {\n  public static object Solve() {\n    // Your code here\n    return null;\n  }\n}"
     },
     "examples": [
-      "Example: see problem statement"
+      "Input: 1 2 3 4 5 6 7 8 9  =>  Output: 1 2 3 6 9 8 7 4 5",
+      "Input: 1 2 3 4 5 6 7 8 9 10 11 12  =>  Output: 1 2 3 4 8 12 11 10 9 5 6 7",
+      "Input: 1  =>  Output: 1"
     ],
     "testCases": [
       {
-        "input": "sample_input_1",
-        "expected": "expected_output_1"
+        "input": "1 2 3\n4 5 6\n7 8 9\n",
+        "expected": "1 2 3 6 9 8 7 4 5"
       },
       {
-        "input": "sample_input_2",
-        "expected": "expected_output_2"
+        "input": "1 2 3 4\n5 6 7 8\n9 10 11 12\n",
+        "expected": "1 2 3 4 8 12 11 10 9 5 6 7"
       },
       {
-        "input": "sample_input_3",
-        "expected": "expected_output_3"
+        "input": "1\n",
+        "expected": "1"
       }
     ]
   },
@@ -2969,20 +3166,22 @@
       "csharp": "// C#\npublic class Solution {\n  public static object Solve() {\n    // Your code here\n    return null;\n  }\n}"
     },
     "examples": [
-      "Example: see problem statement"
+      "Input: 1 1 1 1 0 1 1 1 1  =>  Output: 1 0 1 0 0 0 1 0 1",
+      "Input: 0 1 2 0 3 4 5 2 1 3 1 5  =>  Output: 0 0 0 0 0 4 5 0 0 3 1 0",
+      "Input: 1 2 3 4  =>  Output: 1 2 3 4"
     ],
     "testCases": [
       {
-        "input": "sample_input_1",
-        "expected": "expected_output_1"
+        "input": "1 1 1\n1 0 1\n1 1 1\n",
+        "expected": "1 0 1\n0 0 0\n1 0 1"
       },
       {
-        "input": "sample_input_2",
-        "expected": "expected_output_2"
+        "input": "0 1 2 0\n3 4 5 2\n1 3 1 5\n",
+        "expected": "0 0 0 0\n0 4 5 0\n0 3 1 0"
       },
       {
-        "input": "sample_input_3",
-        "expected": "expected_output_3"
+        "input": "1 2\n3 4\n",
+        "expected": "1 2\n3 4"
       }
     ]
   },
@@ -2998,20 +3197,22 @@
       "csharp": "// C#\npublic class Solution {\n  public static object Solve() {\n    // Your code here\n    return null;\n  }\n}"
     },
     "examples": [
-      "Example: see problem statement"
+      "Input: 100 4 200 1 3 2  =>  Output: 4",
+      "Input: 0 3 7 2 5 8 4 6 0 1  =>  Output: 9",
+      "Input: 1 2 0 1  =>  Output: 3"
     ],
     "testCases": [
       {
-        "input": "sample_input_1",
-        "expected": "expected_output_1"
+        "input": "100 4 200 1 3 2\n",
+        "expected": "4"
       },
       {
-        "input": "sample_input_2",
-        "expected": "expected_output_2"
+        "input": "0 3 7 2 5 8 4 6 0 1\n",
+        "expected": "9"
       },
       {
-        "input": "sample_input_3",
-        "expected": "expected_output_3"
+        "input": "1 2 0 1\n",
+        "expected": "3"
       }
     ]
   },
@@ -3027,20 +3228,22 @@
       "csharp": "// C#\npublic class Solution {\n  public static object Solve() {\n    // Your code here\n    return null;\n  }\n}"
     },
     "examples": [
-      "Example: see problem statement"
+      "Input: 1 3 2 6 8 10 15 18  =>  Output: 1 6 8 10 15 18",
+      "Input: 1 4 4 5  =>  Output: 1 5",
+      "Input: 6 8 1 9 2 4  =>  Output: 1 9"
     ],
     "testCases": [
       {
-        "input": "sample_input_1",
-        "expected": "expected_output_1"
+        "input": "1 3\n2 6\n8 10\n15 18\n",
+        "expected": "1 6\n8 10\n15 18"
       },
       {
-        "input": "sample_input_2",
-        "expected": "expected_output_2"
+        "input": "1 4\n4 5\n",
+        "expected": "1 5"
       },
       {
-        "input": "sample_input_3",
-        "expected": "expected_output_3"
+        "input": "6 8\n1 9\n2 4\n",
+        "expected": "1 9"
       }
     ]
   },
@@ -3056,20 +3259,22 @@
       "csharp": "// C#\npublic class Solution {\n  public static object Solve() {\n    // Your code here\n    return null;\n  }\n}"
     },
     "examples": [
-      "Example: see problem statement"
+      "Input: 2 1 3 6 9 2 5  =>  Output: 1 5 6 9",
+      "Input: 5 1 2 3 5 6 7 8 10 12 16 4 8  =>  Output: 1 2 3 10 12 16",
+      "Input: 1 5 7 2 3  =>  Output: 2 3 5 7"
     ],
     "testCases": [
       {
-        "input": "sample_input_1",
-        "expected": "expected_output_1"
+        "input": "2\n1 3\n6 9\n2 5\n",
+        "expected": "1 5\n6 9"
       },
       {
-        "input": "sample_input_2",
-        "expected": "expected_output_2"
+        "input": "5\n1 2\n3 5\n6 7\n8 10\n12 16\n4 8\n",
+        "expected": "1 2\n3 10\n12 16"
       },
       {
-        "input": "sample_input_3",
-        "expected": "expected_output_3"
+        "input": "1\n5 7\n2 3\n",
+        "expected": "2 3\n5 7"
       }
     ]
   },
@@ -3085,20 +3290,22 @@
       "csharp": "// C#\npublic class Solution {\n  public static object Solve() {\n    // Your code here\n    return null;\n  }\n}"
     },
     "examples": [
-      "Example: see problem statement"
+      "Input: A A A B B B 2  =>  Output: 8",
+      "Input: A C A B D B 1  =>  Output: 6",
+      "Input: A A A 1  =>  Output: 5"
     ],
     "testCases": [
       {
-        "input": "sample_input_1",
-        "expected": "expected_output_1"
+        "input": "A A A B B B\n2\n",
+        "expected": "8"
       },
       {
-        "input": "sample_input_2",
-        "expected": "expected_output_2"
+        "input": "A C A B D B\n1\n",
+        "expected": "6"
       },
       {
-        "input": "sample_input_3",
-        "expected": "expected_output_3"
+        "input": "A A A\n1\n",
+        "expected": "5"
       }
     ]
   },
@@ -3114,20 +3321,22 @@
       "csharp": "// C#\npublic class Solution {\n  public static object Solve() {\n    // Your code here\n    return null;\n  }\n}"
     },
     "examples": [
-      "Example: see problem statement"
+      "Input: 73 74 75 71 69 72 76 73  =>  Output: 1 1 4 2 1 1 0 0",
+      "Input: 30 40 50 60  =>  Output: 1 1 1 0",
+      "Input: 30 60 90  =>  Output: 1 1 0"
     ],
     "testCases": [
       {
-        "input": "sample_input_1",
-        "expected": "expected_output_1"
+        "input": "73 74 75 71 69 72 76 73\n",
+        "expected": "1 1 4 2 1 1 0 0"
       },
       {
-        "input": "sample_input_2",
-        "expected": "expected_output_2"
+        "input": "30 40 50 60\n",
+        "expected": "1 1 1 0"
       },
       {
-        "input": "sample_input_3",
-        "expected": "expected_output_3"
+        "input": "30 60 90\n",
+        "expected": "1 1 0"
       }
     ]
   },
@@ -3143,20 +3352,22 @@
       "csharp": "// C#\npublic class Solution {\n  public static object Solve() {\n    // Your code here\n    return null;\n  }\n}"
     },
     "examples": [
-      "Example: see problem statement"
+      "Input: 2 1 + 3 *  =>  Output: 9",
+      "Input: 4 13 5 / +  =>  Output: 6",
+      "Input: 10 6 9 3 + -11 * / * 17 + 5 +  =>  Output: 22"
     ],
     "testCases": [
       {
-        "input": "sample_input_1",
-        "expected": "expected_output_1"
+        "input": "2 1 + 3 *\n",
+        "expected": "9"
       },
       {
-        "input": "sample_input_2",
-        "expected": "expected_output_2"
+        "input": "4 13 5 / +\n",
+        "expected": "6"
       },
       {
-        "input": "sample_input_3",
-        "expected": "expected_output_3"
+        "input": "10 6 9 3 + -11 * / * 17 + 5 +\n",
+        "expected": "22"
       }
     ]
   },
@@ -3172,20 +3383,22 @@
       "csharp": "// C#\npublic class Solution {\n  public static object Solve() {\n    // Your code here\n    return null;\n  }\n}"
     },
     "examples": [
-      "Example: see problem statement"
+      "Input: 3[a]2[bc]  =>  Output: aaabcbc",
+      "Input: 3[a2[c]]  =>  Output: accaccacc",
+      "Input: 2[abc]3[cd]ef  =>  Output: abcabccdcdcdef"
     ],
     "testCases": [
       {
-        "input": "sample_input_1",
-        "expected": "expected_output_1"
+        "input": "3[a]2[bc]\n",
+        "expected": "aaabcbc"
       },
       {
-        "input": "sample_input_2",
-        "expected": "expected_output_2"
+        "input": "3[a2[c]]\n",
+        "expected": "accaccacc"
       },
       {
-        "input": "sample_input_3",
-        "expected": "expected_output_3"
+        "input": "2[abc]3[cd]ef\n",
+        "expected": "abcabccdcdcdef"
       }
     ]
   },
@@ -3201,20 +3414,22 @@
       "csharp": "// C#\npublic class Solution {\n  public static object Solve() {\n    // Your code here\n    return null;\n  }\n}"
     },
     "examples": [
-      "Example: see problem statement"
+      "Input: /home/  =>  Output: /home",
+      "Input: /a/./b/../../c/  =>  Output: /c",
+      "Input: /../  =>  Output: /"
     ],
     "testCases": [
       {
-        "input": "sample_input_1",
-        "expected": "expected_output_1"
+        "input": "/home/\n",
+        "expected": "/home"
       },
       {
-        "input": "sample_input_2",
-        "expected": "expected_output_2"
+        "input": "/a/./b/../../c/\n",
+        "expected": "/c"
       },
       {
-        "input": "sample_input_3",
-        "expected": "expected_output_3"
+        "input": "/../\n",
+        "expected": "/"
       }
     ]
   },
@@ -3230,20 +3445,22 @@
       "csharp": "// C#\npublic class Solution {\n  public static object Solve() {\n    // Your code here\n    return null;\n  }\n}"
     },
     "examples": [
-      "Example: see problem statement"
+      "Input: 1 3 4 2 2  =>  Output: 2",
+      "Input: 3 1 3 4 2  =>  Output: 3",
+      "Input: 1 1  =>  Output: 1"
     ],
     "testCases": [
       {
-        "input": "sample_input_1",
-        "expected": "expected_output_1"
+        "input": "1 3 4 2 2\n",
+        "expected": "2"
       },
       {
-        "input": "sample_input_2",
-        "expected": "expected_output_2"
+        "input": "3 1 3 4 2\n",
+        "expected": "3"
       },
       {
-        "input": "sample_input_3",
-        "expected": "expected_output_3"
+        "input": "1 1\n",
+        "expected": "1"
       }
     ]
   },
@@ -3259,20 +3476,22 @@
       "csharp": "// C#\npublic class Solution {\n  public static object Solve() {\n    // Your code here\n    return null;\n  }\n}"
     },
     "examples": [
-      "Example: see problem statement"
+      "Input: 5  =>  Output: 1 1 1 1 2 1 1 3 3 1 1 4 6 4 1",
+      "Input: 1  =>  Output: 1",
+      "Input: 3  =>  Output: 1 1 1 1 2 1"
     ],
     "testCases": [
       {
-        "input": "sample_input_1",
-        "expected": "expected_output_1"
+        "input": "5\n",
+        "expected": "1\n1 1\n1 2 1\n1 3 3 1\n1 4 6 4 1"
       },
       {
-        "input": "sample_input_2",
-        "expected": "expected_output_2"
+        "input": "1\n",
+        "expected": "1"
       },
       {
-        "input": "sample_input_3",
-        "expected": "expected_output_3"
+        "input": "3\n",
+        "expected": "1\n1 1\n1 2 1"
       }
     ]
   },
@@ -3288,20 +3507,22 @@
       "csharp": "// C#\npublic class Solution {\n  public static object Solve() {\n    // Your code here\n    return null;\n  }\n}"
     },
     "examples": [
-      "Example: see problem statement"
+      "Input: 2 3 1 1 4  =>  Output: true",
+      "Input: 3 2 1 0 4  =>  Output: false",
+      "Input: 0  =>  Output: true"
     ],
     "testCases": [
       {
-        "input": "sample_input_1",
-        "expected": "expected_output_1"
+        "input": "2 3 1 1 4\n",
+        "expected": "true"
       },
       {
-        "input": "sample_input_2",
-        "expected": "expected_output_2"
+        "input": "3 2 1 0 4\n",
+        "expected": "false"
       },
       {
-        "input": "sample_input_3",
-        "expected": "expected_output_3"
+        "input": "0\n",
+        "expected": "true"
       }
     ]
   },
@@ -3317,20 +3538,22 @@
       "csharp": "// C#\npublic class Solution {\n  public static object Solve() {\n    // Your code here\n    return null;\n  }\n}"
     },
     "examples": [
-      "Example: see problem statement"
+      "Input: 1 2 3 4 5 3 4 5 1 2  =>  Output: 3",
+      "Input: 2 3 4 3 4 3  =>  Output: -1",
+      "Input: 1 2 2 1  =>  Output: 1"
     ],
     "testCases": [
       {
-        "input": "sample_input_1",
-        "expected": "expected_output_1"
+        "input": "1 2 3 4 5\n3 4 5 1 2\n",
+        "expected": "3"
       },
       {
-        "input": "sample_input_2",
-        "expected": "expected_output_2"
+        "input": "2 3 4\n3 4 3\n",
+        "expected": "-1"
       },
       {
-        "input": "sample_input_3",
-        "expected": "expected_output_3"
+        "input": "1 2\n2 1\n",
+        "expected": "1"
       }
     ]
   },
@@ -3346,20 +3569,22 @@
       "csharp": "// C#\npublic class Solution {\n  public static object Solve() {\n    // Your code here\n    return null;\n  }\n}"
     },
     "examples": [
-      "Example: see problem statement"
+      "Input: ababcbacadefegdehijhklij  =>  Output: 9 7 8",
+      "Input: eccbbbbdec  =>  Output: 10",
+      "Input: caedbdedda  =>  Output: 1 9"
     ],
     "testCases": [
       {
-        "input": "sample_input_1",
-        "expected": "expected_output_1"
+        "input": "ababcbacadefegdehijhklij\n",
+        "expected": "9 7 8"
       },
       {
-        "input": "sample_input_2",
-        "expected": "expected_output_2"
+        "input": "eccbbbbdec\n",
+        "expected": "10"
       },
       {
-        "input": "sample_input_3",
-        "expected": "expected_output_3"
+        "input": "caedbdedda\n",
+        "expected": "1 9"
       }
     ]
   },
@@ -3375,20 +3600,22 @@
       "csharp": "// C#\npublic class Solution {\n  public static object Solve() {\n    // Your code here\n    return null;\n  }\n}"
     },
     "examples": [
-      "Example: see problem statement"
+      "Input: 2 1 5 6 2 3  =>  Output: 10",
+      "Input: 2 4  =>  Output: 4",
+      "Input: 6 2 5 4 5 1 6  =>  Output: 12"
     ],
     "testCases": [
       {
-        "input": "sample_input_1",
-        "expected": "expected_output_1"
+        "input": "2 1 5 6 2 3\n",
+        "expected": "10"
       },
       {
-        "input": "sample_input_2",
-        "expected": "expected_output_2"
+        "input": "2 4\n",
+        "expected": "4"
       },
       {
-        "input": "sample_input_3",
-        "expected": "expected_output_3"
+        "input": "6 2 5 4 5 1 6\n",
+        "expected": "12"
       }
     ]
   },
@@ -3404,20 +3631,22 @@
       "csharp": "// C#\npublic class Solution {\n  public static object Solve() {\n    // Your code here\n    return null;\n  }\n}"
     },
     "examples": [
-      "Example: see problem statement"
+      "Input: 4 5 2 25  =>  Output: 5 25 25 -1",
+      "Input: 13 7 6 12  =>  Output: -1 12 12 -1",
+      "Input: 1 2 3 4  =>  Output: 2 3 4 -1"
     ],
     "testCases": [
       {
-        "input": "sample_input_1",
-        "expected": "expected_output_1"
+        "input": "4 5 2 25\n",
+        "expected": "5 25 25 -1"
       },
       {
-        "input": "sample_input_2",
-        "expected": "expected_output_2"
+        "input": "13 7 6 12\n",
+        "expected": "-1 12 12 -1"
       },
       {
-        "input": "sample_input_3",
-        "expected": "expected_output_3"
+        "input": "1 2 3 4\n",
+        "expected": "2 3 4 -1"
       }
     ]
   },
@@ -3433,20 +3662,21 @@
       "csharp": "// C#\npublic class Solution {\n  public static object Solve() {\n    // Your code here\n    return null;\n  }\n}"
     },
     "examples": [
-      "Example: see problem statement"
+      "Input: ADOBECODEBANC ABC  =>  Output: BANC",
+      "Input: aa aa  =>  Output: aa"
     ],
     "testCases": [
       {
-        "input": "sample_input_1",
-        "expected": "expected_output_1"
+        "input": "ADOBECODEBANC\nABC\n",
+        "expected": "BANC"
       },
       {
-        "input": "sample_input_2",
-        "expected": "expected_output_2"
+        "input": "a\nb\n",
+        "expected": ""
       },
       {
-        "input": "sample_input_3",
-        "expected": "expected_output_3"
+        "input": "aa\naa\n",
+        "expected": "aa"
       }
     ]
   },
@@ -3462,20 +3692,22 @@
       "csharp": "// C#\npublic class Solution {\n  public static object Solve() {\n    // Your code here\n    return null;\n  }\n}"
     },
     "examples": [
-      "Example: see problem statement"
+      "Input: 1 2 3 null 5 null 4  =>  Output: 1 3 4",
+      "Input: 1 2 3 4  =>  Output: 1 3 4",
+      "Input: 1 null 2  =>  Output: 1 2"
     ],
     "testCases": [
       {
-        "input": "sample_input_1",
-        "expected": "expected_output_1"
+        "input": "1 2 3 null 5 null 4\n",
+        "expected": "1 3 4"
       },
       {
-        "input": "sample_input_2",
-        "expected": "expected_output_2"
+        "input": "1 2 3 4\n",
+        "expected": "1 3 4"
       },
       {
-        "input": "sample_input_3",
-        "expected": "expected_output_3"
+        "input": "1 null 2\n",
+        "expected": "1 2"
       }
     ]
   },
@@ -3491,20 +3723,22 @@
       "csharp": "// C#\npublic class Solution {\n  public static object Solve() {\n    // Your code here\n    return null;\n  }\n}"
     },
     "examples": [
-      "Example: see problem statement"
+      "Input: 0 1 0 0 0 1 1 1 1 0 0 0  =>  Output: 0 0 0 1 0 1 0 1 1 0 1 0",
+      "Input: 1 1 1 1  =>  Output: 1 1 1 1",
+      "Input: 1  =>  Output: 0"
     ],
     "testCases": [
       {
-        "input": "sample_input_1",
-        "expected": "expected_output_1"
+        "input": "0 1 0\n0 0 1\n1 1 1\n0 0 0\n",
+        "expected": "0 0 0\n1 0 1\n0 1 1\n0 1 0"
       },
       {
-        "input": "sample_input_2",
-        "expected": "expected_output_2"
+        "input": "1 1\n1 1\n",
+        "expected": "1 1\n1 1"
       },
       {
-        "input": "sample_input_3",
-        "expected": "expected_output_3"
+        "input": "1\n",
+        "expected": "0"
       }
     ]
   },
@@ -3520,20 +3754,22 @@
       "csharp": "// C#\npublic class Solution {\n  public static object Solve() {\n    // Your code here\n    return null;\n  }\n}"
     },
     "examples": [
-      "Example: see problem statement"
+      "Input: 2 1 2 3 5 2 4  =>  Output: 1 5",
+      "Input: 3 1 3 6 9 11 13 7 12  =>  Output: 1 3 6 13",
+      "Input: 1 1 5 2 3  =>  Output: 1 5"
     ],
     "testCases": [
       {
-        "input": "sample_input_1",
-        "expected": "expected_output_1"
+        "input": "2\n1 2\n3 5\n2 4\n",
+        "expected": "1 5"
       },
       {
-        "input": "sample_input_2",
-        "expected": "expected_output_2"
+        "input": "3\n1 3\n6 9\n11 13\n7 12\n",
+        "expected": "1 3\n6 13"
       },
       {
-        "input": "sample_input_3",
-        "expected": "expected_output_3"
+        "input": "1\n1 5\n2 3\n",
+        "expected": "1 5"
       }
     ]
   },
@@ -3549,20 +3785,22 @@
       "csharp": "// C#\npublic class Solution {\n  public static object Solve() {\n    // Your code here\n    return null;\n  }\n}"
     },
     "examples": [
-      "Example: see problem statement"
+      "Input: 1 0 1 0 0 1 0 1 1 1 1 1 1 1 1 1 0 0 1 0  =>  Output: 6",
+      "Input: 0 1 1 0  =>  Output: 1",
+      "Input: 1  =>  Output: 1"
     ],
     "testCases": [
       {
-        "input": "sample_input_1",
-        "expected": "expected_output_1"
+        "input": "1 0 1 0 0\n1 0 1 1 1\n1 1 1 1 1\n1 0 0 1 0\n",
+        "expected": "6"
       },
       {
-        "input": "sample_input_2",
-        "expected": "expected_output_2"
+        "input": "0 1\n1 0\n",
+        "expected": "1"
       },
       {
-        "input": "sample_input_3",
-        "expected": "expected_output_3"
+        "input": "1\n",
+        "expected": "1"
       }
     ]
   },
@@ -3578,20 +3816,22 @@
       "csharp": "// C#\npublic class Solution {\n  public static object Solve() {\n    // Your code here\n    return null;\n  }\n}"
     },
     "examples": [
-      "Example: see problem statement"
+      "Input: add 1 add 2 findMedian add 3 findMedian  =>  Output: 1.5 2",
+      "Input: add 5 findMedian add 2 findMedian add 4 findMedian  =>  Output: 5 3.5 4",
+      "Input: add -1 findMedian add -2 findMedian  =>  Output: -1 -1.5"
     ],
     "testCases": [
       {
-        "input": "sample_input_1",
-        "expected": "expected_output_1"
+        "input": "add 1\nadd 2\nfindMedian\nadd 3\nfindMedian\n",
+        "expected": "1.5\n2"
       },
       {
-        "input": "sample_input_2",
-        "expected": "expected_output_2"
+        "input": "add 5\nfindMedian\nadd 2\nfindMedian\nadd 4\nfindMedian\n",
+        "expected": "5\n3.5\n4"
       },
       {
-        "input": "sample_input_3",
-        "expected": "expected_output_3"
+        "input": "add -1\nfindMedian\nadd -2\nfindMedian\n",
+        "expected": "-1\n-1.5"
       }
     ]
   },
@@ -3607,20 +3847,22 @@
       "csharp": "// C#\npublic class Solution {\n  public static object Solve() {\n    // Your code here\n    return null;\n  }\n}"
     },
     "examples": [
-      "Example: see problem statement"
+      "Input: 0 30 5 10 15 20  =>  Output: 2",
+      "Input: 7 10 2 4  =>  Output: 1",
+      "Input: 0 5 1 3 2 6  =>  Output: 3"
     ],
     "testCases": [
       {
-        "input": "sample_input_1",
-        "expected": "expected_output_1"
+        "input": "0 30\n5 10\n15 20\n",
+        "expected": "2"
       },
       {
-        "input": "sample_input_2",
-        "expected": "expected_output_2"
+        "input": "7 10\n2 4\n",
+        "expected": "1"
       },
       {
-        "input": "sample_input_3",
-        "expected": "expected_output_3"
+        "input": "0 5\n1 3\n2 6\n",
+        "expected": "3"
       }
     ]
   },
@@ -3636,20 +3878,22 @@
       "csharp": "// C#\npublic class Solution {\n  public static object Solve() {\n    // Your code here\n    return null;\n  }\n}"
     },
     "examples": [
-      "Example: see problem statement"
+      "Input: 1 2 2 3 3 4 1 3  =>  Output: 1",
+      "Input: 1 2 1 2 1 2  =>  Output: 2",
+      "Input: 1 2 2 3  =>  Output: 0"
     ],
     "testCases": [
       {
-        "input": "sample_input_1",
-        "expected": "expected_output_1"
+        "input": "1 2\n2 3\n3 4\n1 3\n",
+        "expected": "1"
       },
       {
-        "input": "sample_input_2",
-        "expected": "expected_output_2"
+        "input": "1 2\n1 2\n1 2\n",
+        "expected": "2"
       },
       {
-        "input": "sample_input_3",
-        "expected": "expected_output_3"
+        "input": "1 2\n2 3\n",
+        "expected": "0"
       }
     ]
   },
@@ -3665,20 +3909,21 @@
       "csharp": "// C#\npublic class Solution {\n  public static object Solve() {\n    // Your code here\n    return null;\n  }\n}"
     },
     "examples": [
-      "Example: see problem statement"
+      "Input: oaan etic ehts haee oath pea eat rain  =>  Output: eat oath",
+      "Input: ab cd a b c d  =>  Output: a b c d"
     ],
     "testCases": [
       {
-        "input": "sample_input_1",
-        "expected": "expected_output_1"
+        "input": "oaan\netic\nehts\nhaee\noath pea eat rain\n",
+        "expected": "eat\noath"
       },
       {
-        "input": "sample_input_2",
-        "expected": "expected_output_2"
+        "input": "a\nb\n",
+        "expected": ""
       },
       {
-        "input": "sample_input_3",
-        "expected": "expected_output_3"
+        "input": "ab\ncd\na b c d\n",
+        "expected": "a\nb\nc\nd"
       }
     ]
   },
@@ -3694,20 +3939,21 @@
       "csharp": "// C#\npublic class Solution {\n  public static object Solve() {\n    // Your code here\n    return null;\n  }\n}"
     },
     "examples": [
-      "Example: see problem statement"
+      "Input: 5 10 -5  =>  Output: 5 10",
+      "Input: 10 2 -5  =>  Output: 10"
     ],
     "testCases": [
       {
-        "input": "sample_input_1",
-        "expected": "expected_output_1"
+        "input": "5 10 -5\n",
+        "expected": "5 10"
       },
       {
-        "input": "sample_input_2",
-        "expected": "expected_output_2"
+        "input": "8 -8\n",
+        "expected": ""
       },
       {
-        "input": "sample_input_3",
-        "expected": "expected_output_3"
+        "input": "10 2 -5\n",
+        "expected": "10"
       }
     ]
   },
@@ -3723,20 +3969,21 @@
       "csharp": "// C#\npublic class Solution {\n  public static object Solve() {\n    // Your code here\n    return null;\n  }\n}"
     },
     "examples": [
-      "Example: see problem statement"
+      "Input: lee(t(c)o)de)  =>  Output: lee(t(c)o)de",
+      "Input: a)b(c)d  =>  Output: ab(c)d"
     ],
     "testCases": [
       {
-        "input": "sample_input_1",
-        "expected": "expected_output_1"
+        "input": "lee(t(c)o)de)\n",
+        "expected": "lee(t(c)o)de"
       },
       {
-        "input": "sample_input_2",
-        "expected": "expected_output_2"
+        "input": "a)b(c)d\n",
+        "expected": "ab(c)d"
       },
       {
-        "input": "sample_input_3",
-        "expected": "expected_output_3"
+        "input": "))((\n",
+        "expected": ""
       }
     ]
   },
@@ -3752,20 +3999,21 @@
       "csharp": "// C#\npublic class Solution {\n  public static object Solve() {\n    // Your code here\n    return null;\n  }\n}"
     },
     "examples": [
-      "Example: see problem statement"
+      "Input: 4 3 2 7 8 2 3 1  =>  Output: 2 3",
+      "Input: 1 1 2  =>  Output: 1"
     ],
     "testCases": [
       {
-        "input": "sample_input_1",
-        "expected": "expected_output_1"
+        "input": "4 3 2 7 8 2 3 1\n",
+        "expected": "2 3"
       },
       {
-        "input": "sample_input_2",
-        "expected": "expected_output_2"
+        "input": "1 1 2\n",
+        "expected": "1"
       },
       {
-        "input": "sample_input_3",
-        "expected": "expected_output_3"
+        "input": "1\n",
+        "expected": ""
       }
     ]
   },
@@ -3781,20 +4029,22 @@
       "csharp": "// C#\npublic class Solution {\n  public static object Solve() {\n    // Your code here\n    return null;\n  }\n}"
     },
     "examples": [
-      "Example: see problem statement"
+      "Input: 1 2 3 6 2 3 4 7 8 3  =>  Output: true",
+      "Input: 1 2 3 4 5 4  =>  Output: false",
+      "Input: 1 2 3 1  =>  Output: true"
     ],
     "testCases": [
       {
-        "input": "sample_input_1",
-        "expected": "expected_output_1"
+        "input": "1 2 3 6 2 3 4 7 8\n3\n",
+        "expected": "true"
       },
       {
-        "input": "sample_input_2",
-        "expected": "expected_output_2"
+        "input": "1 2 3 4 5\n4\n",
+        "expected": "false"
       },
       {
-        "input": "sample_input_3",
-        "expected": "expected_output_3"
+        "input": "1 2 3\n1\n",
+        "expected": "true"
       }
     ]
   },
@@ -3810,20 +4060,21 @@
       "csharp": "// C#\npublic class Solution {\n  public static object Solve() {\n    // Your code here\n    return null;\n  }\n}"
     },
     "examples": [
-      "Example: see problem statement"
+      "Input: aab  =>  Output: aba",
+      "Input: vvvlo  =>  Output: vovlv"
     ],
     "testCases": [
       {
-        "input": "sample_input_1",
-        "expected": "expected_output_1"
+        "input": "aab\n",
+        "expected": "aba"
       },
       {
-        "input": "sample_input_2",
-        "expected": "expected_output_2"
+        "input": "aaab\n",
+        "expected": ""
       },
       {
-        "input": "sample_input_3",
-        "expected": "expected_output_3"
+        "input": "vvvlo\n",
+        "expected": "vovlv"
       }
     ]
   },
@@ -3839,20 +4090,22 @@
       "csharp": "// C#\npublic class Solution {\n  public static object Solve() {\n    // Your code here\n    return null;\n  }\n}"
     },
     "examples": [
-      "Example: see problem statement"
+      "Input: 3 0 1 1 2  =>  Output: 0 1 2",
+      "Input: 4 0 1 1 2 2 3  =>  Output: 0 1 2 3",
+      "Input: 2 0 1  =>  Output: 0 1"
     ],
     "testCases": [
       {
-        "input": "sample_input_1",
-        "expected": "expected_output_1"
+        "input": "3\n0 1\n1 2\n",
+        "expected": "0 1 2"
       },
       {
-        "input": "sample_input_2",
-        "expected": "expected_output_2"
+        "input": "4\n0 1\n1 2\n2 3\n",
+        "expected": "0 1 2 3"
       },
       {
-        "input": "sample_input_3",
-        "expected": "expected_output_3"
+        "input": "2\n0 1\n",
+        "expected": "0 1"
       }
     ]
   },
@@ -3868,20 +4121,22 @@
       "csharp": "// C#\npublic class Solution {\n  public static object Solve() {\n    // Your code here\n    return null;\n  }\n}"
     },
     "examples": [
-      "Example: see problem statement"
+      "Input: insert apple insert apple countWordsEqualTo apple countWordsStartingWith app erase apple countWordsEqualTo apple countWordsStartingWith app  =>  Output: 2 2 1 1",
+      "Input: insert hello insert world countWordsStartingWith wor countWordsEqualTo world  =>  Output: 1 1",
+      "Input: countWordsStartingWith a insert a countWordsEqualTo a  =>  Output: 0 1"
     ],
     "testCases": [
       {
-        "input": "sample_input_1",
-        "expected": "expected_output_1"
+        "input": "insert apple\ninsert apple\ncountWordsEqualTo apple\ncountWordsStartingWith app\nerase apple\ncountWordsEqualTo apple\ncountWordsStartingWith app\n",
+        "expected": "2\n2\n1\n1"
       },
       {
-        "input": "sample_input_2",
-        "expected": "expected_output_2"
+        "input": "insert hello\ninsert world\ncountWordsStartingWith wor\ncountWordsEqualTo world\n",
+        "expected": "1\n1"
       },
       {
-        "input": "sample_input_3",
-        "expected": "expected_output_3"
+        "input": "countWordsStartingWith a\ninsert a\ncountWordsEqualTo a\n",
+        "expected": "0\n1"
       }
     ]
   },
@@ -3897,20 +4152,22 @@
       "csharp": "// C#\npublic class Solution {\n  public static object Solve() {\n    // Your code here\n    return null;\n  }\n}"
     },
     "examples": [
-      "Example: see problem statement"
+      "Input: addWord bad addWord dad addWord mad search pad search .ad search b..  =>  Output: false true true",
+      "Input: addWord a search . search a search ..  =>  Output: true true false",
+      "Input: search .a addWord aa search .a  =>  Output: false true"
     ],
     "testCases": [
       {
-        "input": "sample_input_1",
-        "expected": "expected_output_1"
+        "input": "addWord bad\naddWord dad\naddWord mad\nsearch pad\nsearch .ad\nsearch b..\n",
+        "expected": "false\ntrue\ntrue"
       },
       {
-        "input": "sample_input_2",
-        "expected": "expected_output_2"
+        "input": "addWord a\nsearch .\nsearch a\nsearch ..\n",
+        "expected": "true\ntrue\nfalse"
       },
       {
-        "input": "sample_input_3",
-        "expected": "expected_output_3"
+        "input": "search .a\naddWord aa\nsearch .a\n",
+        "expected": "false\ntrue"
       }
     ]
   },
@@ -3926,20 +4183,22 @@
       "csharp": "// C#\npublic class Solution {\n  public static object Solve() {\n    // Your code here\n    return null;\n  }\n}"
     },
     "examples": [
-      "Example: see problem statement"
+      "Input: 0 1 0 2 1 0 1 3 2 1 2 1  =>  Output: 6",
+      "Input: 4 2 0 3 2 5  =>  Output: 9",
+      "Input: 4 2 3  =>  Output: 1"
     ],
     "testCases": [
       {
-        "input": "sample_input_1",
-        "expected": "expected_output_1"
+        "input": "0 1 0 2 1 0 1 3 2 1 2 1\n",
+        "expected": "6"
       },
       {
-        "input": "sample_input_2",
-        "expected": "expected_output_2"
+        "input": "4 2 0 3 2 5\n",
+        "expected": "9"
       },
       {
-        "input": "sample_input_3",
-        "expected": "expected_output_3"
+        "input": "4 2 3\n",
+        "expected": "1"
       }
     ]
   },
@@ -3955,20 +4214,22 @@
       "csharp": "// C#\npublic class Solution {\n  public static object Solve() {\n    // Your code here\n    return null;\n  }\n}"
     },
     "examples": [
-      "Example: see problem statement"
+      "Input: 1 3 2  =>  Output: 2",
+      "Input: 1 2 3 4  =>  Output: 2.5",
+      "Input: 0 0 0 0  =>  Output: 0"
     ],
     "testCases": [
       {
-        "input": "sample_input_1",
-        "expected": "expected_output_1"
+        "input": "1 3\n2\n",
+        "expected": "2"
       },
       {
-        "input": "sample_input_2",
-        "expected": "expected_output_2"
+        "input": "1 2\n3 4\n",
+        "expected": "2.5"
       },
       {
-        "input": "sample_input_3",
-        "expected": "expected_output_3"
+        "input": "0 0\n0 0\n",
+        "expected": "0"
       }
     ]
   },
@@ -3984,20 +4245,22 @@
       "csharp": "// C#\npublic class Solution {\n  public static object Solve() {\n    // Your code here\n    return null;\n  }\n}"
     },
     "examples": [
-      "Example: see problem statement"
+      "Input: aa a  =>  Output: false",
+      "Input: aa a*  =>  Output: true",
+      "Input: ab .*  =>  Output: true"
     ],
     "testCases": [
       {
-        "input": "sample_input_1",
-        "expected": "expected_output_1"
+        "input": "aa\na\n",
+        "expected": "false"
       },
       {
-        "input": "sample_input_2",
-        "expected": "expected_output_2"
+        "input": "aa\na*\n",
+        "expected": "true"
       },
       {
-        "input": "sample_input_3",
-        "expected": "expected_output_3"
+        "input": "ab\n.*\n",
+        "expected": "true"
       }
     ]
   },
@@ -4013,20 +4276,22 @@
       "csharp": "// C#\npublic class Solution {\n  public static object Solve() {\n    // Your code here\n    return null;\n  }\n}"
     },
     "examples": [
-      "Example: see problem statement"
+      "Input: aa a  =>  Output: false",
+      "Input: aa *  =>  Output: true",
+      "Input: cb ?b  =>  Output: true"
     ],
     "testCases": [
       {
-        "input": "sample_input_1",
-        "expected": "expected_output_1"
+        "input": "aa\na\n",
+        "expected": "false"
       },
       {
-        "input": "sample_input_2",
-        "expected": "expected_output_2"
+        "input": "aa\n*\n",
+        "expected": "true"
       },
       {
-        "input": "sample_input_3",
-        "expected": "expected_output_3"
+        "input": "cb\n?b\n",
+        "expected": "true"
       }
     ]
   },
@@ -4042,20 +4307,22 @@
       "csharp": "// C#\npublic class Solution {\n  public static object Solve() {\n    // Your code here\n    return null;\n  }\n}"
     },
     "examples": [
-      "Example: see problem statement"
+      "Input: (()  =>  Output: 2",
+      "Input: )()())  =>  Output: 4",
+      "Input: ()(()  =>  Output: 2"
     ],
     "testCases": [
       {
-        "input": "sample_input_1",
-        "expected": "expected_output_1"
+        "input": "(()\n",
+        "expected": "2"
       },
       {
-        "input": "sample_input_2",
-        "expected": "expected_output_2"
+        "input": ")()())\n",
+        "expected": "4"
       },
       {
-        "input": "sample_input_3",
-        "expected": "expected_output_3"
+        "input": "()(()\n",
+        "expected": "2"
       }
     ]
   },
@@ -4071,20 +4338,22 @@
       "csharp": "// C#\npublic class Solution {\n  public static object Solve() {\n    // Your code here\n    return null;\n  }\n}"
     },
     "examples": [
-      "Example: see problem statement"
+      "Input: 53..7.... 6..195... .98....6. 8...6...3 4..8.3..1 7...2...6 .6....28. ...419..5 ....8..79  =>  Output: 534678912 672195348 198342567 859761423 426853791 713924856 961537284 287419635 345286179",
+      "Input: ..9748... 7........ .2.1.9... ..7...24. .64.1.59. .98...3.. ...8.3.2. ........6 ...2759..  =>  Output: 519748632 783652419 426139875 357986241 264317598 198524367 975863124 832491756 641275983",
+      "Input: ..594..27 ..7..18.. 2........ 31.4....8 5......6. .2...5..9 69......5 .3..269.1 ..1...24.  =>  Output: 185943627 947261853 263857194 316492578 579318462 428675319 692184735 734526981 851739246"
     ],
     "testCases": [
       {
-        "input": "sample_input_1",
-        "expected": "expected_output_1"
+        "input": "53..7....\n6..195...\n.98....6.\n8...6...3\n4..8.3..1\n7...2...6\n.6....28.\n...419..5\n....8..79\n",
+        "expected": "534678912\n672195348\n198342567\n859761423\n426853791\n713924856\n961537284\n287419635\n345286179"
       },
       {
-        "input": "sample_input_2",
-        "expected": "expected_output_2"
+        "input": "..9748...\n7........\n.2.1.9...\n..7...24.\n.64.1.59.\n.98...3..\n...8.3.2.\n........6\n...2759..\n",
+        "expected": "519748632\n783652419\n426139875\n357986241\n264317598\n198524367\n975863124\n832491756\n641275983"
       },
       {
-        "input": "sample_input_3",
-        "expected": "expected_output_3"
+        "input": "..594..27\n..7..18..\n2........\n31.4....8\n5......6.\n.2...5..9\n69......5\n.3..269.1\n..1...24.\n",
+        "expected": "185943627\n947261853\n263857194\n316492578\n579318462\n428675319\n692184735\n734526981\n851739246"
       }
     ]
   },
@@ -4100,20 +4369,21 @@
       "csharp": "// C#\npublic class Solution {\n  public static object Solve() {\n    // Your code here\n    return null;\n  }\n}"
     },
     "examples": [
-      "Example: see problem statement"
+      "Input: 4  =>  Output: .Q.. ...Q Q... ..Q.  ..Q. Q... ...Q .Q..",
+      "Input: 1  =>  Output: Q"
     ],
     "testCases": [
       {
-        "input": "sample_input_1",
-        "expected": "expected_output_1"
+        "input": "4\n",
+        "expected": ".Q..\n...Q\nQ...\n..Q.\n\n..Q.\nQ...\n...Q\n.Q.."
       },
       {
-        "input": "sample_input_2",
-        "expected": "expected_output_2"
+        "input": "1\n",
+        "expected": "Q"
       },
       {
-        "input": "sample_input_3",
-        "expected": "expected_output_3"
+        "input": "2\n",
+        "expected": ""
       }
     ]
   },
@@ -4129,20 +4399,22 @@
       "csharp": "// C#\npublic class Solution {\n  public static object Solve() {\n    // Your code here\n    return null;\n  }\n}"
     },
     "examples": [
-      "Example: see problem statement"
+      "Input: hit cog hot dot dog lot log cog  =>  Output: 5",
+      "Input: hit cog hot dot dog lot log  =>  Output: 0",
+      "Input: a c a b c  =>  Output: 2"
     ],
     "testCases": [
       {
-        "input": "sample_input_1",
-        "expected": "expected_output_1"
+        "input": "hit\ncog\nhot dot dog lot log cog\n",
+        "expected": "5"
       },
       {
-        "input": "sample_input_2",
-        "expected": "expected_output_2"
+        "input": "hit\ncog\nhot dot dog lot log\n",
+        "expected": "0"
       },
       {
-        "input": "sample_input_3",
-        "expected": "expected_output_3"
+        "input": "a\nc\na b c\n",
+        "expected": "2"
       }
     ]
   },
@@ -4158,20 +4430,22 @@
       "csharp": "// C#\npublic class Solution {\n  public static object Solve() {\n    // Your code here\n    return null;\n  }\n}"
     },
     "examples": [
-      "Example: see problem statement"
+      "Input: 3 1 5 8  =>  Output: 167",
+      "Input: 1 5  =>  Output: 10",
+      "Input: 9  =>  Output: 9"
     ],
     "testCases": [
       {
-        "input": "sample_input_1",
-        "expected": "expected_output_1"
+        "input": "3 1 5 8\n",
+        "expected": "167"
       },
       {
-        "input": "sample_input_2",
-        "expected": "expected_output_2"
+        "input": "1 5\n",
+        "expected": "10"
       },
       {
-        "input": "sample_input_3",
-        "expected": "expected_output_3"
+        "input": "9\n",
+        "expected": "9"
       }
     ]
   },
@@ -4187,20 +4461,22 @@
       "csharp": "// C#\npublic class Solution {\n  public static object Solve() {\n    // Your code here\n    return null;\n  }\n}"
     },
     "examples": [
-      "Example: see problem statement"
+      "Input: push 5 push 7 push 5 push 7 push 4 push 5 pop pop pop pop  =>  Output: 5 7 5 4",
+      "Input: push 1 push 1 pop pop  =>  Output: 1 1",
+      "Input: push 2 push 3 push 3 pop pop pop  =>  Output: 3 3 2"
     ],
     "testCases": [
       {
-        "input": "sample_input_1",
-        "expected": "expected_output_1"
+        "input": "push 5\npush 7\npush 5\npush 7\npush 4\npush 5\npop\npop\npop\npop\n",
+        "expected": "5\n7\n5\n4"
       },
       {
-        "input": "sample_input_2",
-        "expected": "expected_output_2"
+        "input": "push 1\npush 1\npop\npop\n",
+        "expected": "1\n1"
       },
       {
-        "input": "sample_input_3",
-        "expected": "expected_output_3"
+        "input": "push 2\npush 3\npush 3\npop\npop\npop\n",
+        "expected": "3\n3\n2"
       }
     ]
   },
@@ -4216,20 +4492,22 @@
       "csharp": "// C#\npublic class Solution {\n  public static object Solve() {\n    // Your code here\n    return null;\n  }\n}"
     },
     "examples": [
-      "Example: see problem statement"
+      "Input: set 0 5 snap set 0 6 get 0 0 get 0 1  =>  Output: 5 6",
+      "Input: snap set 1 10 get 1 0 get 1 1  =>  Output: 0 10",
+      "Input: set 0 1 set 0 2 snap get 0 0 snap get 0 1 get 0 2  =>  Output: 2 2 2"
     ],
     "testCases": [
       {
-        "input": "sample_input_1",
-        "expected": "expected_output_1"
+        "input": "set 0 5\nsnap\nset 0 6\nget 0 0\nget 0 1\n",
+        "expected": "5\n6"
       },
       {
-        "input": "sample_input_2",
-        "expected": "expected_output_2"
+        "input": "snap\nset 1 10\nget 1 0\nget 1 1\n",
+        "expected": "0\n10"
       },
       {
-        "input": "sample_input_3",
-        "expected": "expected_output_3"
+        "input": "set 0 1\nset 0 2\nsnap\nget 0 0\nsnap\nget 0 1\nget 0 2\n",
+        "expected": "2\n2\n2"
       }
     ]
   },
@@ -4245,20 +4523,22 @@
       "csharp": "// C#\npublic class Solution {\n  public static object Solve() {\n    // Your code here\n    return null;\n  }\n}"
     },
     "examples": [
-      "Example: see problem statement"
+      "Input: 5 2 6 1  =>  Output: 2 1 1 0",
+      "Input: -1 -1  =>  Output: 0 0",
+      "Input: 1 2 3 4  =>  Output: 0 0 0 0"
     ],
     "testCases": [
       {
-        "input": "sample_input_1",
-        "expected": "expected_output_1"
+        "input": "5 2 6 1\n",
+        "expected": "2 1 1 0"
       },
       {
-        "input": "sample_input_2",
-        "expected": "expected_output_2"
+        "input": "-1 -1\n",
+        "expected": "0 0"
       },
       {
-        "input": "sample_input_3",
-        "expected": "expected_output_3"
+        "input": "1 2 3 4\n",
+        "expected": "0 0 0 0"
       }
     ]
   },
@@ -4274,20 +4554,22 @@
       "csharp": "// C#\npublic class Solution {\n  public static object Solve() {\n    // Your code here\n    return null;\n  }\n}"
     },
     "examples": [
-      "Example: see problem statement"
+      "Input: 1 3 2 3 1  =>  Output: 2",
+      "Input: 2 4 3 5 1  =>  Output: 3",
+      "Input: 1  =>  Output: 0"
     ],
     "testCases": [
       {
-        "input": "sample_input_1",
-        "expected": "expected_output_1"
+        "input": "1 3 2 3 1\n",
+        "expected": "2"
       },
       {
-        "input": "sample_input_2",
-        "expected": "expected_output_2"
+        "input": "2 4 3 5 1\n",
+        "expected": "3"
       },
       {
-        "input": "sample_input_3",
-        "expected": "expected_output_3"
+        "input": "1\n",
+        "expected": "0"
       }
     ]
   },
@@ -4303,20 +4585,22 @@
       "csharp": "// C#\npublic class Solution {\n  public static object Solve() {\n    // Your code here\n    return null;\n  }\n}"
     },
     "examples": [
-      "Example: see problem statement"
+      "Input: 3 1 4 5 1 3 4 2 6  =>  Output: 1 1 2 3 4 4 5 6",
+      "Input: 2 1 2 3 4  =>  Output: 1 2 3 4",
+      "Input: 1 5  =>  Output: 5"
     ],
     "testCases": [
       {
-        "input": "sample_input_1",
-        "expected": "expected_output_1"
+        "input": "3\n1 4 5\n1 3 4\n2 6\n",
+        "expected": "1 1 2 3 4 4 5 6"
       },
       {
-        "input": "sample_input_2",
-        "expected": "expected_output_2"
+        "input": "2\n1 2\n3 4\n",
+        "expected": "1 2 3 4"
       },
       {
-        "input": "sample_input_3",
-        "expected": "expected_output_3"
+        "input": "1\n5\n",
+        "expected": "5"
       }
     ]
   },
@@ -4332,20 +4616,22 @@
       "csharp": "// C#\npublic class Solution {\n  public static object Solve() {\n    // Your code here\n    return null;\n  }\n}"
     },
     "examples": [
-      "Example: see problem statement"
+      "Input: 2 0 1 2 3 0 1 1  =>  Output: 4",
+      "Input: 3 0 1 2 3 0 1 2  =>  Output: 6",
+      "Input: 1 2 1 2 3 0 0 0  =>  Output: 5"
     ],
     "testCases": [
       {
-        "input": "sample_input_1",
-        "expected": "expected_output_1"
+        "input": "2 0\n1 2 3\n0 1 1\n",
+        "expected": "4"
       },
       {
-        "input": "sample_input_2",
-        "expected": "expected_output_2"
+        "input": "3 0\n1 2 3\n0 1 2\n",
+        "expected": "6"
       },
       {
-        "input": "sample_input_3",
-        "expected": "expected_output_3"
+        "input": "1 2\n1 2 3\n0 0 0\n",
+        "expected": "5"
       }
     ]
   },
@@ -4361,20 +4647,22 @@
       "csharp": "// C#\npublic class Solution {\n  public static object Solve() {\n    // Your code here\n    return null;\n  }\n}"
     },
     "examples": [
-      "Example: see problem statement"
+      "Input: 4 0 1 1 2 2 0 1 3  =>  Output: 1 3",
+      "Input: 6 0 1 1 2 2 3 3 0 2 4 4 5 5 2  =>  Output: 2 4",
+      "Input: 2 0 1  =>  Output: 0 1"
     ],
     "testCases": [
       {
-        "input": "sample_input_1",
-        "expected": "expected_output_1"
+        "input": "4\n0 1\n1 2\n2 0\n1 3\n",
+        "expected": "1 3"
       },
       {
-        "input": "sample_input_2",
-        "expected": "expected_output_2"
+        "input": "6\n0 1\n1 2\n2 3\n3 0\n2 4\n4 5\n5 2\n",
+        "expected": "2 4"
       },
       {
-        "input": "sample_input_3",
-        "expected": "expected_output_3"
+        "input": "2\n0 1\n",
+        "expected": "0 1"
       }
     ]
   },
@@ -4390,20 +4678,22 @@
       "csharp": "// C#\npublic class Solution {\n  public static object Solve() {\n    // Your code here\n    return null;\n  }\n}"
     },
     "examples": [
-      "Example: see problem statement"
+      "Input: 5 4 6 4 6 7 2 3  =>  Output: 3",
+      "Input: 1 1 1 1 1 1  =>  Output: 1",
+      "Input: 1 2 2 3 3 4 4 5  =>  Output: 4"
     ],
     "testCases": [
       {
-        "input": "sample_input_1",
-        "expected": "expected_output_1"
+        "input": "5 4\n6 4\n6 7\n2 3\n",
+        "expected": "3"
       },
       {
-        "input": "sample_input_2",
-        "expected": "expected_output_2"
+        "input": "1 1\n1 1\n1 1\n",
+        "expected": "1"
       },
       {
-        "input": "sample_input_3",
-        "expected": "expected_output_3"
+        "input": "1 2\n2 3\n3 4\n4 5\n",
+        "expected": "4"
       }
     ]
   },
@@ -4419,20 +4709,22 @@
       "csharp": "// C#\npublic class Solution {\n  public static object Solve() {\n    // Your code here\n    return null;\n  }\n}"
     },
     "examples": [
-      "Example: see problem statement"
+      "Input: rabbbit rabbit  =>  Output: 3",
+      "Input: babgbag bag  =>  Output: 5",
+      "Input: abc abc  =>  Output: 1"
     ],
     "testCases": [
       {
-        "input": "sample_input_1",
-        "expected": "expected_output_1"
+        "input": "rabbbit\nrabbit\n",
+        "expected": "3"
       },
       {
-        "input": "sample_input_2",
-        "expected": "expected_output_2"
+        "input": "babgbag\nbag\n",
+        "expected": "5"
       },
       {
-        "input": "sample_input_3",
-        "expected": "expected_output_3"
+        "input": "abc\nabc\n",
+        "expected": "1"
       }
     ]
   },
@@ -4448,20 +4740,22 @@
       "csharp": "// C#\npublic class Solution {\n  public static object Solve() {\n    // Your code here\n    return null;\n  }\n}"
     },
     "examples": [
-      "Example: see problem statement"
+      "Input: aabcc dbbca aadbbcbcac  =>  Output: true",
+      "Input: aabcc dbbca aadbbbaccc  =>  Output: false",
+      "Input: a b ab  =>  Output: true"
     ],
     "testCases": [
       {
-        "input": "sample_input_1",
-        "expected": "expected_output_1"
+        "input": "aabcc\ndbbca\naadbbcbcac\n",
+        "expected": "true"
       },
       {
-        "input": "sample_input_2",
-        "expected": "expected_output_2"
+        "input": "aabcc\ndbbca\naadbbbaccc\n",
+        "expected": "false"
       },
       {
-        "input": "sample_input_3",
-        "expected": "expected_output_3"
+        "input": "a\nb\nab\n",
+        "expected": "true"
       }
     ]
   },
@@ -4477,20 +4771,22 @@
       "csharp": "// C#\npublic class Solution {\n  public static object Solve() {\n    // Your code here\n    return null;\n  }\n}"
     },
     "examples": [
-      "Example: see problem statement"
+      "Input: great rgeat  =>  Output: true",
+      "Input: abcde caebd  =>  Output: false",
+      "Input: ab ba  =>  Output: true"
     ],
     "testCases": [
       {
-        "input": "sample_input_1",
-        "expected": "expected_output_1"
+        "input": "great\nrgeat\n",
+        "expected": "true"
       },
       {
-        "input": "sample_input_2",
-        "expected": "expected_output_2"
+        "input": "abcde\ncaebd\n",
+        "expected": "false"
       },
       {
-        "input": "sample_input_3",
-        "expected": "expected_output_3"
+        "input": "ab\nba\n",
+        "expected": "true"
       }
     ]
   },
@@ -4506,20 +4802,21 @@
       "csharp": "// C#\npublic class Solution {\n  public static object Solve() {\n    // Your code here\n    return null;\n  }\n}"
     },
     "examples": [
-      "Example: see problem statement"
+      "Input: catsanddog cat cats and sand dog  =>  Output: cat sand dog cats and dog",
+      "Input: pineapplepenapple apple pen applepen pine pineapple  =>  Output: pine apple pen apple pine applepen apple pineapple pen apple"
     ],
     "testCases": [
       {
-        "input": "sample_input_1",
-        "expected": "expected_output_1"
+        "input": "catsanddog\ncat cats and sand dog\n",
+        "expected": "cat sand dog\ncats and dog"
       },
       {
-        "input": "sample_input_2",
-        "expected": "expected_output_2"
+        "input": "pineapplepenapple\napple pen applepen pine pineapple\n",
+        "expected": "pine apple pen apple\npine applepen apple\npineapple pen apple"
       },
       {
-        "input": "sample_input_3",
-        "expected": "expected_output_3"
+        "input": "catsandog\ncats dog sand and cat\n",
+        "expected": ""
       }
     ]
   },
@@ -4535,20 +4832,22 @@
       "csharp": "// C#\npublic class Solution {\n  public static object Solve() {\n    // Your code here\n    return null;\n  }\n}"
     },
     "examples": [
-      "Example: see problem statement"
+      "Input: 1 2 1 2 3 2  =>  Output: 7",
+      "Input: 1 2 1 3 4 3  =>  Output: 3",
+      "Input: 1 1 1 1  =>  Output: 6"
     ],
     "testCases": [
       {
-        "input": "sample_input_1",
-        "expected": "expected_output_1"
+        "input": "1 2 1 2 3\n2\n",
+        "expected": "7"
       },
       {
-        "input": "sample_input_2",
-        "expected": "expected_output_2"
+        "input": "1 2 1 3 4\n3\n",
+        "expected": "3"
       },
       {
-        "input": "sample_input_3",
-        "expected": "expected_output_3"
+        "input": "1 1 1\n1\n",
+        "expected": "6"
       }
     ]
   },
@@ -4564,20 +4863,22 @@
       "csharp": "// C#\npublic class Solution {\n  public static object Solve() {\n    // Your code here\n    return null;\n  }\n}"
     },
     "examples": [
-      "Example: see problem statement"
+      "Input: 1 2 1 2 6 7 5 1 2  =>  Output: 0 3 5",
+      "Input: 4 3 2 1 1  =>  Output: 0 1 2",
+      "Input: 1 1 1 1 1 1 2  =>  Output: 0 2 4"
     ],
     "testCases": [
       {
-        "input": "sample_input_1",
-        "expected": "expected_output_1"
+        "input": "1 2 1 2 6 7 5 1\n2\n",
+        "expected": "0 3 5"
       },
       {
-        "input": "sample_input_2",
-        "expected": "expected_output_2"
+        "input": "4 3 2 1\n1\n",
+        "expected": "0 1 2"
       },
       {
-        "input": "sample_input_3",
-        "expected": "expected_output_3"
+        "input": "1 1 1 1 1 1\n2\n",
+        "expected": "0 2 4"
       }
     ]
   },
@@ -4593,20 +4894,22 @@
       "csharp": "// C#\npublic class Solution {\n  public static object Solve() {\n    // Your code here\n    return null;\n  }\n}"
     },
     "examples": [
-      "Example: see problem statement"
+      "Input: 0 1 3 5 6 8 12 17  =>  Output: true",
+      "Input: 0 1 2 3 4 8 9 11  =>  Output: false",
+      "Input: 0 1  =>  Output: true"
     ],
     "testCases": [
       {
-        "input": "sample_input_1",
-        "expected": "expected_output_1"
+        "input": "0 1 3 5 6 8 12 17\n",
+        "expected": "true"
       },
       {
-        "input": "sample_input_2",
-        "expected": "expected_output_2"
+        "input": "0 1 2 3 4 8 9 11\n",
+        "expected": "false"
       },
       {
-        "input": "sample_input_3",
-        "expected": "expected_output_3"
+        "input": "0 1\n",
+        "expected": "true"
       }
     ]
   },
@@ -4622,20 +4925,22 @@
       "csharp": "// C#\npublic class Solution {\n  public static object Solve() {\n    // Your code here\n    return null;\n  }\n}"
     },
     "examples": [
-      "Example: see problem statement"
+      "Input: 1 5 2  =>  Output: false",
+      "Input: 1 5 233 7  =>  Output: true",
+      "Input: 1 1  =>  Output: true"
     ],
     "testCases": [
       {
-        "input": "sample_input_1",
-        "expected": "expected_output_1"
+        "input": "1 5 2\n",
+        "expected": "false"
       },
       {
-        "input": "sample_input_2",
-        "expected": "expected_output_2"
+        "input": "1 5 233 7\n",
+        "expected": "true"
       },
       {
-        "input": "sample_input_3",
-        "expected": "expected_output_3"
+        "input": "1 1\n",
+        "expected": "true"
       }
     ]
   },
@@ -4651,20 +4956,22 @@
       "csharp": "// C#\npublic class Solution {\n  public static object Solve() {\n    // Your code here\n    return null;\n  }\n}"
     },
     "examples": [
-      "Example: see problem statement"
+      "Input: 3 1 2 0  =>  Output: 3",
+      "Input: 4 1 2 0 2  =>  Output: 3",
+      "Input: 2 -1 -1  =>  Output: -1"
     ],
     "testCases": [
       {
-        "input": "sample_input_1",
-        "expected": "expected_output_1"
+        "input": "3\n1 2 0\n",
+        "expected": "3"
       },
       {
-        "input": "sample_input_2",
-        "expected": "expected_output_2"
+        "input": "4\n1 2 0 2\n",
+        "expected": "3"
       },
       {
-        "input": "sample_input_3",
-        "expected": "expected_output_3"
+        "input": "2\n-1 -1\n",
+        "expected": "-1"
       }
     ]
   },
@@ -4680,20 +4987,22 @@
       "csharp": "// C#\npublic class Solution {\n  public static object Solve() {\n    // Your code here\n    return null;\n  }\n}"
     },
     "examples": [
-      "Example: see problem statement"
+      "Input: 3 0 1 100 1 2 100 0 2 500 0 2 1  =>  Output: 200",
+      "Input: 3 0 1 100 1 2 100 0 2 500 0 2 0  =>  Output: 500",
+      "Input: 4 0 1 100 1 2 100 2 3 100 0 2 500 0 3 1 0 3 1  =>  Output: 1"
     ],
     "testCases": [
       {
-        "input": "sample_input_1",
-        "expected": "expected_output_1"
+        "input": "3\n0 1 100\n1 2 100\n0 2 500\n0 2 1\n",
+        "expected": "200"
       },
       {
-        "input": "sample_input_2",
-        "expected": "expected_output_2"
+        "input": "3\n0 1 100\n1 2 100\n0 2 500\n0 2 0\n",
+        "expected": "500"
       },
       {
-        "input": "sample_input_3",
-        "expected": "expected_output_3"
+        "input": "4\n0 1 100\n1 2 100\n2 3 100\n0 2 500\n0 3 1\n0 3 1\n",
+        "expected": "1"
       }
     ]
   },
@@ -4709,20 +5018,22 @@
       "csharp": "// C#\npublic class Solution {\n  public static object Solve() {\n    // Your code here\n    return null;\n  }\n}"
     },
     "examples": [
-      "Example: see problem statement"
+      "Input: 4 2 1 1 2 3 1 3 4 1 2  =>  Output: 2",
+      "Input: 2 1 2 1 1  =>  Output: 1",
+      "Input: 2 1 2 1 2  =>  Output: -1"
     ],
     "testCases": [
       {
-        "input": "sample_input_1",
-        "expected": "expected_output_1"
+        "input": "4\n2 1 1\n2 3 1\n3 4 1\n2\n",
+        "expected": "2"
       },
       {
-        "input": "sample_input_2",
-        "expected": "expected_output_2"
+        "input": "2\n1 2 1\n1\n",
+        "expected": "1"
       },
       {
-        "input": "sample_input_3",
-        "expected": "expected_output_3"
+        "input": "2\n1 2 1\n2\n",
+        "expected": "-1"
       }
     ]
   },
@@ -4738,20 +5049,22 @@
       "csharp": "// C#\npublic class Solution {\n  public static object Solve() {\n    // Your code here\n    return null;\n  }\n}"
     },
     "examples": [
-      "Example: see problem statement"
+      "Input: 0 2 1 3  =>  Output: 3",
+      "Input: 0 1 2 3 4 24 23 22 21 5 12 13 14 15 16 11 17 18 19 20 10 9 8 7 6  =>  Output: 16",
+      "Input: 0 1 2 0  =>  Output: 1"
     ],
     "testCases": [
       {
-        "input": "sample_input_1",
-        "expected": "expected_output_1"
+        "input": "0 2\n1 3\n",
+        "expected": "3"
       },
       {
-        "input": "sample_input_2",
-        "expected": "expected_output_2"
+        "input": "0 1 2 3 4\n24 23 22 21 5\n12 13 14 15 16\n11 17 18 19 20\n10 9 8 7 6\n",
+        "expected": "16"
       },
       {
-        "input": "sample_input_3",
-        "expected": "expected_output_3"
+        "input": "0 1\n2 0\n",
+        "expected": "1"
       }
     ]
   },
@@ -4767,20 +5080,22 @@
       "csharp": "// C#\npublic class Solution {\n  public static object Solve() {\n    // Your code here\n    return null;\n  }\n}"
     },
     "examples": [
-      "Example: see problem statement"
+      "Input: 0 1 1 0  =>  Output: 2",
+      "Input: 0 0 0 1 1 0 1 1 0  =>  Output: 4",
+      "Input: 1 0 0 0  =>  Output: -1"
     ],
     "testCases": [
       {
-        "input": "sample_input_1",
-        "expected": "expected_output_1"
+        "input": "0 1\n1 0\n",
+        "expected": "2"
       },
       {
-        "input": "sample_input_2",
-        "expected": "expected_output_2"
+        "input": "0 0 0\n1 1 0\n1 1 0\n",
+        "expected": "4"
       },
       {
-        "input": "sample_input_3",
-        "expected": "expected_output_3"
+        "input": "1 0\n0 0\n",
+        "expected": "-1"
       }
     ]
   },
@@ -4796,20 +5111,22 @@
       "csharp": "// C#\npublic class Solution {\n  public static object Solve() {\n    // Your code here\n    return null;\n  }\n}"
     },
     "examples": [
-      "Example: see problem statement"
+      "Input: hit cog hot dot dog lot log cog  =>  Output: hit hot dot dog cog hit hot lot log cog",
+      "Input: red lex ted tex tax tad lex  =>  Output: red ted tex lex",
+      "Input: a c a b c  =>  Output: a c"
     ],
     "testCases": [
       {
-        "input": "sample_input_1",
-        "expected": "expected_output_1"
+        "input": "hit\ncog\nhot dot dog lot log cog\n",
+        "expected": "hit hot dot dog cog\nhit hot lot log cog"
       },
       {
-        "input": "sample_input_2",
-        "expected": "expected_output_2"
+        "input": "red\nlex\nted tex tax tad lex\n",
+        "expected": "red ted tex lex"
       },
       {
-        "input": "sample_input_3",
-        "expected": "expected_output_3"
+        "input": "a\nc\na b c\n",
+        "expected": "a c"
       }
     ]
   },
@@ -4825,20 +5142,22 @@
       "csharp": "// C#\npublic class Solution {\n  public static object Solve() {\n    // Your code here\n    return null;\n  }\n}"
     },
     "examples": [
-      "Example: see problem statement"
+      "Input: 4 1 2 3 3 -  =>  Output: 0 1 3 0 2 3",
+      "Input: 3 1 2 -  =>  Output: 0 1 2",
+      "Input: 2 1 -  =>  Output: 0 1"
     ],
     "testCases": [
       {
-        "input": "sample_input_1",
-        "expected": "expected_output_1"
+        "input": "4\n1 2\n3\n3\n-\n",
+        "expected": "0 1 3\n0 2 3"
       },
       {
-        "input": "sample_input_2",
-        "expected": "expected_output_2"
+        "input": "3\n1\n2\n-\n",
+        "expected": "0 1 2"
       },
       {
-        "input": "sample_input_3",
-        "expected": "expected_output_3"
+        "input": "2\n1\n-\n",
+        "expected": "0 1"
       }
     ]
   },
@@ -4854,20 +5173,21 @@
       "csharp": "// C#\npublic class Solution {\n  public static object Solve() {\n    // Your code here\n    return null;\n  }\n}"
     },
     "examples": [
-      "Example: see problem statement"
+      "Input: abcd dcba lls s sssu  =>  Output: 0 1 1 0 3 2",
+      "Input: bat tab cat  =>  Output: 0 1 1 0"
     ],
     "testCases": [
       {
-        "input": "sample_input_1",
-        "expected": "expected_output_1"
+        "input": "abcd dcba lls s sssu\n",
+        "expected": "0 1\n1 0\n3 2"
       },
       {
-        "input": "sample_input_2",
-        "expected": "expected_output_2"
+        "input": "bat tab cat\n",
+        "expected": "0 1\n1 0"
       },
       {
-        "input": "sample_input_3",
-        "expected": "expected_output_3"
+        "input": "a\n",
+        "expected": ""
       }
     ]
   },
@@ -4883,20 +5203,22 @@
       "csharp": "// C#\npublic class Solution {\n  public static object Solve() {\n    // Your code here\n    return null;\n  }\n}"
     },
     "examples": [
-      "Example: see problem statement"
+      "Input: 123  =>  Output: One Hundred Twenty Three",
+      "Input: 1234567  =>  Output: One Million Two Hundred Thirty Four Thousand Five Hundred Sixty Seven",
+      "Input: 100  =>  Output: One Hundred"
     ],
     "testCases": [
       {
-        "input": "sample_input_1",
-        "expected": "expected_output_1"
+        "input": "123\n",
+        "expected": "One Hundred Twenty Three"
       },
       {
-        "input": "sample_input_2",
-        "expected": "expected_output_2"
+        "input": "1234567\n",
+        "expected": "One Million Two Hundred Thirty Four Thousand Five Hundred Sixty Seven"
       },
       {
-        "input": "sample_input_3",
-        "expected": "expected_output_3"
+        "input": "100\n",
+        "expected": "One Hundred"
       }
     ]
   },
@@ -4912,20 +5234,21 @@
       "csharp": "// C#\npublic class Solution {\n  public static object Solve() {\n    // Your code here\n    return null;\n  }\n}"
     },
     "examples": [
-      "Example: see problem statement"
+      "Input: ()())()  =>  Output: (())() ()()()",
+      "Input: (a)())()  =>  Output: (a())() (a)()()"
     ],
     "testCases": [
       {
-        "input": "sample_input_1",
-        "expected": "expected_output_1"
+        "input": "()())()\n",
+        "expected": "(())()\n()()()"
       },
       {
-        "input": "sample_input_2",
-        "expected": "expected_output_2"
+        "input": "(a)())()\n",
+        "expected": "(a())()\n(a)()()"
       },
       {
-        "input": "sample_input_3",
-        "expected": "expected_output_3"
+        "input": "))(\n",
+        "expected": ""
       }
     ]
   },
@@ -4941,20 +5264,22 @@
       "csharp": "// C#\npublic class Solution {\n  public static object Solve() {\n    // Your code here\n    return null;\n  }\n}"
     },
     "examples": [
-      "Example: see problem statement"
+      "Input: 1 0 2  =>  Output: 5",
+      "Input: 1 2 2  =>  Output: 4",
+      "Input: 1 2 87 87 87 2 1  =>  Output: 13"
     ],
     "testCases": [
       {
-        "input": "sample_input_1",
-        "expected": "expected_output_1"
+        "input": "1 0 2\n",
+        "expected": "5"
       },
       {
-        "input": "sample_input_2",
-        "expected": "expected_output_2"
+        "input": "1 2 2\n",
+        "expected": "4"
       },
       {
-        "input": "sample_input_3",
-        "expected": "expected_output_3"
+        "input": "1 2 87 87 87 2 1\n",
+        "expected": "13"
       }
     ]
   },
@@ -4970,20 +5295,22 @@
       "csharp": "// C#\npublic class Solution {\n  public static object Solve() {\n    // Your code here\n    return null;\n  }\n}"
     },
     "examples": [
-      "Example: see problem statement"
+      "Input: 2 put 1 1 put 2 2 get 1 put 3 3 get 2 get 3 put 4 4 get 1 get 3 get 4  =>  Output: 1 -1 3 -1 3 4",
+      "Input: 1 put 1 1 get 1 put 2 2 get 1 get 2  =>  Output: 1 -1 2",
+      "Input: 3 put 1 1 put 2 2 put 3 3 get 1 get 2 put 4 4 get 3 get 4  =>  Output: 1 2 -1 4"
     ],
     "testCases": [
       {
-        "input": "sample_input_1",
-        "expected": "expected_output_1"
+        "input": "2\nput 1 1\nput 2 2\nget 1\nput 3 3\nget 2\nget 3\nput 4 4\nget 1\nget 3\nget 4\n",
+        "expected": "1\n-1\n3\n-1\n3\n4"
       },
       {
-        "input": "sample_input_2",
-        "expected": "expected_output_2"
+        "input": "1\nput 1 1\nget 1\nput 2 2\nget 1\nget 2\n",
+        "expected": "1\n-1\n2"
       },
       {
-        "input": "sample_input_3",
-        "expected": "expected_output_3"
+        "input": "3\nput 1 1\nput 2 2\nput 3 3\nget 1\nget 2\nput 4 4\nget 3\nget 4\n",
+        "expected": "1\n2\n-1\n4"
       }
     ]
   },
@@ -4999,20 +5326,22 @@
       "csharp": "// C#\npublic class Solution {\n  public static object Solve() {\n    // Your code here\n    return null;\n  }\n}"
     },
     "examples": [
-      "Example: see problem statement"
+      "Input: push 10 push 5 getMin push 8 getMin pop getMin  =>  Output: 5 5 5",
+      "Input: push 2 push 0 getMin push 3 getMin pop getMin  =>  Output: 0 0 2",
+      "Input: push 5 getMin push 5 getMin pop getMin  =>  Output: 5 5 5"
     ],
     "testCases": [
       {
-        "input": "sample_input_1",
-        "expected": "expected_output_1"
+        "input": "push 10\npush 5\ngetMin\npush 8\ngetMin\npop\ngetMin\n",
+        "expected": "5\n5\n5"
       },
       {
-        "input": "sample_input_2",
-        "expected": "expected_output_2"
+        "input": "push 2\npush 0\ngetMin\npush 3\ngetMin\npop\ngetMin\n",
+        "expected": "0\n0\n2"
       },
       {
-        "input": "sample_input_3",
-        "expected": "expected_output_3"
+        "input": "push 5\ngetMin\npush 5\ngetMin\npop\ngetMin\n",
+        "expected": "5\n5\n5"
       }
     ]
   },
@@ -5028,20 +5357,22 @@
       "csharp": "// C#\npublic class Solution {\n  public static object Solve() {\n    // Your code here\n    return null;\n  }\n}"
     },
     "examples": [
-      "Example: see problem statement"
+      "Input: 1  =>  Output: 0",
+      "Input: 5  =>  Output: 0",
+      "Input: 100  =>  Output: 0"
     ],
     "testCases": [
       {
-        "input": "sample_input_1",
-        "expected": "expected_output_1"
+        "input": "1\n",
+        "expected": "0"
       },
       {
-        "input": "sample_input_2",
-        "expected": "expected_output_2"
+        "input": "5\n",
+        "expected": "0"
       },
       {
-        "input": "sample_input_3",
-        "expected": "expected_output_3"
+        "input": "100\n",
+        "expected": "0"
       }
     ]
   },
@@ -5057,20 +5388,22 @@
       "csharp": "// C#\npublic class Solution {\n  public static object Solve() {\n    // Your code here\n    return null;\n  }\n}"
     },
     "examples": [
-      "Example: see problem statement"
+      "Input: 5 5 3 0 1 4 2 5 6 3 2 1 1 2 0 1 5 4 1 0 1 7 1 0 3 0 5 sum 2 1 4 3 update 3 2 2 sum 2 1 4 3  =>  Output: 8 10",
+      "Input: 2 2 1 2 3 4 sum 0 0 1 1 update 1 1 10 sum 0 0 1 1  =>  Output: 10 16",
+      "Input: 1 1 5 sum 0 0 0 0 update 0 0 7 sum 0 0 0 0  =>  Output: 5 7"
     ],
     "testCases": [
       {
-        "input": "sample_input_1",
-        "expected": "expected_output_1"
+        "input": "5 5\n3 0 1 4 2\n5 6 3 2 1\n1 2 0 1 5\n4 1 0 1 7\n1 0 3 0 5\nsum 2 1 4 3\nupdate 3 2 2\nsum 2 1 4 3\n",
+        "expected": "8\n10"
       },
       {
-        "input": "sample_input_2",
-        "expected": "expected_output_2"
+        "input": "2 2\n1 2\n3 4\nsum 0 0 1 1\nupdate 1 1 10\nsum 0 0 1 1\n",
+        "expected": "10\n16"
       },
       {
-        "input": "sample_input_3",
-        "expected": "expected_output_3"
+        "input": "1 1\n5\nsum 0 0 0 0\nupdate 0 0 7\nsum 0 0 0 0\n",
+        "expected": "5\n7"
       }
     ]
   },
@@ -5086,20 +5419,22 @@
       "csharp": "// C#\npublic class Solution {\n  public static object Solve() {\n    // Your code here\n    return null;\n  }\n}"
     },
     "examples": [
-      "Example: see problem statement"
+      "Input: 5 add 0 3 add 1 5 sum 1 sum 2 add 2 2 sum 2  =>  Output: 8 8 10",
+      "Input: 3 add 0 1 add 2 4 sum 2 sum 0  =>  Output: 5 1",
+      "Input: 4 add 1 2 add 3 3 sum 3 sum 2  =>  Output: 5 2"
     ],
     "testCases": [
       {
-        "input": "sample_input_1",
-        "expected": "expected_output_1"
+        "input": "5\nadd 0 3\nadd 1 5\nsum 1\nsum 2\nadd 2 2\nsum 2\n",
+        "expected": "8\n8\n10"
       },
       {
-        "input": "sample_input_2",
-        "expected": "expected_output_2"
+        "input": "3\nadd 0 1\nadd 2 4\nsum 2\nsum 0\n",
+        "expected": "5\n1"
       },
       {
-        "input": "sample_input_3",
-        "expected": "expected_output_3"
+        "input": "4\nadd 1 2\nadd 3 3\nsum 3\nsum 2\n",
+        "expected": "5\n2"
       }
     ]
   },
@@ -5115,20 +5450,22 @@
       "csharp": "// C#\npublic class Solution {\n  public static object Solve() {\n    // Your code here\n    return null;\n  }\n}"
     },
     "examples": [
-      "Example: see problem statement"
+      "Input: 5 1 2 3 4 5 query 0 4 update 2 10 query 0 4 query 1 3  =>  Output: 15 22 16",
+      "Input: 3 1 1 1 query 0 2 update 0 5 query 0 2  =>  Output: 3 7",
+      "Input: 1 7 query 0 0 update 0 3 query 0 0  =>  Output: 7 3"
     ],
     "testCases": [
       {
-        "input": "sample_input_1",
-        "expected": "expected_output_1"
+        "input": "5\n1 2 3 4 5\nquery 0 4\nupdate 2 10\nquery 0 4\nquery 1 3\n",
+        "expected": "15\n22\n16"
       },
       {
-        "input": "sample_input_2",
-        "expected": "expected_output_2"
+        "input": "3\n1 1 1\nquery 0 2\nupdate 0 5\nquery 0 2\n",
+        "expected": "3\n7"
       },
       {
-        "input": "sample_input_3",
-        "expected": "expected_output_3"
+        "input": "1\n7\nquery 0 0\nupdate 0 3\nquery 0 0\n",
+        "expected": "7\n3"
       }
     ]
   },
@@ -5144,20 +5481,22 @@
       "csharp": "// C#\npublic class Solution {\n  public static object Solve() {\n    // Your code here\n    return null;\n  }\n}"
     },
     "examples": [
-      "Example: see problem statement"
+      "Input: add 1 add 2 add 3 findMedian add 4 findMedian  =>  Output: 2 2.5",
+      "Input: add -3 findMedian add -2 findMedian add -1 findMedian  =>  Output: -3 -2.5 -2",
+      "Input: add 10 add 20 findMedian add 30 findMedian  =>  Output: 15 20"
     ],
     "testCases": [
       {
-        "input": "sample_input_1",
-        "expected": "expected_output_1"
+        "input": "add 1\nadd 2\nadd 3\nfindMedian\nadd 4\nfindMedian\n",
+        "expected": "2\n2.5"
       },
       {
-        "input": "sample_input_2",
-        "expected": "expected_output_2"
+        "input": "add -3\nfindMedian\nadd -2\nfindMedian\nadd -1\nfindMedian\n",
+        "expected": "-3\n-2.5\n-2"
       },
       {
-        "input": "sample_input_3",
-        "expected": "expected_output_3"
+        "input": "add 10\nadd 20\nfindMedian\nadd 30\nfindMedian\n",
+        "expected": "15\n20"
       }
     ]
   },
@@ -5173,20 +5512,22 @@
       "csharp": "// C#\npublic class Solution {\n  public static object Solve() {\n    // Your code here\n    return null;\n  }\n}"
     },
     "examples": [
-      "Example: see problem statement"
+      "Input: 1 0 10 1 0 5 3  =>  Output: 10 13",
+      "Input: 1 5 10 1 5 10 3  =>  Output: 0 3",
+      "Input: 2 10 50 60 120 2 0 15 60 70 8  =>  Output: 50 58"
     ],
     "testCases": [
       {
-        "input": "sample_input_1",
-        "expected": "expected_output_1"
+        "input": "1\n0 10\n1\n0 5\n3\n",
+        "expected": "10 13"
       },
       {
-        "input": "sample_input_2",
-        "expected": "expected_output_2"
+        "input": "1\n5 10\n1\n5 10\n3\n",
+        "expected": "0 3"
       },
       {
-        "input": "sample_input_3",
-        "expected": "expected_output_3"
+        "input": "2\n10 50\n60 120\n2\n0 15\n60 70\n8\n",
+        "expected": "50 58"
       }
     ]
   },
@@ -5202,20 +5543,22 @@
       "csharp": "// C#\npublic class Solution {\n  public static object Solve() {\n    // Your code here\n    return null;\n  }\n}"
     },
     "examples": [
-      "Example: see problem statement"
+      "Input: 2 2 4 1 1  =>  Output: 8",
+      "Input: 2 3 4 1 1  =>  Output: 8",
+      "Input: 2 10 5 2 1  =>  Output: 15"
     ],
     "testCases": [
       {
-        "input": "sample_input_1",
-        "expected": "expected_output_1"
+        "input": "2\n2 4\n1 1\n",
+        "expected": "8"
       },
       {
-        "input": "sample_input_2",
-        "expected": "expected_output_2"
+        "input": "2\n3 4\n1 1\n",
+        "expected": "8"
       },
       {
-        "input": "sample_input_3",
-        "expected": "expected_output_3"
+        "input": "2\n10 5\n2 1\n",
+        "expected": "15"
       }
     ]
   },
@@ -5231,20 +5574,22 @@
       "csharp": "// C#\npublic class Solution {\n  public static object Solve() {\n    // Your code here\n    return null;\n  }\n}"
     },
     "examples": [
-      "Example: see problem statement"
+      "Input: 1 7 11 2 4 6 3  =>  Output: 1 2 1 4 1 6",
+      "Input: 1 1 2 1 2 3 2  =>  Output: 1 1 1 1",
+      "Input: 1 2 3 3  =>  Output: 1 3 2 3"
     ],
     "testCases": [
       {
-        "input": "sample_input_1",
-        "expected": "expected_output_1"
+        "input": "1 7 11\n2 4 6\n3\n",
+        "expected": "1 2\n1 4\n1 6"
       },
       {
-        "input": "sample_input_2",
-        "expected": "expected_output_2"
+        "input": "1 1 2\n1 2 3\n2\n",
+        "expected": "1 1\n1 1"
       },
       {
-        "input": "sample_input_3",
-        "expected": "expected_output_3"
+        "input": "1 2\n3\n3\n",
+        "expected": "1 3\n2 3"
       }
     ]
   },
@@ -5260,20 +5605,22 @@
       "csharp": "// C#\npublic class Solution {\n  public static object Solve() {\n    // Your code here\n    return null;\n  }\n}"
     },
     "examples": [
-      "Example: see problem statement"
+      "Input: 1 5 9 10 11 13 12 13 15 8  =>  Output: 13",
+      "Input: 1 2 3 4 1  =>  Output: 1",
+      "Input: 1 2 3 4 3  =>  Output: 3"
     ],
     "testCases": [
       {
-        "input": "sample_input_1",
-        "expected": "expected_output_1"
+        "input": "1 5 9\n10 11 13\n12 13 15\n8\n",
+        "expected": "13"
       },
       {
-        "input": "sample_input_2",
-        "expected": "expected_output_2"
+        "input": "1 2\n3 4\n1\n",
+        "expected": "1"
       },
       {
-        "input": "sample_input_3",
-        "expected": "expected_output_3"
+        "input": "1 2\n3 4\n3\n",
+        "expected": "3"
       }
     ]
   },
@@ -5289,20 +5636,22 @@
       "csharp": "// C#\npublic class Solution {\n  public static object Solve() {\n    // Your code here\n    return null;\n  }\n}"
     },
     "examples": [
-      "Example: see problem statement"
+      "Input: 3 4 10 15 24 26 0 9 12 20 5 18 22 30  =>  Output: 20 24",
+      "Input: 2 1 2 3 1 2 3  =>  Output: 1 1",
+      "Input: 2 4 10 3 11  =>  Output: 3 4"
     ],
     "testCases": [
       {
-        "input": "sample_input_1",
-        "expected": "expected_output_1"
+        "input": "3\n4 10 15 24 26\n0 9 12 20\n5 18 22 30\n",
+        "expected": "20 24"
       },
       {
-        "input": "sample_input_2",
-        "expected": "expected_output_2"
+        "input": "2\n1 2 3\n1 2 3\n",
+        "expected": "1 1"
       },
       {
-        "input": "sample_input_3",
-        "expected": "expected_output_3"
+        "input": "2\n4 10\n3 11\n",
+        "expected": "3 4"
       }
     ]
   },
@@ -5318,20 +5667,22 @@
       "csharp": "// C#\npublic class Solution {\n  public static object Solve() {\n    // Your code here\n    return null;\n  }\n}"
     },
     "examples": [
-      "Example: see problem statement"
+      "Input: with example science thehat  =>  Output: 3",
+      "Input: notice possible basicbasic  =>  Output: -1",
+      "Input: a b a  =>  Output: 1"
     ],
     "testCases": [
       {
-        "input": "sample_input_1",
-        "expected": "expected_output_1"
+        "input": "with example science\nthehat\n",
+        "expected": "3"
       },
       {
-        "input": "sample_input_2",
-        "expected": "expected_output_2"
+        "input": "notice possible\nbasicbasic\n",
+        "expected": "-1"
       },
       {
-        "input": "sample_input_3",
-        "expected": "expected_output_3"
+        "input": "a b\na\n",
+        "expected": "1"
       }
     ]
   },
@@ -5347,20 +5698,22 @@
       "csharp": "// C#\npublic class Solution {\n  public static object Solve() {\n    // Your code here\n    return null;\n  }\n}"
     },
     "examples": [
-      "Example: see problem statement"
+      "Input: ghiabcdefhelloadamhelloabcdefghi  =>  Output: 7",
+      "Input: merchant  =>  Output: 1",
+      "Input: aaa  =>  Output: 3"
     ],
     "testCases": [
       {
-        "input": "sample_input_1",
-        "expected": "expected_output_1"
+        "input": "ghiabcdefhelloadamhelloabcdefghi\n",
+        "expected": "7"
       },
       {
-        "input": "sample_input_2",
-        "expected": "expected_output_2"
+        "input": "merchant\n",
+        "expected": "1"
       },
       {
-        "input": "sample_input_3",
-        "expected": "expected_output_3"
+        "input": "aaa\n",
+        "expected": "3"
       }
     ]
   },
@@ -5376,20 +5729,22 @@
       "csharp": "// C#\npublic class Solution {\n  public static object Solve() {\n    // Your code here\n    return null;\n  }\n}"
     },
     "examples": [
-      "Example: see problem statement"
+      "Input: 1 2 1 2 2  =>  Output: 1 1 1 2",
+      "Input: 1 1 1 1 1 3  =>  Output: 1 1 1 1 1 1",
+      "Input: 1 2 1  =>  Output: 1 2"
     ],
     "testCases": [
       {
-        "input": "sample_input_1",
-        "expected": "expected_output_1"
+        "input": "1 2\n1 2\n2\n",
+        "expected": "1 1\n1 2"
       },
       {
-        "input": "sample_input_2",
-        "expected": "expected_output_2"
+        "input": "1 1 1\n1 1\n3\n",
+        "expected": "1 1\n1 1\n1 1"
       },
       {
-        "input": "sample_input_3",
-        "expected": "expected_output_3"
+        "input": "1\n2\n1\n",
+        "expected": "1 2"
       }
     ]
   },
@@ -5405,20 +5760,22 @@
       "csharp": "// C#\npublic class Solution {\n  public static object Solve() {\n    // Your code here\n    return null;\n  }\n}"
     },
     "examples": [
-      "Example: see problem statement"
+      "Input: 0 1 0 1  =>  Output: 2",
+      "Input: 1 1 0 2  =>  Output: -1",
+      "Input: 0 0 0 1 0 1 1 0 3  =>  Output: 3"
     ],
     "testCases": [
       {
-        "input": "sample_input_1",
-        "expected": "expected_output_1"
+        "input": "0 1 0\n1\n",
+        "expected": "2"
       },
       {
-        "input": "sample_input_2",
-        "expected": "expected_output_2"
+        "input": "1 1 0\n2\n",
+        "expected": "-1"
       },
       {
-        "input": "sample_input_3",
-        "expected": "expected_output_3"
+        "input": "0 0 0 1 0 1 1 0\n3\n",
+        "expected": "3"
       }
     ]
   },
@@ -5434,20 +5791,22 @@
       "csharp": "// C#\npublic class Solution {\n  public static object Solve() {\n    // Your code here\n    return null;\n  }\n}"
     },
     "examples": [
-      "Example: see problem statement"
+      "Input: 3 2  =>  Output: 3",
+      "Input: 5 5  =>  Output: 1",
+      "Input: 4 3  =>  Output: 6"
     ],
     "testCases": [
       {
-        "input": "sample_input_1",
-        "expected": "expected_output_1"
+        "input": "3 2\n",
+        "expected": "3"
       },
       {
-        "input": "sample_input_2",
-        "expected": "expected_output_2"
+        "input": "5 5\n",
+        "expected": "1"
       },
       {
-        "input": "sample_input_3",
-        "expected": "expected_output_3"
+        "input": "4 3\n",
+        "expected": "6"
       }
     ]
   },
@@ -5463,20 +5822,22 @@
       "csharp": "// C#\npublic class Solution {\n  public static object Solve() {\n    // Your code here\n    return null;\n  }\n}"
     },
     "examples": [
-      "Example: see problem statement"
+      "Input: 3 0 1 0.5 1 2 0.5 0 2 0.2 0 2  =>  Output: 0.25",
+      "Input: 3 0 1 0.5 1 2 0.5 0 2 0.3 0 2  =>  Output: 0.3",
+      "Input: 3 0 1 0.9 0 2  =>  Output: 0"
     ],
     "testCases": [
       {
-        "input": "sample_input_1",
-        "expected": "expected_output_1"
+        "input": "3\n0 1 0.5\n1 2 0.5\n0 2 0.2\n0 2\n",
+        "expected": "0.25"
       },
       {
-        "input": "sample_input_2",
-        "expected": "expected_output_2"
+        "input": "3\n0 1 0.5\n1 2 0.5\n0 2 0.3\n0 2\n",
+        "expected": "0.3"
       },
       {
-        "input": "sample_input_3",
-        "expected": "expected_output_3"
+        "input": "3\n0 1 0.9\n0 2\n",
+        "expected": "0"
       }
     ]
   },
@@ -5492,20 +5853,22 @@
       "csharp": "// C#\npublic class Solution {\n  public static object Solve() {\n    // Your code here\n    return null;\n  }\n}"
     },
     "examples": [
-      "Example: see problem statement"
+      "Input: 0 1 1 1 1 0 1 1 0  =>  Output: 2",
+      "Input: 0 1 1 0  =>  Output: 2",
+      "Input: 0  =>  Output: 0"
     ],
     "testCases": [
       {
-        "input": "sample_input_1",
-        "expected": "expected_output_1"
+        "input": "0 1 1\n1 1 0\n1 1 0\n",
+        "expected": "2"
       },
       {
-        "input": "sample_input_2",
-        "expected": "expected_output_2"
+        "input": "0 1 1 0\n",
+        "expected": "2"
       },
       {
-        "input": "sample_input_3",
-        "expected": "expected_output_3"
+        "input": "0\n",
+        "expected": "0"
       }
     ]
   },
@@ -5521,20 +5884,22 @@
       "csharp": "// C#\npublic class Solution {\n  public static object Solve() {\n    // Your code here\n    return null;\n  }\n}"
     },
     "examples": [
-      "Example: see problem statement"
+      "Input: 3 1 3 2 3  =>  Output: 2",
+      "Input: 3 1 2 2 3 3 1  =>  Output: -1",
+      "Input: 5 1 5 2 5 3 5 4 5  =>  Output: 2"
     ],
     "testCases": [
       {
-        "input": "sample_input_1",
-        "expected": "expected_output_1"
+        "input": "3\n1 3\n2 3\n",
+        "expected": "2"
       },
       {
-        "input": "sample_input_2",
-        "expected": "expected_output_2"
+        "input": "3\n1 2\n2 3\n3 1\n",
+        "expected": "-1"
       },
       {
-        "input": "sample_input_3",
-        "expected": "expected_output_3"
+        "input": "5\n1 5\n2 5\n3 5\n4 5\n",
+        "expected": "2"
       }
     ]
   },
@@ -5550,20 +5915,22 @@
       "csharp": "// C#\npublic class Solution {\n  public static object Solve() {\n    // Your code here\n    return null;\n  }\n}"
     },
     "examples": [
-      "Example: see problem statement"
+      "Input: 4 2 2 1 3 1 4 1  =>  Output: 3",
+      "Input: 4 2  =>  Output: 2",
+      "Input: 5 3 2 1 3 1 4 1 5 1  =>  Output: 3"
     ],
     "testCases": [
       {
-        "input": "sample_input_1",
-        "expected": "expected_output_1"
+        "input": "4 2\n2 1\n3 1\n4 1\n",
+        "expected": "3"
       },
       {
-        "input": "sample_input_2",
-        "expected": "expected_output_2"
+        "input": "4 2\n",
+        "expected": "2"
       },
       {
-        "input": "sample_input_3",
-        "expected": "expected_output_3"
+        "input": "5 3\n2 1\n3 1\n4 1\n5 1\n",
+        "expected": "3"
       }
     ]
   },
@@ -5579,20 +5946,22 @@
       "csharp": "// C#\npublic class Solution {\n  public static object Solve() {\n    // Your code here\n    return null;\n  }\n}"
     },
     "examples": [
-      "Example: see problem statement"
+      "Input: 0 0 1 0 0 0 0 0 0  =>  Output: 2",
+      "Input: 1 1 1 1  =>  Output: 0",
+      "Input: 0 1 0 0 0 0  =>  Output: 1"
     ],
     "testCases": [
       {
-        "input": "sample_input_1",
-        "expected": "expected_output_1"
+        "input": "0 0 1\n0 0 0\n0 0 0\n",
+        "expected": "2"
       },
       {
-        "input": "sample_input_2",
-        "expected": "expected_output_2"
+        "input": "1 1\n1 1\n",
+        "expected": "0"
       },
       {
-        "input": "sample_input_3",
-        "expected": "expected_output_3"
+        "input": "0 1 0\n0 0 0\n",
+        "expected": "1"
       }
     ]
   },
@@ -5608,20 +5977,22 @@
       "csharp": "// C#\npublic class Solution {\n  public static object Solve() {\n    // Your code here\n    return null;\n  }\n}"
     },
     "examples": [
-      "Example: see problem statement"
+      "Input: 1 2 3  =>  Output: 0",
+      "Input: 3 2 1  =>  Output: 3",
+      "Input: 2 1 3  =>  Output: 1"
     ],
     "testCases": [
       {
-        "input": "sample_input_1",
-        "expected": "expected_output_1"
+        "input": "1 2 3\n",
+        "expected": "0"
       },
       {
-        "input": "sample_input_2",
-        "expected": "expected_output_2"
+        "input": "3 2 1\n",
+        "expected": "3"
       },
       {
-        "input": "sample_input_3",
-        "expected": "expected_output_3"
+        "input": "2 1 3\n",
+        "expected": "1"
       }
     ]
   },
@@ -5637,27 +6008,29 @@
       "csharp": "// C#\npublic class Solution {\n  public static object Solve() {\n    // Your code here\n    return null;\n  }\n}"
     },
     "examples": [
-      "Example: see problem statement"
+      "Input: 1 2 3 6 5  =>  Output: 0",
+      "Input: 12 4  =>  Output: 4",
+      "Input: 1 2 3 4  =>  Output: 3"
     ],
     "testCases": [
       {
-        "input": "sample_input_1",
-        "expected": "expected_output_1"
+        "input": "1 2 3\n6 5\n",
+        "expected": "0"
       },
       {
-        "input": "sample_input_2",
-        "expected": "expected_output_2"
+        "input": "12\n4\n",
+        "expected": "4"
       },
       {
-        "input": "sample_input_3",
-        "expected": "expected_output_3"
+        "input": "1 2\n3 4\n",
+        "expected": "3"
       }
     ]
   },
   {
     "id": 196,
     "title": "Number of Excellent Pairs",
-    "statement": "Count pairs where bitwise OR minus AND is at least k.",
+    "statement": "Count the number of distinct pairs (num1, num2) where both num1 and num2 are present in the array and the total number of set bits in (num1 OR num2) plus the number of set bits in (num1 AND num2) is at least k.",
     "starter": {
       "javascript": "// JavaScript\nfunction solution() {\n  // Your code here\n}",
       "python": "# Python\ndef solution():\n    # Your code here\n    pass",
@@ -5666,20 +6039,22 @@
       "csharp": "// C#\npublic class Solution {\n  public static object Solve() {\n    // Your code here\n    return null;\n  }\n}"
     },
     "examples": [
-      "Example: see problem statement"
+      "Input: 1 2 3 1 3  =>  Output: 5",
+      "Input: 2 5 4  =>  Output: 1",
+      "Input: 1 2 3 7  =>  Output: 0"
     ],
     "testCases": [
       {
-        "input": "sample_input_1",
-        "expected": "expected_output_1"
+        "input": "1 2 3 1\n3\n",
+        "expected": "5"
       },
       {
-        "input": "sample_input_2",
-        "expected": "expected_output_2"
+        "input": "2 5\n4\n",
+        "expected": "1"
       },
       {
-        "input": "sample_input_3",
-        "expected": "expected_output_3"
+        "input": "1 2 3\n7\n",
+        "expected": "0"
       }
     ]
   }

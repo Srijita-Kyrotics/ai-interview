@@ -10,9 +10,8 @@ from pythonjsonlogger import json as json_logger
 
 from app.ai_interviewer.router import router as ai_interviewer_router
 from app.auth_routes import router as auth_router
+from app.auth_service import has_strong_password, hash_password, validate_email_format, verify_password
 from app.config import BASE_DIR, settings
-from app.helpers import create_token
-from app.auth_service import hash_password
 from app.db import (
     check_db_health,
     cleanup_expired_cache,
@@ -21,8 +20,22 @@ from app.db import (
     init_db,
     migrate_accounts_json,
 )
+from app.helpers import create_token, decode_token, default_scores
 from app.interview_ws import router as interview_router
 from app.session_routes import router as session_router
+from app.session_routes import score_open_round
+
+__all__ = [
+    "app",
+    "create_token",
+    "decode_token",
+    "default_scores",
+    "has_strong_password",
+    "hash_password",
+    "score_open_round",
+    "validate_email_format",
+    "verify_password",
+]
 
 logger = logging.getLogger("ai_interview")
 

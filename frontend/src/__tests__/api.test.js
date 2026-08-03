@@ -34,6 +34,7 @@ describe('api.get', () => {
 
   it('calls fetch with correct path', async () => {
     const mockFetch = vi.fn().mockResolvedValue({
+      ok: true,
       json: () => Promise.resolve({ ok: true }),
     })
     vi.stubGlobal('fetch', mockFetch)
@@ -41,13 +42,17 @@ describe('api.get', () => {
     await api.get('/test-endpoint')
     expect(mockFetch).toHaveBeenCalledWith(
       expect.stringContaining('/test-endpoint'),
-      expect.objectContaining({ headers: {} })
+      expect.objectContaining({
+        method: 'GET',
+        headers: { 'Content-Type': 'application/json' },
+      })
     )
   })
 
   it('includes Authorization header when token exists', async () => {
     localStorage.setItem('mockRecruitmentUser', JSON.stringify({ token: 'mytoken' }))
     const mockFetch = vi.fn().mockResolvedValue({
+      ok: true,
       json: () => Promise.resolve({ ok: true }),
     })
     vi.stubGlobal('fetch', mockFetch)
@@ -56,7 +61,7 @@ describe('api.get', () => {
     expect(mockFetch).toHaveBeenCalledWith(
       expect.any(String),
       expect.objectContaining({
-        headers: { Authorization: 'Bearer mytoken' },
+        headers: expect.objectContaining({ Authorization: 'Bearer mytoken' }),
       })
     )
   })
@@ -70,6 +75,7 @@ describe('api.post', () => {
 
   it('sends JSON body by default', async () => {
     const mockFetch = vi.fn().mockResolvedValue({
+      ok: true,
       json: () => Promise.resolve({ ok: true }),
     })
     vi.stubGlobal('fetch', mockFetch)
@@ -87,6 +93,7 @@ describe('api.post', () => {
 
   it('sends form data when isForm is true', async () => {
     const mockFetch = vi.fn().mockResolvedValue({
+      ok: true,
       json: () => Promise.resolve({ ok: true }),
     })
     vi.stubGlobal('fetch', mockFetch)

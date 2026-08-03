@@ -131,7 +131,7 @@ class TestFullInterviewFlow:
         resp = client.post("/select-company", json={
             "session_id": session_id,
             "companies": ["Google"],
-        })
+        }, headers=headers)
         assert resp.status_code == 200
         assert "rounds" in resp.json()
 
@@ -185,7 +185,7 @@ class TestFullInterviewFlow:
         resp = client.post("/select-company", json={
             "session_id": session_id,
             "companies": ["Microsoft"],
-        })
+        }, headers=headers)
         assert resp.status_code == 200
 
         resp = client.post("/submit-answer", json={

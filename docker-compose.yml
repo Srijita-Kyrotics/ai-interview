@@ -54,6 +54,7 @@ services:
       retries: 3
     volumes:
       - ./shared:/shared
+      - ./frontend/public:/frontend/public
       - custom_questions:/shared/custom_questions
 
   frontend:

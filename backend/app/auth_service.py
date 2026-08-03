@@ -19,11 +19,8 @@ from app.db import (
     get_all_users,
     load_captcha,
     load_otp,
-    load_user,
-    save_captcha,
     save_otp,
     save_user,
-    user_exists,
 )
 
 logger = logging.getLogger("ai_interview")

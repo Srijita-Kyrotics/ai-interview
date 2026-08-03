@@ -1,4 +1,4 @@
-import React, { Suspense, useEffect, useMemo, useState } from 'react'
+import React, { Suspense, useEffect, useState } from 'react'
 import { Navigate, Route, Routes } from 'react-router-dom'
 import { api } from './api'
 import { resetProctoringState, usePersistentProctoring } from './proctoring/proctoringState'
@@ -44,6 +44,27 @@ function getStoredUser() {
   }
 }
 
+const FLOW_STORAGE_KEY = 'mockRecruitmentFlow'
+
+function restoreFlowState() {
+  try {
+    const stored = localStorage.getItem(FLOW_STORAGE_KEY)
+    if (!stored) return null
+    const s = JSON.parse(stored)
+    if (!s) return null
+    return {
+      stage: s.stage || 'resume',
+      sessionId: s.sessionId || '',
+      resume: s.resume || null,
+      company: s.company || '',
+      selectedCompanies: Array.isArray(s.selectedCompanies) ? s.selectedCompanies : [],
+      rounds: Array.isArray(s.rounds) ? s.rounds : []
+    }
+  } catch {
+    return null
+  }
+}
+
 function shuffle(array) {
   const a = [...array]
   for (let i = a.length - 1; i > 0; i--) {
@@ -64,9 +85,9 @@ function buildAptitudeRound(allQuestions) {
     const sec = q.section
     if (bySection[sec]) bySection[sec].push(q)
   }
-  const quant = pickRandom(bySection.quantitative, 25)
-  const logical = pickRandom(bySection.logical, 15)
-  const verbal = pickRandom(bySection.verbal, 15)
+  const quant = pickRandom(bySection.quantitative, 14)
+  const logical = pickRandom(bySection.logical, 8)
+  const verbal = pickRandom(bySection.verbal, 8)
   return [...quant, ...logical, ...verbal]
 }
 
@@ -97,9 +118,9 @@ export default function App() {
     datasets: {
       aptitude: [],
       coding: [],
-      technical: [],
-      hr: []
-    }
+      technical: []
+    },
+    ...restoreFlowState()
   })
 
   const fetchData = () => {
@@ -109,12 +130,11 @@ export default function App() {
       api.get('/companies'),
       fetch('/questions/aptitude.json').then(r => r.json()),
       api.get('/questions/coding'),
-      api.get('/questions/technical'),
-      api.get('/questions/hr')
-    ]).then(([companies, aptitudeData, coding, technical, hr]) => {
+      api.get('/questions/technical')
+    ]).then(([companies, aptitudeData, coding, technical]) => {
       let aptitude = aptitudeData.questions || aptitudeData
       aptitude = processAptitudeText(aptitude)
-      setState((s) => ({ ...s, companies, datasets: { aptitude, coding, technical, hr } }))
+      setState((s) => ({ ...s, companies, datasets: { aptitude, coding, technical } }))
     }).catch(() => {
       setDataError(true)
     }).finally(() => {
@@ -124,24 +144,24 @@ export default function App() {
 
   useEffect(() => { fetchData() }, [])
 
-  const aptitudeItems = useMemo(() => {
-    return buildAptitudeRound(state.datasets.aptitude)
-  }, [state.datasets.aptitude, state.sessionId])
-
-  const codingItems = useMemo(() => {
-    return filterQuestions(state.datasets.coding, state.selectedCompanies)
-  }, [state.datasets.coding, state.selectedCompanies])
-
-  const technicalItems = useMemo(() => {
-    return filterQuestions(state.datasets.technical, state.selectedCompanies)
-  }, [state.datasets.technical, state.selectedCompanies])
-
-  const hrItems = useMemo(() => {
-    return filterQuestions(state.datasets.hr, state.selectedCompanies)
-  }, [state.datasets.hr, state.selectedCompanies])
+  useEffect(() => {
+    try {
+      localStorage.setItem(FLOW_STORAGE_KEY, JSON.stringify({
+        stage: state.stage,
+        sessionId: state.sessionId,
+        resume: state.resume,
+        company: state.company,
+        selectedCompanies: state.selectedCompanies,
+        rounds: state.rounds
+      }))
+    } catch {
+      /* storage quota exceeded — skip persistence */
+    }
+  }, [state])
 
   const logout = () => {
     localStorage.removeItem('mockRecruitmentUser')
+    localStorage.removeItem(FLOW_STORAGE_KEY)
     setProctoring(resetProctoringState())
     setUser(null)
   }
@@ -177,12 +197,11 @@ export default function App() {
             <Route path="/" element={<Home />} />
             <Route path="/resume" element={<ResumePage state={state} setState={setState} setProctoring={setProctoring} />} />
             <Route path="/company" element={<CompanyPage state={state} setState={setState} user={user} />} />
-            <Route path="/aptitude" element={<RoundPage key="aptitude" title="Aptitude Round" items={aptitudeItems} type="aptitude" state={state} setState={setState} proctoring={proctoring} setProctoring={setProctoring} />} />
-            <Route path="/coding" element={<RoundPage key="coding" title="Coding Round" items={codingItems} type="coding" state={state} setState={setState} proctoring={proctoring} setProctoring={setProctoring} />} />
+            <Route path="/aptitude" element={<RoundPage key="aptitude" title="Aptitude Round" type="aptitude" pool={state.datasets.aptitude} build={buildAptitudeRound} state={state} setState={setState} proctoring={proctoring} setProctoring={setProctoring} />} />
+            <Route path="/coding" element={<RoundPage key="coding" title="Coding Round" type="coding" pool={state.datasets.coding} build={(pool) => filterQuestions(pool, state.selectedCompanies).slice(0, 3)} state={state} setState={setState} proctoring={proctoring} setProctoring={setProctoring} />} />
             
             {/* Swapped legacy LiveInterview with our new AIInterviewer component */}
             <Route path="/technical" element={<AIInterviewer sessionId={state.sessionId} token={user.token} role="Software Engineer" company={state.company || 'the company'} proctoring={proctoring} setProctoring={setProctoring} onComplete={(report) => { console.log('Final Report:', report); window.location.href = '/report'; }} />} />
-            <Route path="/hr" element={<AIInterviewer sessionId={state.sessionId} token={user.token} role="Software Engineer" company={state.company || 'the company'} proctoring={proctoring} setProctoring={setProctoring} onComplete={(report) => { console.log('Final Report:', report); window.location.href = '/report'; }} />} />
 
             <Route path="/report" element={<ReportPage state={state} proctoring={proctoring} />} />
             <Route path="/dashboard" element={<DashboardPage user={user} />} />

@@ -172,15 +172,14 @@ function LiveInterview({ title, questions, state, setState, proctoring, setProct
       }
 
       audioLevelTimerRef.current = { timer: setInterval(updateLevel, 150), audioCtx }
-    } catch {
-      // AudioContext not available
+    } catch { /* AudioContext not available */
     }
   }, [userStream])
 
   const stopAudioLevelMonitor = useCallback(() => {
     if (audioLevelTimerRef.current) {
       clearInterval(audioLevelTimerRef.current.timer)
-      try { audioLevelTimerRef.current.audioCtx?.close() } catch {}
+      try { audioLevelTimerRef.current.audioCtx?.close() } catch { /* best-effort teardown */ }
       audioLevelTimerRef.current = null
     }
     setAudioLevel(0)
@@ -200,7 +199,7 @@ function LiveInterview({ title, questions, state, setState, proctoring, setProct
       restartTimeoutRef.current = null
     }
     if (recognitionRef.current) {
-      try { recognitionRef.current.stop() } catch {}
+      try { recognitionRef.current.stop() } catch { /* best-effort teardown */ }
       recognitionRef.current = null
     }
     stopVoiceTracking()
@@ -284,7 +283,7 @@ function LiveInterview({ title, questions, state, setState, proctoring, setProct
       if (event.error === 'no-speech' || event.error === 'aborted') {
         if (autoRestartRef.current && !isThinkingRef.current) {
           restartTimeoutRef.current = setTimeout(() => {
-            try { recognition.start() } catch {}
+            try { recognition.start() } catch { /* best-effort teardown */ }
           }, RESTART_DELAY_MS)
         }
         return
@@ -301,7 +300,7 @@ function LiveInterview({ title, questions, state, setState, proctoring, setProct
         setSpeechError('Network error during speech recognition. Retrying...')
         if (autoRestartRef.current && !isThinkingRef.current) {
           restartTimeoutRef.current = setTimeout(() => {
-            try { recognition.start() } catch {}
+            try { recognition.start() } catch { /* best-effort teardown */ }
           }, 2000)
         }
         return
@@ -316,7 +315,7 @@ function LiveInterview({ title, questions, state, setState, proctoring, setProct
 
       if (autoRestartRef.current && !isThinkingRef.current) {
         restartTimeoutRef.current = setTimeout(() => {
-          try { recognition.start() } catch {}
+          try { recognition.start() } catch { /* best-effort teardown */ }
         }, RESTART_DELAY_MS)
       }
     }
@@ -340,7 +339,7 @@ function LiveInterview({ title, questions, state, setState, proctoring, setProct
         restartTimeoutRef.current = setTimeout(() => {
           try {
             recognition.start()
-          } catch {
+          } catch { /* best-effort */
             setIsListening(false)
             recognitionRef.current = null
           }
@@ -355,7 +354,7 @@ function LiveInterview({ title, questions, state, setState, proctoring, setProct
     recognitionRef.current = recognition
     try {
       recognition.start()
-    } catch {
+    } catch { /* best-effort */
       setIsListening(false)
       recognitionRef.current = null
       setSpeechError('Failed to start speech recognition. Please try again.')
@@ -536,7 +535,7 @@ function LiveInterview({ title, questions, state, setState, proctoring, setProct
       }
       questionStartTimeRef.current = Date.now()
       setIsStarted(true)
-    } catch {
+    } catch { /* best-effort */
       setProctorError('Failed to start the interview.')
     }
   }
@@ -580,7 +579,7 @@ function LiveInterview({ title, questions, state, setState, proctoring, setProct
         code,
       })
       requestCodeReview()
-    } catch {}
+    } catch { /* best-effort teardown */ }
   }, [code, language, state.sessionId, roleKey, requestCodeReview])
 
   // ── End / skip ────────────────────────────────────────────────────────
