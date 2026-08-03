@@ -9,8 +9,10 @@ import { CodeEditor } from './CodeEditor';
 // Production-grade voice + text interview interface
 // ─────────────────────────────────────────────────────────────────────────────
 
-const WS_BASE = import.meta.env.VITE_WS_URL || 'ws://localhost:8000';
-const API_BASE = import.meta.env.VITE_API_URL || 'http://localhost:8000';
+const API_BASE = import.meta.env.VITE_API_URL || '/api';
+const getWsBase = () =>
+  import.meta.env.VITE_WS_URL ||
+  `${window.location.protocol === 'https:' ? 'wss' : 'ws'}://${window.location.host}/api`;
 
 // ── Sub-components ────────────────────────────────────────────────────────────
 
@@ -282,131 +284,6 @@ export default function AIInterviewer({ sessionId, token, role, company, onCompl
     }
   }, [phase, refreshToken]);
 
-  // ── P3: Auto-reconnect on disconnect ────────────────────────────────
-  const reconnectWs = useCallback(() => {
-    if (!interviewSessionId || !token || !sessionId) return;
-    if (reconnectAttempts >= 5) {
-      setError('Connection lost. Please refresh the page.');
-      setPhase('error');
-      return;
-    }
-
-    setReconnectAttempts(prev => prev + 1);
-    setPhase('opening');
-
-    const wsUrl = `${WS_BASE}/ai-interview/ws?token=${token}&interview_session_id=${interviewSessionId}&session_id=${sessionId}`;
-    const ws = new WebSocket(wsUrl);
-    wsRef.current = ws;
-    ws.binaryType = 'arraybuffer';
-
-    ws.onopen = () => {
-      console.log('[AIInterviewer] WebSocket reconnected');
-      setReconnectAttempts(0);
-    };
-
-    ws.onmessage = (event) => {
-      if (typeof event.data === 'string') {
-        handleWsMessage(JSON.parse(event.data));
-      } else {
-        handleAudioResponse(event.data);
-      }
-    };
-
-    ws.onerror = () => {
-      // Will trigger onclose
-    };
-
-    ws.onclose = () => {
-      if (phase !== 'completed' && phase !== 'error') {
-        // Auto-reconnect after delay
-        reconnectTimerRef.current = setTimeout(reconnectWs, 2000 * (reconnectAttempts + 1));
-      }
-    };
-  }, [interviewSessionId, token, sessionId, reconnectAttempts, phase, handleWsMessage, handleAudioResponse]);
-
-  // Cleanup reconnect timer
-  useEffect(() => {
-    return () => {
-      clearTimeout(reconnectTimerRef.current);
-      clearInterval(tokenRefreshRef.current);
-    };
-  }, []);
-
-  // ── Start Interview ──────────────────────────────────────────────────
-  const startInterview = useCallback(async () => {
-    setPhase('initializing');
-    setError(null);
-
-    try {
-      // Step 1: Initialize the session via REST
-      const res = await fetch(`${API_BASE}/ai-interview/start`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${token}`,
-        },
-        body: JSON.stringify({
-          session_id: sessionId,
-          role: role || 'Software Engineer',
-          company: company || 'the company',
-          max_questions: 12,
-          voice_enabled: voiceMode,
-        }),
-      });
-
-      if (!res.ok) {
-        throw new Error(`Failed to initialize interview: ${res.statusText}`);
-      }
-
-      const data = await res.json();
-      const ivSessionId = data.interview_session_id;
-      setInterviewSessionId(ivSessionId);
-
-      // Step 2: Connect WebSocket
-      const wsUrl = `${WS_BASE}/ai-interview/ws?token=${token}&interview_session_id=${ivSessionId}&session_id=${sessionId}`;
-      const ws = new WebSocket(wsUrl);
-      wsRef.current = ws;
-      ws.binaryType = 'arraybuffer';
-
-      ws.onopen = () => {
-        console.log('[AIInterviewer] WebSocket connected');
-        setPhase('opening');
-      };
-
-      ws.onmessage = (event) => {
-        if (typeof event.data === 'string') {
-          handleWsMessage(JSON.parse(event.data));
-        } else {
-          // Binary: TTS audio
-          handleAudioResponse(event.data);
-        }
-      };
-
-      ws.onerror = (e) => {
-        console.error('[AIInterviewer] WebSocket error', e);
-        setError('Connection error. Please refresh and try again.');
-        setPhase('error');
-      };
-
-      ws.onclose = () => {
-        console.log('[AIInterviewer] WebSocket closed');
-        if (phase !== 'completed' && phase !== 'error') {
-          // P3: Auto-reconnect after brief delay
-          reconnectTimerRef.current = setTimeout(() => {
-            if (wsRef.current === ws) {
-              reconnectWs();
-            }
-          }, 2000);
-        }
-      };
-
-    } catch (err) {
-      console.error('[AIInterviewer] Start failed', err);
-      setError(err.message);
-      setPhase('error');
-    }
-  }, [sessionId, token, role, company, voiceMode]);
-
   // ── WebSocket Message Handler ────────────────────────────────────────
   const handleWsMessage = useCallback((msg) => {
     const { type } = msg;
@@ -518,6 +395,131 @@ export default function AIInterviewer({ sessionId, token, role, company, onCompl
       setIsSpeaking(false);
     }
   }, []);
+
+  // ── P3: Auto-reconnect on disconnect ────────────────────────────────
+  const reconnectWs = useCallback(() => {
+    if (!interviewSessionId || !token || !sessionId) return;
+    if (reconnectAttempts >= 5) {
+      setError('Connection lost. Please refresh the page.');
+      setPhase('error');
+      return;
+    }
+
+    setReconnectAttempts(prev => prev + 1);
+    setPhase('opening');
+
+    const wsUrl = `${getWsBase()}/ai-interview/ws?token=${token}&interview_session_id=${interviewSessionId}&session_id=${sessionId}`;
+    const ws = new WebSocket(wsUrl);
+    wsRef.current = ws;
+    ws.binaryType = 'arraybuffer';
+
+    ws.onopen = () => {
+      console.log('[AIInterviewer] WebSocket reconnected');
+      setReconnectAttempts(0);
+    };
+
+    ws.onmessage = (event) => {
+      if (typeof event.data === 'string') {
+        handleWsMessage(JSON.parse(event.data));
+      } else {
+        handleAudioResponse(event.data);
+      }
+    };
+
+    ws.onerror = () => {
+      // Will trigger onclose
+    };
+
+    ws.onclose = () => {
+      if (phase !== 'completed' && phase !== 'error') {
+        // Auto-reconnect after delay
+        reconnectTimerRef.current = setTimeout(reconnectWs, 2000 * (reconnectAttempts + 1));
+      }
+    };
+  }, [interviewSessionId, token, sessionId, reconnectAttempts, phase, handleWsMessage, handleAudioResponse]);
+
+  // Cleanup reconnect timer
+  useEffect(() => {
+    return () => {
+      clearTimeout(reconnectTimerRef.current);
+      clearInterval(tokenRefreshRef.current);
+    };
+  }, []);
+
+  // ── Start Interview ──────────────────────────────────────────────────
+  const startInterview = useCallback(async () => {
+    setPhase('initializing');
+    setError(null);
+
+    try {
+      // Step 1: Initialize the session via REST
+      const res = await fetch(`${API_BASE}/ai-interview/start`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({
+          session_id: sessionId,
+          role: role || 'Software Engineer',
+          company: company || 'the company',
+          max_questions: 12,
+          voice_enabled: voiceMode,
+        }),
+      });
+
+      if (!res.ok) {
+        throw new Error(`Failed to initialize interview: ${res.statusText}`);
+      }
+
+      const data = await res.json();
+      const ivSessionId = data.interview_session_id;
+      setInterviewSessionId(ivSessionId);
+
+      // Step 2: Connect WebSocket
+      const wsUrl = `${getWsBase()}/ai-interview/ws?token=${token}&interview_session_id=${ivSessionId}&session_id=${sessionId}`;
+      const ws = new WebSocket(wsUrl);
+      wsRef.current = ws;
+      ws.binaryType = 'arraybuffer';
+
+      ws.onopen = () => {
+        console.log('[AIInterviewer] WebSocket connected');
+        setPhase('opening');
+      };
+
+      ws.onmessage = (event) => {
+        if (typeof event.data === 'string') {
+          handleWsMessage(JSON.parse(event.data));
+        } else {
+          // Binary: TTS audio
+          handleAudioResponse(event.data);
+        }
+      };
+
+      ws.onerror = (e) => {
+        console.error('[AIInterviewer] WebSocket error', e);
+        setError('Connection error. Please refresh and try again.');
+        setPhase('error');
+      };
+
+      ws.onclose = () => {
+        console.log('[AIInterviewer] WebSocket closed');
+        if (phase !== 'completed' && phase !== 'error') {
+          // P3: Auto-reconnect after brief delay
+          reconnectTimerRef.current = setTimeout(() => {
+            if (wsRef.current === ws) {
+              reconnectWs();
+            }
+          }, 2000);
+        }
+      };
+
+    } catch (err) {
+      console.error('[AIInterviewer] Start failed', err);
+      setError(err.message);
+      setPhase('error');
+    }
+  }, [sessionId, token, role, company, voiceMode]);
 
   // ── Add Message Helper ───────────────────────────────────────────────
   const addMessage = (msg) => {
