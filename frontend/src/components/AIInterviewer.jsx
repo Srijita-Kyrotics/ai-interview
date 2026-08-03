@@ -178,6 +178,10 @@ export default function AIInterviewer({ sessionId, token, role, company, onCompl
   const [code, setCode] = useState('');
   const [language, setLanguage] = useState('python');
   const [activeTab, setActiveTab] = useState('chat');
+  const [stdin, setStdin] = useState('');
+  const [runOutput, setRunOutput] = useState('');
+  const [runStatus, setRunStatus] = useState('');
+  const [isRunning, setIsRunning] = useState(false);
 
   const LANGUAGE_OPTIONS = [
     { key: 'python', label: 'Python' },
@@ -540,6 +544,42 @@ export default function AIInterviewer({ sessionId, token, role, company, onCompl
       language: code ? language : undefined,
     }));
   }, [code, language]);
+
+  // ── Run Code ───────────────────────────────────────────────────────
+  const runCode = useCallback(async () => {
+    if (!code.trim() || isRunning) return;
+    setIsRunning(true);
+    setRunStatus('Running…');
+    setRunOutput('');
+    try {
+      const res = await fetch(`${API_BASE}/ai-interview/run-code`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({ language, code, stdin }),
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        setRunStatus(data.detail || data.message || `Run failed (${res.status})`);
+        setRunOutput(data.error || '');
+        return;
+      }
+      if (!data.ok) {
+        setRunStatus(data.error || 'Could not run code.');
+        return;
+      }
+      setRunStatus(data.timed_out ? 'Execution timed out.' : 'Ran successfully.');
+      const out = [data.stdout, data.stderr].filter(Boolean).join('\n');
+      setRunOutput(out || '(no output)');
+    } catch (err) {
+      setRunStatus('Could not contact run service.');
+      setRunOutput(err.message || '');
+    } finally {
+      setIsRunning(false);
+    }
+  }, [code, language, stdin, token, isRunning]);
 
   // ── Voice Recording ──────────────────────────────────────────────────
   const startRecording = useCallback(async () => {
@@ -904,6 +944,14 @@ export default function AIInterviewer({ sessionId, token, role, company, onCompl
             <span className="aii-code-hint">
               Code written here is shared with Obi for evaluation
             </span>
+            <button
+              className="aii-run-btn"
+              onClick={runCode}
+              disabled={isRunning || !code.trim()}
+              title="Run code and see output"
+            >
+              {isRunning ? 'Running…' : '▶ Run Code'}
+            </button>
           </div>
           <div className="aii-code-editor-wrap">
             <CodeEditor
@@ -912,6 +960,21 @@ export default function AIInterviewer({ sessionId, token, role, company, onCompl
               language={language}
               questionTitle="Live Code"
             />
+          </div>
+          <div className="aii-run-panel">
+            <div className="aii-run-panel__row">
+              <input
+                className="aii-stdin-input"
+                placeholder="Optional stdin — e.g. 1 2 3"
+                value={stdin}
+                onChange={(e) => setStdin(e.target.value)}
+                disabled={isRunning}
+              />
+              {runStatus && <span className="aii-run-status">{runStatus}</span>}
+            </div>
+            {runOutput && (
+              <pre className="aii-run-output">{runOutput}</pre>
+            )}
           </div>
         </div>
       )}

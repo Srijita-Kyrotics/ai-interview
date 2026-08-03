@@ -59,8 +59,9 @@ from app.ai_interviewer.nodes import GeminiUnavailableError
 from app.ai_interviewer.state import make_initial_state
 from app.ai_interviewer.state_store import InterviewStateStore, get_state_store
 from app.ai_interviewer.voice import VoicePipeline
+from app.code_executor import execute_local
 from app.config import settings
-from app.db import load_session, save_session
+from app.db import check_rate_limit, load_session, save_session
 from app.helpers import create_token, decode_token
 
 logger = logging.getLogger("ai_interview.router")
@@ -98,6 +99,12 @@ class StartInterviewResponse(BaseModel):
 class ResumeInterviewRequest(BaseModel):
     interview_session_id: str
     session_id: str  # Original platform session
+
+
+class RunCodeRequest(BaseModel):
+    language: str
+    code: str
+    stdin: str = ""
 
 
 # ── Dependency: Auth ──────────────────────────────────────────────────────────
@@ -201,6 +208,39 @@ async def start_ai_interview(
         status="ready",
         message="Session initialized. Connect via WebSocket to begin.",
     )
+
+
+@router.post("/run-code")
+async def run_interview_code(
+    request: RunCodeRequest,
+    user: dict = Depends(get_current_user),
+):
+    """
+    Execute candidate code in a sandboxed subprocess and return raw output.
+
+    Unlike the coding-round ``/run-code`` grader, this endpoint has no test
+    cases: Obi's coding questions are LLM-generated, so the candidate just
+    runs their code against optional stdin and inspects stdout/stderr.
+    """
+    if not request.code.strip():
+        raise HTTPException(status_code=400, detail="Code cannot be empty")
+
+    if not check_rate_limit(f"code:{user.get('email', '')}", settings.code_rate_limit, settings.code_rate_window):
+        raise HTTPException(status_code=429, detail="Too many code execution requests. Please wait.")
+
+    result = await execute_local(request.language, request.code, request.stdin)
+    logger.info(
+        "AI interview code run",
+        extra={"email": user.get("email"), "language": request.language, "timed_out": result.get("timed_out")},
+    )
+    return {
+        "ok": result.get("ok"),
+        "missing_runtime": result.get("missing_runtime"),
+        "timed_out": result.get("timed_out"),
+        "stdout": result.get("stdout", ""),
+        "stderr": result.get("stderr", ""),
+        "error": result.get("error", ""),
+    }
 
 
 @router.post("/resume", response_model=StartInterviewResponse)
