@@ -1,9 +1,9 @@
 import React, { useState } from 'react'
 import { useNavigate, useLocation } from 'react-router-dom'
-import { CheckCircle, LayoutDashboard, Shield, Menu, X } from 'lucide-react'
+import { Bot, CheckCircle, LayoutDashboard, Shield, Menu, X, Play } from 'lucide-react'
 import { steps } from '../constants'
 
-function Shell({ state, user, onLogout, proctoring, children }) {
+function Shell({ state, user, onLogout, proctoring, onStartAiInterview, children }) {
   const navigate = useNavigate()
   const location = useLocation()
   const [sidebarOpen, setSidebarOpen] = useState(false)
@@ -12,16 +12,16 @@ function Shell({ state, user, onLogout, proctoring, children }) {
   const isDashboard = routeStage === 'dashboard'
   const isRecruiterPage = routeStage === 'recruiter'
 
-  const currentStageIndex = steps.findIndex(s => s.key === state.stage)
-  const isStepLocked = (stepKey) => {
-    if (state.stage === 'report') return stepKey !== 'report' && stepKey !== 'company'
-    const idx = steps.findIndex(s => s.key === stepKey)
-    return idx !== currentStageIndex
-  }
+  const isRoundCompleted = (stepKey) => (state.roundStatus?.[stepKey] || 'not_started') === 'completed'
 
   const handleNav = (path) => {
     navigate(path)
     setSidebarOpen(false)
+  }
+
+  const handleAiInterview = () => {
+    setSidebarOpen(false)
+    onStartAiInterview && onStartAiInterview()
   }
 
   return (
@@ -68,31 +68,50 @@ function Shell({ state, user, onLogout, proctoring, children }) {
             </button>
           )}
 
+          <button
+            type="button"
+            onClick={handleAiInterview}
+            className={`step-item ai-interview-nav ${routeStage === 'technical' ? 'active' : ''}`}
+            title="Jump straight into the Obi AI interview"
+          >
+            <span><Bot size={15} /></span>
+            <b>AI Interview with Obi</b>
+          </button>
+
           <div className="sidebar-divider" />
 
           {steps.map((step) => {
-            const locked = isStepLocked(step.key)
             const active = routeStage === step.key || state.stage === step.key
-            const stepIndex = steps.findIndex(s => s.key === step.key)
-            const isCompleted = stepIndex < currentStageIndex
+            const isCompleted = isRoundCompleted(step.key)
             return (
-              <button
-                key={step.key}
-                type="button"
-                disabled={locked}
-                onClick={() => handleNav(`/${step.key}`)}
-                className={`step-item ${active ? 'active' : ''} ${locked && !isCompleted ? 'locked' : ''} ${isCompleted ? 'completed' : ''}`}
-              >
-                <span>
-                  {isCompleted
-                    ? <CheckCircle size={15} />
-                    : step.icon
-                      ? <step.icon size={15} />
-                      : step.badge
-                  }
-                </span>
-                <b>{step.label}</b>
-              </button>
+              <React.Fragment key={step.key}>
+                <button
+                  type="button"
+                  onClick={() => handleNav(`/${step.key}`)}
+                  className={`step-item ${active ? 'active' : ''} ${isCompleted ? 'completed' : ''}`}
+                >
+                  <span>
+                    {isCompleted
+                      ? <CheckCircle size={15} />
+                      : step.icon
+                        ? <step.icon size={15} />
+                        : step.badge
+                    }
+                  </span>
+                  <b>{step.label}</b>
+                </button>
+                {step.key === 'hr' && (
+                  <button
+                    type="button"
+                    onClick={() => handleNav('/resume')}
+                    className={`step-item full-interview-nav ${routeStage === 'resume' ? 'active' : ''}`}
+                    title="Start the complete multi-round interview"
+                  >
+                    <span><Play size={15} /></span>
+                    <b>Full Interview</b>
+                  </button>
+                )}
+              </React.Fragment>
             )
           })}
         </nav>

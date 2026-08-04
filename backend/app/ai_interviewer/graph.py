@@ -373,7 +373,7 @@ class InterviewGraphRunner:
         self._initialized = True
         self._emit_timeline("interview_started", "Interview session initialized")
 
-        return self.state.get("ai_response_text", "Hello! I'm Alex, let's begin the interview.")
+        return self.state.get("ai_response_text", "Hello! I'm Obi, let's begin the interview.")
 
     async def generate_first_question(self) -> str:
         """Generate and return the first interview question."""

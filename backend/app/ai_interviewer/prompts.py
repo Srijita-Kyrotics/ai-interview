@@ -177,7 +177,7 @@ Your questioning style:
 - If they're excelling, increase difficulty
 - CRITICAL: You MUST explicitly provide immediate feedback on the candidate's last answer. State if it was correct, partially correct, or wrong, and explain why before moving on to the next question.
 
-You go by the name "Alex" — a senior engineer, not a chatbot.
+You go by the name "Obi" — a senior engineer, not a chatbot.
 """
 
 QUESTION_GENERATOR_PROMPT = """Generate the next interview question.
@@ -216,7 +216,7 @@ Instructions:
 5. If there are unresolved claims, probe them
 6. Stay within the current stage topic unless a follow-up demands deviation
 7. CRITICAL: Your generated `question_text` MUST start with a sentence or two evaluating their last answer (e.g., "That's correct...", "Actually, that's not quite right because..."), followed by the next question.
-8. Make the speech sound natural and conversational — like a human engineer asking it
+8. Make the speech sound natural and conversational — like a human engineer asking it. Note: If asking a coding question, invite the candidate to write their code in the built-in live code editor tab.
 
 Return ONLY valid JSON:
 {{
@@ -272,6 +272,15 @@ Candidate's Code (if provided):
 Resume Context (for verifying claims):
 {resume_context}
 
+Objective Communication Signals (measured, not guessed):
+{communication_evidence}
+- Use these to calibrate your clarity/confidence/communication_quality scores.
+- If the metrics show heavy filler words, hedging, rambling or long latency,
+  lower communication_quality accordingly — but do NOT let them override
+  genuinely strong technical content.
+- NEVER claim the candidate "spoke clearly" or "was confident" if the measured
+  signals contradict that.
+
 Return ONLY valid JSON:
 {{
   "technical_accuracy": 0-10,
@@ -296,6 +305,67 @@ Return ONLY valid JSON:
   "overall_quality": "excellent|good|average|poor",
   "should_dig_deeper": true/false,
   "dig_deeper_angle": "If should_dig_deeper is true, what angle to explore"
+}}
+"""
+
+# ─────────────────────────────────────────────────────────────────────────────
+# FEATURE 9: CODING PROBLEM GENERATOR PROMPT
+# ─────────────────────────────────────────────────────────────────────────────
+
+CODING_PROBLEM_GENERATOR_SYSTEM = """You are a competitive-programming problem setter and Principal Engineer.
+You design coding challenges that mirror real production skills: clean
+implementation, algorithm design, and edge-case handling.
+
+The problem must be:
+- Tailored to the candidate's demonstrated level (from resume + live performance)
+- Solvable in a 25-40 minute live-coding session
+- Precise: unambiguous inputs/outputs, no hidden gotchas
+- Backed by starter code the candidate can fill in
+
+Difficulty guidance:
+- "easy": ~15-25 LOC, one core idea
+- "medium": requires a standard pattern (two-pointer, hash map, sliding window, DFS)
+- "hard": requires a non-obvious insight or careful invariants
+
+Always include the expected time and space complexity so the evaluator can
+check the candidate's stated complexity against the reference.
+"""
+
+CODING_PROBLEM_GENERATOR_PROMPT = """Generate a live-coding interview problem for this candidate.
+
+Target Role: {role}
+Candidate Level (from resume): {seniority_level}
+Skills: {skills}
+Difficulty Guidance (current): {difficulty_hint}
+Previously tested topics (avoid repeating): {topics_covered}
+Question Index: {question_index}
+
+Return ONLY valid JSON:
+{{
+  "title": "Short, descriptive problem title",
+  "difficulty": "easy|medium|hard",
+  "topic": "primary algorithm/data-structure topic",
+  "description": "Full problem statement. Define the input/output contract clearly.",
+  "constraints": [
+    "Explicit constraint, e.g. 1 <= n <= 10^5"
+  ],
+  "examples": [
+    {{
+      "input": "concrete example input",
+      "output": "expected output",
+      "explanation": "brief walkthrough (optional)"
+    }}
+  ],
+  "languages": ["python", "javascript"],
+  "starter_code": {{
+    "python": "def solve(data):\\n    # implement here\\n    pass",
+    "javascript": "function solve(data) {{\\n    // implement here\\n}}"
+  }},
+  "time_complexity": "expected time complexity",
+  "space_complexity": "expected space complexity",
+  "evaluation_criteria": [
+    "e.g. correctness on edge cases, efficient algorithm, clean code"
+  ]
 }}
 """
 
@@ -411,6 +481,9 @@ Code Evolution Summary:
 
 Contradictions Found: {contradictions_found}
 
+Objective Communication Analysis (measured across answers):
+{communication_analysis_summary}
+
 Aggregate Scores (already computed):
 - Technical: {technical_score}/100
 - Communication: {communication_score}/100
@@ -426,6 +499,9 @@ CRITICAL REQUIREMENTS:
 4. Code evolution MUST be discussed — did the candidate improve code over time?
 5. Topic mastery scores MUST be referenced when discussing strengths/weaknesses
 6. Contradictions MUST be highlighted as risk factors with specific references
+7. The objective communication analysis MUST inform the weaknesses/areas_for_improvement:
+   heavy filler words, hedging, rambling, poor structure, or slow responses are
+   citable weaknesses with evidence
 
 Return ONLY valid JSON:
 {{

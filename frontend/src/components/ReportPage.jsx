@@ -1,5 +1,4 @@
 import React, { useEffect, useMemo, useState } from 'react'
-import { Navigate } from 'react-router-dom'
 import { Download, Code2, MessageSquare } from 'lucide-react'
 import { api } from '../api'
 import { calculateInterviewScores } from '../proctoring/proctoringState'
@@ -119,8 +118,23 @@ function ReportPage({ state, proctoring }) {
     URL.revokeObjectURL(url)
   }
 
-  if (!state.sessionId) return <Navigate to="/resume" replace />
-  if (!state.company) return <Navigate to="/company" replace />
+  if (!state.sessionId) {
+    return (
+      <section className="panel main-panel report-panel">
+        <div className="section-head">
+          <div>
+            <p className="eyebrow">Final report</p>
+            <h2>Candidate readiness summary</h2>
+            <p className="muted">Your report will appear here as soon as you complete at least one round.</p>
+          </div>
+        </div>
+        <div className="empty-state">
+          <b>No report yet</b>
+          <p>Complete any round (Aptitude, Coding, Technical, or HR) and your partial report will show here. Rounds can be taken in any order.</p>
+        </div>
+      </section>
+    )
+  }
 
   return (
     <section className="panel main-panel report-panel">

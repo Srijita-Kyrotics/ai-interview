@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react'
-import { Navigate, useNavigate } from 'react-router-dom'
+import { useNavigate } from 'react-router-dom'
 import { Mic, Square, Play, RotateCcw } from 'lucide-react'
 import { api } from '../api'
 import { roundDurations } from '../constants'
@@ -148,14 +148,9 @@ function FormattedText({ text }) {
   return <>{root}</>
 }
 
-function getNextStage(type) {
-  if (type === 'aptitude') return 'coding'
-  if (type === 'coding') return 'technical'
-  return 'report'
-}
-
 function RoundPage({ title, items: itemsProp, pool, build, type, state, setState, proctoring, setProctoring }) {
   const navigate = useNavigate()
+  const effectiveCompany = state.company || 'General'
   const [items] = useState(() => {
     if (build) return build(pool || [])
     return Array.isArray(itemsProp) ? itemsProp : []
@@ -243,17 +238,17 @@ function RoundPage({ title, items: itemsProp, pool, build, type, state, setState
   }, [isRecording])
 
   useEffect(() => {
-    if (!isStarted || !current || !state.sessionId || !state.company) return undefined
+    if (!isStarted || !current) return undefined
     const timer = window.setInterval(() => {
       setTimeLeft((remaining) => Math.max(remaining - 1, 0))
     }, 1000)
     return () => window.clearInterval(timer)
-  }, [isStarted, current, state.company, state.sessionId])
+  }, [isStarted, current])
 
   useEffect(() => {
-    if (timeLeft !== 0 || !current || !state.sessionId || !state.company) return
+    if (timeLeft !== 0 || !current) return
     submitRef.current?.(true)
-  }, [timeLeft, current, state.company, state.sessionId])
+  }, [timeLeft, current])
 
   useEffect(() => {
     if (hasPermissions || isStarted) {
@@ -296,7 +291,7 @@ function RoundPage({ title, items: itemsProp, pool, build, type, state, setState
   const beginTest = async (skip = false) => {
     try {
       if (!skip) await proctor.requestFullscreen()
-      const res = await api.post('/start-round', { session_id: state.sessionId, company: state.company, round_key: type })
+      const res = await api.post('/start-round', { session_id: state.sessionId, company: effectiveCompany, round_key: type })
       if (!res.ok && res.error) {
         setProctorError(res.error)
         return
@@ -422,21 +417,17 @@ function RoundPage({ title, items: itemsProp, pool, build, type, state, setState
     if (idx < items.length - 1) {
       setIdx(idx + 1)
     } else {
-      const nextStage = getNextStage(type)
-      if (nextStage !== 'report') {
-        setState((s) => ({ ...s, stage: nextStage, roundTransition: true }))
-        navigate(`/${nextStage}`)
-      } else {
-        setState((s) => ({ ...s, stage: 'report' }))
-        navigate('/report')
-      }
+      setState((s) => ({
+        ...s,
+        stage: 'report',
+        roundTransition: true,
+        roundStatus: { ...s.roundStatus, [type]: 'completed' }
+      }))
+      navigate('/report')
     }
   }
 
   submitRef.current = submit
-
-  if (!state.sessionId) return <Navigate to="/resume" replace />
-  if (!state.company) return <Navigate to="/company" replace />
 
   if (!isStarted) {
     return (

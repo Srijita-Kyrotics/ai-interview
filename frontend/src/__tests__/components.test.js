@@ -103,11 +103,10 @@ describe('TerminatedPage', () => {
 })
 
 describe('ReportPage', () => {
-  it('renders loading state when no session', async () => {
+  it('renders empty state when no session instead of redirecting', async () => {
     const { ReportPage } = await import('../components/ReportPage')
     render(React.createElement(ReportPage, { state: {}, proctoring: {} }))
-    const nav = screen.getByTestId('navigate')
-    expect(nav.textContent).toContain('/resume')
+    expect(screen.getByText(/No report yet/)).toBeTruthy()
   })
 })
 

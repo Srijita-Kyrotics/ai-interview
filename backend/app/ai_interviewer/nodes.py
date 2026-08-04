@@ -25,6 +25,7 @@ import time
 import uuid
 
 from app.ai_interviewer.memory import MemoryManager
+from app.ai_interviewer.communication_analyzer import analyze_communication
 from app.ai_interviewer.prompts import (
     ANSWER_ANALYZER_PROMPT,
     ANSWER_ANALYZER_SYSTEM,
@@ -32,6 +33,8 @@ from app.ai_interviewer.prompts import (
     CLAIM_EXTRACTOR_SYSTEM,
     CLAIM_VERIFIER_PROMPT,
     CLAIM_VERIFIER_SYSTEM,
+    CODING_PROBLEM_GENERATOR_PROMPT,
+    CODING_PROBLEM_GENERATOR_SYSTEM,
     CONTRADICTION_DETECTOR_PROMPT,
     CONTRADICTION_DETECTOR_SYSTEM,
     DIFFICULTY_GUIDANCE,
@@ -56,6 +59,8 @@ from app.ai_interviewer.prompts import (
 from app.ai_interviewer.state import (
     AnswerEvaluation,
     CandidateFact,
+    CodingProblem,
+    CodingSubmission,
     DifficultyLevel,
     FinalReport,
     FinalScores,
@@ -419,6 +424,28 @@ async def question_generator_node(state: InterviewState) -> dict:
         intent=result.get("intent", "technical"),
     )
 
+    # ── Feature 9: In a coding stage, the question is the live-coding problem ──
+    problem_updates: dict = {}
+    if _is_coding_stage(current_stage):
+        active_problem = state.get("active_coding_problem")
+        if not (active_problem and active_problem.get("description")):
+            problem_updates = await coding_problem_generator_node(state)
+            active_problem = problem_updates.get("active_coding_problem")
+        if active_problem and active_problem.get("description"):
+            problem_title = active_problem.get("title", "Coding Challenge")
+            question_record = QuestionRecord(
+                id=question_id,
+                question=(
+                    f"Please solve the following coding problem: {problem_title}\n\n"
+                    f"{active_problem.get('description', '')}"
+                ),
+                stage=current_stage.get("id", "general"),
+                topic=f"coding:{active_problem.get('topic', 'algorithms')}",
+                asked_at=time.time(),
+                intent="coding",
+            )
+            result["topic"] = question_record["topic"]
+
     # Update memory
     mem_mgr.mark_question_asked(question_id, result.get("topic", "general"))
 
@@ -451,6 +478,7 @@ async def question_generator_node(state: InterviewState) -> dict:
         "ai_response_text": question_record["question"],
         "questions_asked": state["questions_asked"] + 1,
         "last_activity_at": time.time(),
+        "active_coding_problem": problem_updates.get("active_coding_problem"),
     }
 
 
@@ -482,15 +510,37 @@ async def answer_analyzer_node(state: InterviewState) -> dict:
         f"Red Flags: {', '.join(analysis.get('red_flags', []))}"
     )
 
-    # Get expected signals from question record
-    questions_history = state.get("questions_history", [])
-    expected_signals = []
-    for q in questions_history:
-        if q["id"] == current_question.get("id"):
-            break
+    # Get expected signals from the question's intent (deterministic, so the
+    # evaluator calibrates against the right bar for this question type).
+    _INTENT_SIGNALS = {
+        "technical": "Accurate technical explanation, concrete examples, complexity awareness",
+        "probe": "Specific details, honest admission of limits, no vague buzzwords",
+        "verify": "Consistency with resume claims, concrete evidence of real experience",
+        "deep_dive": "Tradeoffs, alternatives, design decisions, failure modes",
+        "behavioral": "Situation-action-outcome structure, personal contribution, measurable impact",
+        "coding": "Correct algorithm, edge cases, efficient complexity, clean code",
+    }
+    expected_signals = [_INTENT_SIGNALS.get(current_question.get("intent", "technical"), _INTENT_SIGNALS["technical"])]
 
     # Get code snapshot if available
     code_snapshot = state.get("current_code_snapshot", "") or current_answer.get("code_snapshot", "") or ""
+
+    # ── Objective communication / prosody analysis ──────────────────────
+    comm = analyze_communication(
+        current_answer.get("answer_text", ""),
+        duration_seconds=current_answer.get("duration_seconds"),
+        question_asked_at=current_question.get("asked_at"),
+        answered_at=current_answer.get("answered_at"),
+    )
+    communication_evidence = "\n".join(comm.evidence) if comm.evidence else "No objective signals available."
+
+    # Coding context (Feature 9)
+    active_problem = state.get("active_coding_problem", {})
+    coding_context = (
+        json.dumps(active_problem, indent=2)[:2000]
+        if active_problem and code_snapshot
+        else "No live-coding problem active."
+    )
 
     prompt = ANSWER_ANALYZER_PROMPT.format(
         question_text=current_question.get("question", ""),
@@ -500,9 +550,31 @@ async def answer_analyzer_node(state: InterviewState) -> dict:
         answer_text=current_answer.get("answer_text", ""),
         code_snapshot=code_snapshot if code_snapshot else "No code provided.",
         resume_context=resume_context,
+        communication_evidence=communication_evidence,
     )
 
+    # Coding problem context appended so the evaluator can grade against the prompt
+    if active_problem and code_snapshot:
+        prompt += (
+            f"\n\nLIVE CODING PROBLEM (evaluate the submitted code against this):\n{coding_context}"
+        )
+
     result = await _call_llm_json(ANSWER_ANALYZER_SYSTEM, prompt)
+
+    # ── Blend LLM communication score with objective metrics ─────────────
+    llm_comm = int(result.get("communication_quality", 5))
+    blended_comm = round(0.5 * llm_comm + 0.5 * comm.overall_score)
+    blended_comm = max(0, min(10, blended_comm))
+
+    # Fold objective signals into the sign lists (deduplicated, capped)
+    positive_signals = list(result.get("positive_signals", []))
+    red_flags = list(result.get("red_flags", []))
+    for strength in comm.strengths:
+        if strength not in positive_signals and len(positive_signals) < 5:
+            positive_signals.append(f"(communication) {strength}")
+    for concern in comm.concerns:
+        if concern not in red_flags and len(red_flags) < 5:
+            red_flags.append(f"(communication) {concern}")
 
     evaluation: AnswerEvaluation = {
         "question_id": current_question.get("id", ""),
@@ -511,13 +583,24 @@ async def answer_analyzer_node(state: InterviewState) -> dict:
         "clarity": int(result.get("clarity", 5)),
         "confidence": int(result.get("confidence", 5)),
         "completeness": int(result.get("completeness", 5)),
-        "communication_quality": int(result.get("communication_quality", 5)),
+        "communication_quality": blended_comm,
         "missing_points": result.get("missing_points", []),
-        "positive_signals": result.get("positive_signals", []),
-        "red_flags": result.get("red_flags", []),
+        "positive_signals": positive_signals,
+        "red_flags": red_flags,
         "suggested_follow_ups": result.get("suggested_follow_ups", []),
         "overall_quality": result.get("overall_quality", "average"),
+        "comm_metrics": comm.to_dict(),
     }
+
+    # ── Feature 9: Coding quality grade ──────────────────────────────────
+    coding_quality: int | None = None
+    if active_problem and code_snapshot:
+        coding_quality = int(round(
+            0.5 * evaluation["technical_accuracy"]
+            + 0.3 * evaluation["depth"]
+            + 0.2 * evaluation["completeness"]
+        ))
+        evaluation["coding_quality"] = coding_quality
 
     # Update memory with evaluation insights
     memory = state.get("memory", {})
@@ -594,12 +677,27 @@ async def answer_analyzer_node(state: InterviewState) -> dict:
                 f"Contradiction detected: {contra['explanation'][:100]}"
             )
 
+    # ── Feature 9: Record coding submission when a problem is active ─────
+    coding_submissions = list(state.get("coding_submissions", []))
+    if active_problem and code_snapshot:
+        coding_submissions.append(CodingSubmission(
+            problem_id=active_problem.get("id", ""),
+            question_id=current_question.get("id", ""),
+            code=code_snapshot,
+            language=state.get("current_code_snapshot_language", ""),
+            submitted_at=time.time(),
+            quality=coding_quality or 0,
+            summary=result.get("answer_summary", ""),
+            feedback=", ".join(result.get("red_flags", [])[:2]),
+        ))
+
     logger.info(
         "Answer evaluated",
         extra={
             "technical": evaluation["technical_accuracy"],
             "depth": evaluation["depth"],
             "overall": evaluation["overall_quality"],
+            "communication": blended_comm,
             "should_follow_up": should_follow_up,
             "new_facts": len(contradiction_result.get("new_facts", [])),
             "contradictions": len(contradictions_found),
@@ -608,11 +706,13 @@ async def answer_analyzer_node(state: InterviewState) -> dict:
 
     return {
         "current_evaluation": evaluation,
+        "current_comm_metrics": comm.to_dict(),
         "evaluations_history": updated_evaluations,
         "memory": mem_mgr.get_full_memory(),
         "candidate_facts": updated_facts,
         "topic_mastery": mem_mgr.topic_mastery,
         "difficulty_level": mem_mgr.difficulty_level,
+        "coding_submissions": coding_submissions,
         "_should_follow_up": should_follow_up,  # routing signal
         "_dig_deeper_angle": result.get("dig_deeper_angle", ""),
         "last_activity_at": time.time(),
@@ -880,6 +980,50 @@ async def report_generator_node(state: InterviewState) -> dict:
     candidate_facts = state.get("candidate_facts", [])
     contradictions_found = len([f for f in candidate_facts if f.get("contradicted", False)])
 
+    # ── Objective communication analysis (from stored per-answer metrics) ─
+    comm_metrics_list = [
+        dict(ev.get("comm_metrics", {})) for ev in evaluations if ev.get("comm_metrics")
+    ]
+    if comm_metrics_list:
+        from app.ai_interviewer.communication_analyzer import (
+            CommunicationMetrics,
+            summarize_session,
+        )
+
+        comm_summary = summarize_session(
+            [CommunicationMetrics(**m) for m in comm_metrics_list]
+        )
+        comm_lines = [
+            f"- Answers analyzed: {comm_summary['analyzed_answers']}",
+            f"- Avg communication score: {comm_summary['avg_overall']}/10",
+            f"- Strongest dimension: {comm_summary['best_dimension']}",
+            f"- Weakest dimension: {comm_summary['worst_dimension']}",
+        ]
+        if comm_summary["top_strengths"]:
+            comm_lines.append(f"- Strengths: {', '.join(comm_summary['top_strengths'])}")
+        if comm_summary["top_concerns"]:
+            comm_lines.append(f"- Concerns: {', '.join(comm_summary['top_concerns'])}")
+        communication_analysis_summary = "\n".join(comm_lines)
+        communication_summary = comm_summary
+    else:
+        communication_analysis_summary = "No per-answer communication metrics captured."
+        communication_summary = {"analyzed_answers": 0, "avg_overall": 0.0}
+
+    # ── P5: Evidence graph summary ────────────────────────────────────────
+    evidence_graph = state.get("evidence_graph", {})
+    evidence_graph_summary: dict[str, list[dict]] = {}
+    for claim_id, nodes in evidence_graph.items():
+        evidence_graph_summary[claim_id] = [
+            {
+                "evidence_id": n.get("evidence_id", ""),
+                "question_id": n.get("question_id", ""),
+                "supports_claim": n.get("supports_claim", False),
+                "strength": n.get("strength", ""),
+                "reasoning": n.get("reasoning", "")[:200],
+            }
+            for n in nodes
+        ]
+
     # Duration
     start = state.get("interview_started_at", time.time())
     duration_secs = time.time() - start
@@ -899,6 +1043,7 @@ async def report_generator_node(state: InterviewState) -> dict:
         topic_mastery_summary=topic_mastery_summary,
         code_evolution_summary=code_evolution_summary,
         contradictions_found=str(contradictions_found),
+        communication_analysis_summary=communication_analysis_summary,
         technical_score=scores.get("technical_score", 50),
         communication_score=scores.get("communication_score", 50),
         confidence_score=scores.get("confidence_score", 50),
@@ -953,6 +1098,28 @@ async def report_generator_node(state: InterviewState) -> dict:
             }
             for v in code_history
         ],
+        # Objective communication analysis
+        "communication_summary": communication_summary,
+        # P5: Evidence graph
+        "evidence_graph_summary": evidence_graph_summary,
+        # Feature 9: Live coding round
+        "coding_summary": {
+            "problem": {
+                "id": state.get("active_coding_problem", {}).get("id", ""),
+                "title": state.get("active_coding_problem", {}).get("title", ""),
+                "difficulty": state.get("active_coding_problem", {}).get("difficulty", ""),
+                "topic": state.get("active_coding_problem", {}).get("topic", ""),
+            } if state.get("active_coding_problem") else None,
+            "submissions": [
+                {
+                    "problem_id": s["problem_id"],
+                    "quality": s["quality"],
+                    "language": s.get("language", ""),
+                    "feedback": s.get("feedback", ""),
+                }
+                for s in state.get("coding_submissions", [])
+            ],
+        },
     }
 
     logger.info(
@@ -974,6 +1141,71 @@ async def report_generator_node(state: InterviewState) -> dict:
 # ══════════════════════════════════════════════════════════════════════════════
 # HELPER NODES
 # ══════════════════════════════════════════════════════════════════════════════
+
+# ── Feature 9: Live Coding Problem Generator ────────────────────────────────
+
+def _is_coding_stage(stage: dict) -> bool:
+    """Heuristic: a stage is a coding stage if its id/name signals coding."""
+    name = f"{stage.get('name', '')} {stage.get('id', '')}".lower()
+    return any(token in name for token in ("coding", "cod", "live-code", "algorithm"))
+
+
+def _as_list(value) -> list:
+    """Coerce an LLM field into a list, tolerating None or non-list junk."""
+    return list(value) if isinstance(value, (list, tuple, set)) else []
+
+
+async def coding_problem_generator_node(state: InterviewState) -> dict:
+    """
+    Generates a structured live-coding problem for the coding stage,
+    tailored to the candidate's level and the role being interviewed for.
+    """
+    existing = state.get("active_coding_problem")
+    if existing and existing.get("description"):
+        return {"active_coding_problem": existing}
+
+    logger.info("Executing coding_problem_generator_node", extra={"session": state["session_id"]})
+
+    analysis = state.get("resume_analysis", {})
+    difficulty = state.get("difficulty_level", {})
+    memory = state.get("memory", {})
+
+    prompt = CODING_PROBLEM_GENERATOR_PROMPT.format(
+        role=state["role"],
+        seniority_level=analysis.get("seniority_level", "mid"),
+        skills=", ".join(analysis.get("technologies", [])[:10]),
+        difficulty_hint=DIFFICULTY_GUIDANCE.get(
+            difficulty.get("level", "intermediate"), DIFFICULTY_GUIDANCE["intermediate"]
+        ),
+        topics_covered=", ".join(memory.get("topics_covered", [])[-6:]) or "none yet",
+        question_index=state.get("questions_asked", 0),
+    )
+
+    result = await _call_llm_json(CODING_PROBLEM_GENERATOR_SYSTEM, prompt)
+
+    problem = CodingProblem(
+        id=str(uuid.uuid4())[:8],
+        title=result.get("title") or "Coding Challenge",
+        difficulty=result.get("difficulty") or "medium",
+        topic=result.get("topic") or "algorithms",
+        description=result.get("description") or "",
+        constraints=_as_list(result.get("constraints")),
+        examples=_as_list(result.get("examples")),
+        languages=_as_list(result.get("languages")) or ["python", "javascript"],
+        starter_code=result.get("starter_code") or {},
+        time_complexity=result.get("time_complexity") or "",
+        space_complexity=result.get("space_complexity") or "",
+        evaluation_criteria=_as_list(result.get("evaluation_criteria")),
+        generated_at=time.time(),
+    )
+
+    logger.info(
+        "Coding problem generated",
+        extra={"title": problem["title"], "difficulty": problem["difficulty"]},
+    )
+
+    return {"active_coding_problem": problem}
+
 
 async def stage_advance_node(state: InterviewState) -> dict:
     """
@@ -1003,6 +1235,19 @@ async def stage_advance_node(state: InterviewState) -> dict:
 
     next_stage = stages[next_idx]
 
+    updates: dict = {
+        "current_stage_index": next_idx,
+        "current_stage": next_stage,
+    }
+
+    # ── Feature 9: Generate a live-coding problem when entering a coding stage ──
+    if _is_coding_stage(next_stage):
+        try:
+            coding_result = await coding_problem_generator_node(state)
+            updates.update(coding_result)
+        except Exception as e:  # noqa: BLE001
+            logger.warning("Coding problem generation failed", extra={"error": str(e)})
+
     # Generate transition message
     prompt = STAGE_TRANSITION_PROMPT.format(
         current_stage=current_stage.get("name", ""),
@@ -1029,6 +1274,7 @@ async def stage_advance_node(state: InterviewState) -> dict:
         "current_stage": next_stage,
         "conversation_transcript": updated_transcript,
         "ai_response_text": transition_text,
+        "active_coding_problem": updates.get("active_coding_problem"),
     }
 
 
@@ -1140,6 +1386,12 @@ async def claim_verifier_node(state: InterviewState) -> dict:
     if not current_answer or not resume_claims:
         return {"resume_claims": resume_claims}
 
+    # ── P5: Evidence graph ────────────────────────────────────────────────
+    from app.ai_interviewer.evidence_graph import EvidenceGraph
+
+    existing_graph = state.get("evidence_graph", {})
+    evidence_graph = EvidenceGraph.from_dict(existing_graph, resume_claims)
+
     # Find unverified claims relevant to this answer's topic
     topic = current_question.get("topic", "general")
     claims_to_verify = [
@@ -1184,6 +1436,20 @@ async def claim_verifier_node(state: InterviewState) -> dict:
             if question_id and question_id not in claim["asked_question_ids"]:
                 claim["asked_question_ids"].append(question_id)
 
+        # Record an evidence node for this verification moment (P5)
+        if question_id:
+            supports_claim = new_status in ("VERIFIED", "PARTIALLY_VERIFIED")
+            strength = "strong" if new_status in ("VERIFIED", "FAILED_VERIFICATION") else "moderate"
+            evidence_graph.add_evidence(
+                claim_id=claim["claim_id"],
+                question_id=question_id,
+                question_text=current_question.get("question", "")[:300],
+                answer_excerpt=(current_answer.get("answer_text", "") or "")[:400],
+                supports_claim=supports_claim,
+                strength=strength,
+                reasoning=evidence[:300] or f"Verification outcome: {new_status}",
+            )
+
     logger.info(
         "Claims verified",
         extra={
@@ -1192,7 +1458,10 @@ async def claim_verifier_node(state: InterviewState) -> dict:
         }
     )
 
-    return {"resume_claims": resume_claims}
+    return {
+        "resume_claims": resume_claims,
+        "evidence_graph": evidence_graph.to_dict(),
+    }
 
 
 # ══════════════════════════════════════════════════════════════════════════════

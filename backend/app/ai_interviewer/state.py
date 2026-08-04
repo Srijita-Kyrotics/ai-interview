@@ -80,6 +80,7 @@ class AnswerRecord(TypedDict):
     answered_at: float
     duration_seconds: float
     code_snapshot: NotRequired[str]
+    latency_seconds: NotRequired[float]   # question asked_at → answered_at
 
 
 class AnswerEvaluation(TypedDict):
@@ -90,11 +91,13 @@ class AnswerEvaluation(TypedDict):
     confidence: int           # 0-10
     completeness: int         # 0-10
     communication_quality: int # 0-10
+    coding_quality: NotRequired[int]   # 0-10, only when code was submitted
     missing_points: list[str]
     positive_signals: list[str]
     red_flags: list[str]
     suggested_follow_ups: list[str]
     overall_quality: str      # "excellent" | "good" | "average" | "poor"
+    comm_metrics: NotRequired[dict]    # objective CommunicationMetrics (0-10 normalized)
 
 
 # ── Feature 1: Claim Verification Engine ────────────────────────────────────
@@ -156,6 +159,35 @@ class CodeVersion(TypedDict):
     diff_summary: NotRequired[str]    # Summary of changes from previous version
 
 
+# ── Feature 9: Live Coding Round ───────────────────────────────────────────
+
+class CodingProblem(TypedDict):
+    id: str
+    title: str
+    difficulty: str              # "easy" | "medium" | "hard"
+    topic: str
+    description: str
+    constraints: list[str]
+    examples: list[dict]         # [{"input": "...", "output": "...", "explanation": "..."}]
+    languages: list[str]         # e.g. ["python", "javascript"]
+    starter_code: dict           # {"python": "def solve(...):", "javascript": "function solve(...) {"}
+    time_complexity: NotRequired[str]
+    space_complexity: NotRequired[str]
+    evaluation_criteria: NotRequired[list[str]]
+    generated_at: float
+
+
+class CodingSubmission(TypedDict):
+    problem_id: str
+    question_id: str
+    code: str
+    language: NotRequired[str]
+    submitted_at: float
+    quality: int                 # 0-10
+    summary: NotRequired[str]
+    feedback: NotRequired[str]
+
+
 # ── Feature 4: Difficulty Escalation System ─────────────────────────────────
 
 class DifficultyLevel(TypedDict):
@@ -207,6 +239,10 @@ class FinalReport(TypedDict):
     claim_verification_summary: NotRequired[list[dict]]
     # P5: Evidence graph summary
     evidence_graph_summary: NotRequired[dict[str, list[dict]]]
+    # Objective communication analysis
+    communication_summary: NotRequired[dict]
+    # Feature 9: Live coding round summary
+    coding_summary: NotRequired[dict]
     # Feature 2: Topic mastery summary
     topic_mastery_summary: NotRequired[list[dict]]
     # Feature 5: Code evolution summary
@@ -242,6 +278,7 @@ class InterviewState(TypedDict):
     current_question: NotRequired[QuestionRecord]
     current_answer: NotRequired[AnswerRecord]
     current_evaluation: NotRequired[AnswerEvaluation]
+    current_comm_metrics: NotRequired[dict]  # Objective CommunicationMetrics
     next_question_text: NotRequired[str]
     ai_response_text: NotRequired[str]
     current_code_snapshot: NotRequired[str]
@@ -266,6 +303,11 @@ class InterviewState(TypedDict):
 
     # ── Feature 5: Code Evolution ────────────────────────────────────────
     code_history: NotRequired[list[CodeVersion]]
+    current_code_snapshot_language: NotRequired[str]
+
+    # ── Feature 9: Live Coding Round ─────────────────────────────────────
+    active_coding_problem: NotRequired[CodingProblem]
+    coding_submissions: NotRequired[list[CodingSubmission]]
 
     # ── Feature 6: Dynamic Replanning ────────────────────────────────────
     replan_count: NotRequired[int]
@@ -349,6 +391,7 @@ def make_initial_state(
             consecutive_weak=0,
         ),
         code_history=[],
+        coding_submissions=[],
         replan_count=0,
         replan_topics_added=[],
         is_system_design_mode=False,

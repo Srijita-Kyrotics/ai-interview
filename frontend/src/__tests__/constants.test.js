@@ -2,8 +2,9 @@ import { describe, it, expect } from 'vitest'
 import { steps, COMPANY_META, COMPANY_GROUPS, ROLE_MAPPINGS } from '../constants'
 
 describe('steps', () => {
-  it('has 6 steps', () => {
-    expect(steps).toHaveLength(6)
+  it('has 7 independent steps including HR', () => {
+    expect(steps).toHaveLength(7)
+    expect(steps.map(s => s.key)).toContain('hr')
   })
 
   it('first step is resume', () => {

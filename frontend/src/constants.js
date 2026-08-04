@@ -1,4 +1,4 @@
-import { FileText, Building2, Brain, Code2, MessageSquare, BarChart2 } from 'lucide-react'
+import { FileText, Building2, Brain, Code2, MessageSquare, Users, BarChart2 } from 'lucide-react'
 
 const steps = [
   { key: 'resume', label: 'Upload Resume', badge: '01', icon: FileText },
@@ -6,7 +6,8 @@ const steps = [
   { key: 'aptitude', label: 'Aptitude', badge: '03', icon: Brain },
   { key: 'coding', label: 'Coding', badge: '04', icon: Code2 },
   { key: 'technical', label: 'Technical', badge: '05', icon: MessageSquare },
-  { key: 'report', label: 'Report', badge: '06', icon: BarChart2 }
+  { key: 'hr', label: 'HR', badge: '06', icon: Users },
+  { key: 'report', label: 'Report', badge: '07', icon: BarChart2 }
 ]
 
 const roundDurations = {

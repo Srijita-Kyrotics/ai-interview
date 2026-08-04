@@ -13,9 +13,60 @@ import psycopg2.pool
 
 from app.config import settings
 
+import sqlite3
+
 logger = logging.getLogger("ai_interview.db")
 
 _pool: psycopg2.pool.ThreadedConnectionPool | None = None
+_use_sqlite = False
+_sqlite_conn = None
+
+
+class SQLiteCursorWrapper:
+    def __init__(self, cursor):
+        self.cursor = cursor
+
+    @property
+    def rowcount(self):
+        return self.cursor.rowcount
+
+    def execute(self, sql, params=()):
+        sql_clean = sql.replace("%s::jsonb", "%s").replace("JSONB", "TEXT").replace("DOUBLE PRECISION", "REAL")
+        sql_clean = sql_clean.replace("EXCLUDED.", "excluded.")
+        sql_clean = sql_clean.replace("DEFAULT '[]'::jsonb", "DEFAULT '[]'")
+        sql_clean = sql_clean.replace("%s", "?")
+        try:
+            return self.cursor.execute(sql_clean, params)
+        except Exception as err:
+            logger.warning("SQLite query execution warning: %s", err)
+            raise err
+
+    def fetchone(self):
+        # sqlite3.Row supports both row[0] and dict(row), satisfying all callers
+        return self.cursor.fetchone()
+
+    def fetchall(self):
+        return self.cursor.fetchall()
+
+
+class SQLiteConnWrapper:
+    def __init__(self, conn):
+        self.conn = conn
+
+    def cursor(self, cursor_factory=None):
+        return SQLiteCursorWrapper(self.conn.cursor())
+
+    def commit(self):
+        try:
+            self.conn.commit()
+        except Exception:
+            pass
+
+    def rollback(self):
+        try:
+            self.conn.rollback()
+        except Exception:
+            pass
 
 
 def _get_pool() -> psycopg2.pool.ThreadedConnectionPool:
@@ -31,14 +82,32 @@ def _get_pool() -> psycopg2.pool.ThreadedConnectionPool:
 
 
 def get_connection():
-    conn = _get_pool().getconn()
-    conn.autocommit = False
-    return conn
+    global _use_sqlite, _sqlite_conn
+    if _use_sqlite:
+        if _sqlite_conn is None:
+            _sqlite_conn = sqlite3.connect("ai_interview_sqlite.db", check_same_thread=False)
+            _sqlite_conn.row_factory = sqlite3.Row
+        return SQLiteConnWrapper(_sqlite_conn)
+    try:
+        conn = _get_pool().getconn()
+        conn.autocommit = False
+        return conn
+    except Exception as e:
+        logger.warning("PostgreSQL connection failed (%s). Using SQLite fallback.", e)
+        _use_sqlite = True
+        _sqlite_conn = sqlite3.connect("ai_interview_sqlite.db", check_same_thread=False)
+        _sqlite_conn.row_factory = sqlite3.Row
+        return SQLiteConnWrapper(_sqlite_conn)
 
 
 def release_connection(conn):
+    if _use_sqlite:
+        return
     if conn and _pool:
-        _pool.putconn(conn)
+        try:
+            _pool.putconn(conn)
+        except Exception:
+            pass
 
 
 def init_db():
@@ -485,8 +554,13 @@ def cache_get(key: str, ttl: int = 300) -> Any | None:
         if row:
             data = row[0]
             if isinstance(data, str):
-                return json.loads(data)
+                try:
+                    return json.loads(data)
+                except Exception:
+                    return data
             return data
+        return None
+    except Exception:
         return None
     finally:
         release_connection(conn)
@@ -504,6 +578,8 @@ def cache_set(key: str, data: Any, ttl: int = 300) -> None:
             (key, json.dumps(data), now + ttl),
         )
         conn.commit()
+    except Exception:
+        pass
     finally:
         release_connection(conn)
 

@@ -32,17 +32,22 @@ from app.main import app, create_token, hash_password  # noqa: E402
 @pytest.fixture(scope="session", autouse=True)
 def _init_test_db():
     """Initialize test database once for entire session."""
-    import psycopg2
-    # Connect to default postgres DB to create test DB if needed
-    admin_url = settings.database_url.rsplit("/", 1)[0] + "/postgres"
-    conn = psycopg2.connect(admin_url)
-    conn.autocommit = True
-    cur = conn.cursor()
-    cur.execute("SELECT 1 FROM pg_database WHERE datname = 'ai_interview_test'")
-    if not cur.fetchone():
-        cur.execute("CREATE DATABASE ai_interview_test")
-    cur.close()
-    conn.close()
+    # Best-effort creation of the test database. When PostgreSQL is not
+    # running the app falls back to SQLite (same behaviour as the app itself),
+    # so DB-dependent tests fail individually instead of breaking collection.
+    try:
+        import psycopg2
+        admin_url = settings.database_url.rsplit("/", 1)[0] + "/postgres"
+        conn = psycopg2.connect(admin_url)
+        conn.autocommit = True
+        cur = conn.cursor()
+        cur.execute("SELECT 1 FROM pg_database WHERE datname = 'ai_interview_test'")
+        if not cur.fetchone():
+            cur.execute("CREATE DATABASE ai_interview_test")
+        cur.close()
+        conn.close()
+    except Exception as e:  # noqa: BLE001
+        print(f"  [conftest] PostgreSQL unavailable ({e}); tests will use SQLite fallback")
 
     init_db()
     yield
@@ -56,7 +61,15 @@ def _cleanup_db():
     conn = get_connection()
     try:
         c = conn.cursor()
-        c.execute("TRUNCATE TABLE proctoring_logs, captcha_state, otp_state, sessions, users RESTART IDENTITY CASCADE")
+        if _db._use_sqlite:
+            # SQLite has no TRUNCATE statement
+            c.execute("DELETE FROM proctoring_logs")
+            c.execute("DELETE FROM captcha_state")
+            c.execute("DELETE FROM otp_state")
+            c.execute("DELETE FROM sessions")
+            c.execute("DELETE FROM users")
+        else:
+            c.execute("TRUNCATE TABLE proctoring_logs, captcha_state, otp_state, sessions, users RESTART IDENTITY CASCADE")
         conn.commit()
     finally:
         release_connection(conn)

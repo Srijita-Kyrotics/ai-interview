@@ -16,6 +16,9 @@ Endpoints:
 WebSocket Protocol (text mode):
   Client → Server:
     {"type": "answer", "text": "candidate answer text", "duration_ms": 5000}
+    {"type": "answer", "text": "...", "code": "snapshot", "language": "python"}
+    Binary: raw audio bytes (WebM/opus)  → voice mode, then:
+    {"type": "audio_end"}               → transcribe buffered audio + process answer
     {"type": "end"}
     {"type": "ping"}
     {"type": "refresh_token", "token": "new_jwt_token"}  (P3)
@@ -23,8 +26,12 @@ WebSocket Protocol (text mode):
   Server → Client:
     {"type": "session_ready", "opening_text": "...", "session_id": "..."}
     {"type": "question", "text": "...", "question_id": "...", "is_follow_up": false}
+    {"type": "coding_problem", "problem": {...}}   (Feature 9: live coding round)
     {"type": "thinking"}
     {"type": "transition", "text": "..."}
+    {"type": "processing"} / {"type": "stt_result", "text": "...", "is_final": true}
+    {"type": "ai_response_text", "text": "..."}    (voice mode)
+    Binary: TTS audio bytes (MP3)                  (voice mode)
     {"type": "interview_complete", "closing_text": "...", "report": {...}}
     {"type": "token_refreshed"}
     {"type": "error", "message": "..."}
@@ -62,7 +69,8 @@ from app.ai_interviewer.voice import VoicePipeline
 from app.code_executor import execute_local
 from app.config import settings
 from app.db import check_rate_limit, load_session, save_session
-from app.helpers import create_token, decode_token
+from app.helpers import create_token, decode_token, default_scores
+from app.resume_parser import parse_resume_text
 
 logger = logging.getLogger("ai_interview.router")
 
@@ -125,6 +133,48 @@ def get_current_user(
 
 # ── REST Endpoints ───────────────────────────────────────────────────────────
 
+DEFAULT_AI_INTERVIEW_RESUME = """Name: AI Interview Candidate
+Email: candidate@example.com
+Phone: +91 0000000000
+Summary: Software Engineer with strong fundamentals in data structures, algorithms, system design, and software engineering best practices.
+Skills: Python, JavaScript, SQL, Data Structures, Algorithms, System Design, REST APIs, Git, Problem Solving
+Experience:
+- Software Engineer, 2+ years: Built REST APIs, optimized query performance, and collaborated in agile teams.
+Projects:
+- Implemented data structures and algorithms to solve complex problems efficiently.
+Education: Bachelor of Technology in Computer Science
+Certifications: Data Structures and Algorithms, System Design"""
+
+
+@router.post("/create-session", response_model=dict)
+async def create_ai_interview_session(user: dict = Depends(get_current_user)):
+    """
+    Create a platform session for the direct AI interview flow.
+
+    Lets a candidate jump straight into the Obi interview without a prior
+    resume upload. The session is seeded with a generic resume so the
+    interview pipeline always has resume context to work from.
+    """
+    session_id = str(uuid.uuid4())
+    resume = parse_resume_text(DEFAULT_AI_INTERVIEW_RESUME, "direct-ai-interview.txt")
+    user_id = user.get("email", "")
+    state = {
+        "sessionId": session_id,
+        "resume": resume,
+        "selectedCompany": "",
+        "selectedCompanies": [],
+        "currentRound": "resume",
+        "currentQuestion": 0,
+        "answers": {"aptitude": [], "technical": [], "hr": []},
+        "codingSubmissions": [],
+        "scores": default_scores(),
+        "user_id": user_id,
+    }
+    save_session(session_id, state, user_id=user_id)
+    logger.info("AI interview session created directly", extra={"session_id": session_id, "email": user_id})
+    return {"session_id": session_id, "resume": resume}
+
+
 @router.post("/start", response_model=StartInterviewResponse)
 async def start_ai_interview(
     request: StartInterviewRequest,
@@ -147,7 +197,14 @@ async def start_ai_interview(
     resume_raw = resume_parsed.get("rawText", "") or session_data.get("resume_raw_text", "")
 
     if not resume_parsed and not resume_raw:
-        raise HTTPException(status_code=400, detail="No resume data found in session")
+        # No uploaded resume — start a generic interview seeded with a
+        # placeholder profile so the pipeline always has context to work from.
+        resume_parsed = parse_resume_text(DEFAULT_AI_INTERVIEW_RESUME, "generic-interview.txt")
+        resume_raw = DEFAULT_AI_INTERVIEW_RESUME
+        logger.info(
+            "No resume found, falling back to generic profile",
+            extra={"session_id": request.session_id},
+        )
 
     store = _get_store()
 
@@ -342,6 +399,26 @@ async def get_interview_state(
         "difficulty_level": state.get("difficulty_level", {}).get("level", "intermediate"),
         "code_versions": len(state.get("code_history", [])),
         "replan_count": state.get("replan_count", 0),
+        "current_comm_metrics": state.get("current_comm_metrics"),
+        "active_coding_problem": {
+            "id": p["id"],
+            "title": p["title"],
+            "difficulty": p["difficulty"],
+            "topic": p["topic"],
+            "description": p["description"],
+            "constraints": p.get("constraints", []),
+            "examples": p.get("examples", []),
+            "languages": p.get("languages", []),
+            "starter_code": p.get("starter_code", {}),
+        } if (p := state.get("active_coding_problem")) else None,
+        "coding_submissions": [
+            {
+                "problem_id": s["problem_id"],
+                "quality": s["quality"],
+                "language": s.get("language", ""),
+            }
+            for s in state.get("coding_submissions", [])
+        ],
     }
 
 
@@ -521,10 +598,98 @@ async def ai_interview_websocket(
                     "is_follow_up": False,
                     "timestamp": time.time(),
                 })
+            # Re-send active coding problem if mid-coding-round
+            problem = state.get("active_coding_problem")
+            if problem and problem.get("description"):
+                await websocket.send_json({
+                    "type": "coding_problem",
+                    "problem": problem,
+                    "timestamp": time.time(),
+                })
 
         # ── Main Interview Loop ───────────────────────────────────────────
+        audio_buffer = bytearray()
+        voice_pipeline = None
+
+        async def _send_coding_problem_if_active() -> None:
+            """Feature 9: deliver the live-coding problem alongside a question."""
+            problem = runner.state.get("active_coding_problem")
+            if problem and problem.get("description"):
+                await websocket.send_json({
+                    "type": "coding_problem",
+                    "problem": problem,
+                    "timestamp": time.time(),
+                })
+
+        async def _run_answer(answer_text: str, code_snapshot: str | None = None, code_language: str = "") -> bool:
+            """Shared handler for typed and voice answers. Returns True if the interview ended."""
+            if code_snapshot and code_language:
+                runner.state["current_code_snapshot_language"] = code_language
+
+            await websocket.send_json({"type": "thinking", "timestamp": time.time()})
+
+            result = await runner.process_answer(answer_text, code_snapshot=code_snapshot)
+
+            if result.get("should_end"):
+                # Save and send final report
+                await _save_interview_result(session_id, interview_session_id, runner)
+                await websocket.send_json({
+                    "type": "interview_complete",
+                    "closing_text": result.get("text", ""),
+                    "report": result.get("final_report", {}),
+                    "scores": result.get("final_report", {}).get("scores", {}),
+                    "timestamp": time.time(),
+                })
+                return True
+
+            # Check if this is a transition message
+            if result.get("is_transition"):
+                await websocket.send_json({
+                    "type": "transition",
+                    "text": result.get("text", ""),
+                    "timestamp": time.time(),
+                })
+                # After transition, immediately send next question
+                await websocket.send_json({"type": "thinking", "timestamp": time.time()})
+                state = runner.get_state()
+                current_q = state.get("current_question", {})
+                await websocket.send_json({
+                    "type": "question",
+                    "text": state.get("ai_response_text", ""),
+                    "question_id": current_q.get("id", ""),
+                    "stage": state.get("current_stage", {}).get("name", ""),
+                    "is_follow_up": False,
+                    "timestamp": time.time(),
+                })
+                await _send_coding_problem_if_active()
+            else:
+                state = runner.get_state()
+                current_q = state.get("current_question", {})
+                await websocket.send_json({
+                    "type": "question",
+                    "text": result.get("text", ""),
+                    "question_id": current_q.get("id", ""),
+                    "stage": state.get("current_stage", {}).get("name", ""),
+                    "is_follow_up": result.get("is_follow_up", False),
+                    "questions_asked": result.get("questions_asked", 0),
+                    "max_questions": result.get("max_questions", 12),
+                    "timestamp": time.time(),
+                })
+                await _send_coding_problem_if_active()
+            return False
+
         while True:
-            raw = await websocket.receive_text()
+            data = await websocket.receive()
+
+            # Binary audio (voice mode) — buffered until audio_end
+            audio_bytes = data.get("bytes")
+            if audio_bytes:
+                audio_buffer.extend(audio_bytes)
+                continue
+
+            raw = data.get("text")
+            if raw is None:
+                continue
             try:
                 msg = json.loads(raw)
             except json.JSONDecodeError:
@@ -573,7 +738,43 @@ async def ai_interview_websocket(
                 })
                 continue
 
-            # Candidate answer
+            # Voice: end of a recorded utterance → STT → answer
+            if msg_type == "audio_end":
+                if not audio_buffer:
+                    continue
+                if voice_pipeline is None:
+                    voice_pipeline = VoicePipeline.from_settings()
+                await websocket.send_json({"type": "processing", "timestamp": time.time()})
+
+                transcript = await voice_pipeline.audio_to_text(bytes(audio_buffer))
+                audio_buffer.clear()
+
+                await websocket.send_json({
+                    "type": "stt_result",
+                    "text": transcript,
+                    "is_final": True,
+                    "timestamp": time.time(),
+                })
+
+                if not transcript:
+                    retry_text = "Could you please repeat that?"
+                    retry_audio = await voice_pipeline.tts.synthesize(retry_text)
+                    await websocket.send_json({
+                        "type": "ai_response_text",
+                        "text": retry_text,
+                        "timestamp": time.time(),
+                    })
+                    if retry_audio:
+                        await websocket.send_bytes(retry_audio)
+                    continue
+
+                code_snapshot = msg.get("code") or None
+                code_language = msg.get("language") or ""
+                if await _run_answer(transcript, code_snapshot, code_language):
+                    break
+                continue
+
+            # Candidate answer (typed)
             if msg_type == "answer":
                 answer_text = msg.get("text", "").strip()
                 if not answer_text:
@@ -582,57 +783,9 @@ async def ai_interview_websocket(
                 # Extract code snapshot and language from the answer message
                 code_snapshot = msg.get("code") or None
                 code_language = msg.get("language") or ""
-                if code_snapshot and code_language:
-                    runner.state["current_code_snapshot_language"] = code_language
 
-                await websocket.send_json({"type": "thinking", "timestamp": time.time()})
-
-                result = await runner.process_answer(answer_text, code_snapshot=code_snapshot)
-
-                if result.get("should_end"):
-                    # Save and send final report
-                    await _save_interview_result(session_id, interview_session_id, runner)
-                    await websocket.send_json({
-                        "type": "interview_complete",
-                        "closing_text": result.get("text", ""),
-                        "report": result.get("final_report", {}),
-                        "scores": result.get("final_report", {}).get("scores", {}),
-                        "timestamp": time.time(),
-                    })
+                if await _run_answer(answer_text, code_snapshot, code_language):
                     break
-
-                # Check if this is a transition message
-                if result.get("is_transition"):
-                    await websocket.send_json({
-                        "type": "transition",
-                        "text": result.get("text", ""),
-                        "timestamp": time.time(),
-                    })
-                    # After transition, immediately send next question
-                    await websocket.send_json({"type": "thinking", "timestamp": time.time()})
-                    state = runner.get_state()
-                    current_q = state.get("current_question", {})
-                    await websocket.send_json({
-                        "type": "question",
-                        "text": state.get("ai_response_text", ""),
-                        "question_id": current_q.get("id", ""),
-                        "stage": state.get("current_stage", {}).get("name", ""),
-                        "is_follow_up": False,
-                        "timestamp": time.time(),
-                    })
-                else:
-                    state = runner.get_state()
-                    current_q = state.get("current_question", {})
-                    await websocket.send_json({
-                        "type": "question",
-                        "text": result.get("text", ""),
-                        "question_id": current_q.get("id", ""),
-                        "stage": state.get("current_stage", {}).get("name", ""),
-                        "is_follow_up": result.get("is_follow_up", False),
-                        "questions_asked": result.get("questions_asked", 0),
-                        "max_questions": result.get("max_questions", 12),
-                        "timestamp": time.time(),
-                    })
                 continue
 
     except GeminiUnavailableError as e:

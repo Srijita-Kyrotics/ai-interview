@@ -1,19 +1,25 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { BarChart2, Building2, Calendar, TrendingUp, Award } from 'lucide-react'
+import { BarChart2, Bot, Building2, Calendar, TrendingUp, Award } from 'lucide-react'
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend } from 'recharts'
 import { api } from '../api'
 import { SessionDetailModal } from './SessionDetailModal'
 import { scoreClass } from '../utils/score'
 import { Skeleton, SkeletonCard, SkeletonTable } from './Skeleton'
 
-function DashboardPage({ user }) {
+function DashboardPage({ user, state, onStartAiInterview }) {
   const navigate = useNavigate()
   const [stats, setStats] = useState(null)
   const [sessions, setSessions] = useState([])
   const [selectedSession, setSelectedSession] = useState(null)
   const [loading, setLoading] = useState(true)
   const lastFetchAtRef = useRef(0)
+
+  const startAiInterview = () => {
+    if (onStartAiInterview) onStartAiInterview()
+    else if (state?.sessionId) navigate('/technical')
+    else navigate('/resume')
+  }
 
   const fetchData = () => {
     const now = Date.now()
@@ -80,12 +86,27 @@ function DashboardPage({ user }) {
 
   return (
     <div className="dashboard-page">
+      {/* Direct AI Interview entry */}
+      <div className="ai-hero">
+        <div className="ai-hero__icon">
+          <Bot size={30} />
+        </div>
+        <div className="ai-hero__body">
+          <h3>Interview with Obi — your AI interviewer</h3>
+          <p>Voice-based interview with live coding. Skips aptitude and coding rounds — jump straight in.</p>
+        </div>
+        <button className="btn primary ai-hero__btn" onClick={startAiInterview}>
+          Start AI Interview
+          <span aria-hidden="true"> →</span>
+        </button>
+      </div>
+
       <div className="page-header">
         <div>
           <h2>Your Dashboard</h2>
           <p className="muted" style={{ fontSize: '0.85rem', margin: '0.25rem 0 0' }}>Track your interview performance over time</p>
         </div>
-        <button className="btn primary" onClick={() => navigate('/resume')} aria-label="Start a new mock interview">Start New Interview</button>
+        <button className="btn ghost" onClick={() => navigate('/resume')} aria-label="Start the full mock interview flow">Full Interview</button>
       </div>
 
       {/* Stats Cards */}

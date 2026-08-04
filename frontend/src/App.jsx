@@ -1,6 +1,6 @@
-import React, { Suspense, useEffect, useState } from 'react'
-import { Navigate, Route, Routes } from 'react-router-dom'
-import { api } from './api'
+import React, { Suspense, useCallback, useEffect, useState } from 'react'
+import { Navigate, Route, Routes, useNavigate } from 'react-router-dom'
+import { api, isTokenExpired, AUTH_EVENT } from './api'
 import { resetProctoringState, usePersistentProctoring } from './proctoring/proctoringState'
 import { processAptitudeText } from './utils/aptitudeFormat'
 import { AuthPage } from './components/AuthPage'
@@ -46,6 +46,14 @@ function getStoredUser() {
 
 const FLOW_STORAGE_KEY = 'mockRecruitmentFlow'
 
+const DEFAULT_ROUND_STATUS = {
+  aptitude: 'not_started',
+  coding: 'not_started',
+  technical: 'not_started',
+  hr: 'not_started',
+  fullInterview: 'not_started'
+}
+
 function restoreFlowState() {
   try {
     const stored = localStorage.getItem(FLOW_STORAGE_KEY)
@@ -58,7 +66,8 @@ function restoreFlowState() {
       resume: s.resume || null,
       company: s.company || '',
       selectedCompanies: Array.isArray(s.selectedCompanies) ? s.selectedCompanies : [],
-      rounds: Array.isArray(s.rounds) ? s.rounds : []
+      rounds: Array.isArray(s.rounds) ? s.rounds : [],
+      roundStatus: { ...DEFAULT_ROUND_STATUS, ...(s.roundStatus || {}) }
     }
   } catch {
     return null
@@ -104,6 +113,7 @@ function filterQuestions(questions, selectedCompanies) {
 
 export default function App() {
   const [user, setUser] = useState(getStoredUser)
+  const navigate = useNavigate()
   const [proctoring, setProctoring] = usePersistentProctoring()
   const [dataLoading, setDataLoading] = useState(true)
   const [dataError, setDataError] = useState(false)
@@ -118,8 +128,10 @@ export default function App() {
     datasets: {
       aptitude: [],
       coding: [],
-      technical: []
+      technical: [],
+      hr: []
     },
+    roundStatus: { ...DEFAULT_ROUND_STATUS },
     ...restoreFlowState()
   })
 
@@ -130,11 +142,12 @@ export default function App() {
       api.get('/companies'),
       fetch('/questions/aptitude.json').then(r => r.json()),
       api.get('/questions/coding'),
-      api.get('/questions/technical')
-    ]).then(([companies, aptitudeData, coding, technical]) => {
+      api.get('/questions/technical'),
+      api.get('/questions/hr')
+    ]).then(([companies, aptitudeData, coding, technical, hr]) => {
       let aptitude = aptitudeData.questions || aptitudeData
       aptitude = processAptitudeText(aptitude)
-      setState((s) => ({ ...s, companies, datasets: { aptitude, coding, technical } }))
+      setState((s) => ({ ...s, companies, datasets: { aptitude, coding, technical, hr } }))
     }).catch(() => {
       setDataError(true)
     }).finally(() => {
@@ -152,19 +165,53 @@ export default function App() {
         resume: state.resume,
         company: state.company,
         selectedCompanies: state.selectedCompanies,
-        rounds: state.rounds
+        rounds: state.rounds,
+        roundStatus: state.roundStatus
       }))
     } catch {
       /* storage quota exceeded — skip persistence */
     }
   }, [state])
 
-  const logout = () => {
+  const logout = useCallback(() => {
     localStorage.removeItem('mockRecruitmentUser')
     localStorage.removeItem(FLOW_STORAGE_KEY)
     setProctoring(resetProctoringState())
     setUser(null)
-  }
+  }, [setUser, setProctoring])
+
+  useEffect(() => {
+    if (isTokenExpired()) logout()
+  }, [logout])
+
+  useEffect(() => {
+    const onAuthExpired = () => logout()
+    window.addEventListener(AUTH_EVENT, onAuthExpired)
+    return () => window.removeEventListener(AUTH_EVENT, onAuthExpired)
+  }, [logout])
+
+  const goToAiInterview = useCallback(async () => {
+    if (state.sessionId) {
+      setState((s) => ({ ...s, roundStatus: { ...s.roundStatus, technical: 'in_progress' } }))
+      navigate('/technical')
+      return
+    }
+    try {
+      const res = await api.post('/ai-interview/create-session')
+      setState((s) => ({
+        ...s,
+        sessionId: res.session_id,
+        stage: 'technical',
+        resume: res.resume,
+        roundStatus: { ...s.roundStatus, technical: 'in_progress' }
+      }))
+      navigate('/technical')
+    } catch (err) {
+      if (err.status !== 401) {
+        alert(`Could not start AI interview: ${err.message}`)
+      }
+    }
+  }, [state.sessionId, navigate])
 
   if (!user) return <AuthPage onAuth={setUser} />
 
@@ -191,7 +238,7 @@ export default function App() {
 
   return (
     <ToastProvider>
-      <Shell state={state} user={user} onLogout={logout} proctoring={proctoring}>
+      <Shell state={state} user={user} onLogout={logout} proctoring={proctoring} onStartAiInterview={goToAiInterview}>
         <Suspense fallback={<PageLoader />}>
           <Routes>
             <Route path="/" element={<Home />} />
@@ -201,10 +248,12 @@ export default function App() {
             <Route path="/coding" element={<RoundPage key="coding" title="Coding Round" type="coding" pool={state.datasets.coding} build={(pool) => filterQuestions(pool, state.selectedCompanies).slice(0, 3)} state={state} setState={setState} proctoring={proctoring} setProctoring={setProctoring} />} />
             
             {/* Swapped legacy LiveInterview with our new AIInterviewer component */}
-            <Route path="/technical" element={<AIInterviewer sessionId={state.sessionId} token={user.token} role="Software Engineer" company={state.company || 'the company'} proctoring={proctoring} setProctoring={setProctoring} onComplete={(report) => { console.log('Final Report:', report); window.location.href = '/report'; }} />} />
+            <Route path="/technical" element={<AIInterviewer sessionId={state.sessionId} token={user.token} role="Software Engineer" company={state.company || 'the company'} proctoring={proctoring} setProctoring={setProctoring} onComplete={(report) => { console.log('Final Report:', report); setState((s) => ({ ...s, roundStatus: { ...s.roundStatus, technical: 'completed' } })); window.location.href = '/report'; }} />} />
+
+            <Route path="/hr" element={<RoundPage key="hr" title="HR Round" type="hr" pool={state.datasets.hr} build={(pool) => (state.datasets.hr || []).slice(0, 8)} state={state} setState={setState} proctoring={proctoring} setProctoring={setProctoring} />} />
 
             <Route path="/report" element={<ReportPage state={state} proctoring={proctoring} />} />
-            <Route path="/dashboard" element={<DashboardPage user={user} />} />
+            <Route path="/dashboard" element={<DashboardPage user={user} state={state} onStartAiInterview={goToAiInterview} />} />
             <Route path="/recruiter" element={user?.role === 'recruiter' || user?.role === 'admin' ? <RecruiterPage user={user} /> : <Navigate to="/dashboard" replace />} />
             <Route path="*" element={<Navigate to="/" replace />} />
           </Routes>

@@ -175,7 +175,7 @@ class ElevenLabsTTS:
     ElevenLabs Turbo v2.5 text-to-speech.
 
     Uses the "eleven_turbo_v2_5" model for lowest latency.
-    Voice: "Alex" persona mapped to Rachel (neutral, professional).
+    Voice: "Obi" persona mapped to Rachel/Adam (neutral, professional).
     """
 
     BASE_URL = "https://api.elevenlabs.io/v1"

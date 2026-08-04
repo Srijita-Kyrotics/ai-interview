@@ -15,6 +15,8 @@ export default [
       globals: { ...globals.browser },
     },
     rules: {
+      "react/jsx-uses-vars": "error",
+      "react/jsx-uses-react": "error",
       "react-hooks/rules-of-hooks": "error",
       "react-hooks/exhaustive-deps": "warn",
       "no-unused-vars": ["warn", { argsIgnorePattern: "^_" }],
