@@ -2,8 +2,10 @@
 
 from __future__ import annotations
 
+import contextlib
 import json
 import logging
+import sqlite3
 import time
 from typing import Any
 
@@ -12,8 +14,6 @@ import psycopg2.extras
 import psycopg2.pool
 
 from app.config import settings
-
-import sqlite3
 
 logger = logging.getLogger("ai_interview.db")
 
@@ -57,16 +57,12 @@ class SQLiteConnWrapper:
         return SQLiteCursorWrapper(self.conn.cursor())
 
     def commit(self):
-        try:
+        with contextlib.suppress(Exception):
             self.conn.commit()
-        except Exception:
-            pass
 
     def rollback(self):
-        try:
+        with contextlib.suppress(Exception):
             self.conn.rollback()
-        except Exception:
-            pass
 
 
 def _get_pool() -> psycopg2.pool.ThreadedConnectionPool:
@@ -104,10 +100,8 @@ def release_connection(conn):
     if _use_sqlite:
         return
     if conn and _pool:
-        try:
+        with contextlib.suppress(Exception):
             _pool.putconn(conn)
-        except Exception:
-            pass
 
 
 def init_db():

@@ -24,8 +24,8 @@ import logging
 import time
 import uuid
 
-from app.ai_interviewer.memory import MemoryManager
 from app.ai_interviewer.communication_analyzer import analyze_communication
+from app.ai_interviewer.memory import MemoryManager
 from app.ai_interviewer.prompts import (
     ANSWER_ANALYZER_PROMPT,
     ANSWER_ANALYZER_SYSTEM,
@@ -1152,7 +1152,7 @@ def _is_coding_stage(stage: dict) -> bool:
 
 def _as_list(value) -> list:
     """Coerce an LLM field into a list, tolerating None or non-list junk."""
-    return list(value) if isinstance(value, (list, tuple, set)) else []
+    return list(value) if isinstance(value, list | tuple | set) else []
 
 
 async def coding_problem_generator_node(state: InterviewState) -> dict:

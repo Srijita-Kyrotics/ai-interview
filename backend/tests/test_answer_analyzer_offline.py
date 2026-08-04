@@ -2,9 +2,8 @@
 import time
 
 import pytest
-
 from app.ai_interviewer import nodes
-from app.ai_interviewer.state import InterviewState, make_initial_state
+from app.ai_interviewer.state import make_initial_state
 
 
 @pytest.fixture(autouse=True)

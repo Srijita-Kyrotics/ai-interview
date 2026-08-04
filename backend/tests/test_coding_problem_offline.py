@@ -1,6 +1,5 @@
 """Offline unit tests for the live-coding problem generator (LLM mocked)."""
 import pytest
-
 from app.ai_interviewer import nodes
 from app.ai_interviewer.state import make_initial_state
 

@@ -27,10 +27,8 @@ metadata is available (e.g. from a future streaming STT layer).
 
 from __future__ import annotations
 
-import math
 import re
 from dataclasses import asdict, dataclass, field
-from typing import Optional
 
 # ── Word lists ────────────────────────────────────────────────────────────────
 
@@ -102,8 +100,8 @@ class CommunicationMetrics:
     word_count: int = 0
     sentence_count: int = 0
     avg_sentence_length: float = 0.0
-    speaking_rate_wpm: Optional[float] = None
-    response_latency_seconds: Optional[float] = None
+    speaking_rate_wpm: float | None = None
+    response_latency_seconds: float | None = None
     filler_density: float = 0.0            # filler occurrences per 100 words
     hedge_density: float = 0.0             # hedges per 100 words
     stutters: list[str] = field(default_factory=list)
@@ -145,10 +143,10 @@ def _empty_metrics() -> CommunicationMetrics:
 
 def analyze_communication(
     answer_text: str,
-    duration_seconds: Optional[float] = None,
-    question_asked_at: Optional[float] = None,
-    answered_at: Optional[float] = None,
-    paralinguistic_flags: Optional[list[str]] = None,
+    duration_seconds: float | None = None,
+    question_asked_at: float | None = None,
+    answered_at: float | None = None,
+    paralinguistic_flags: list[str] | None = None,
 ) -> CommunicationMetrics:
     """
     Analyze a single answer and return objective CommunicationMetrics.
