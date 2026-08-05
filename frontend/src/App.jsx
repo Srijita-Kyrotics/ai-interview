@@ -12,7 +12,6 @@ import { TerminatedPage } from './components/TerminatedPage'
 import { ToastProvider } from './utils/ToastContext'
 
 const RoundPage = React.lazy(() => import('./components/RoundPage').then(m => ({ default: m.RoundPage })))
-const LiveInterview = React.lazy(() => import('./components/LiveInterview').then(m => ({ default: m.LiveInterview })))
 const AIInterviewer = React.lazy(() => import('./components/AIInterviewer'))
 const ReportPage = React.lazy(() => import('./components/ReportPage').then(m => ({ default: m.ReportPage })))
 const DashboardPage = React.lazy(() => import('./components/DashboardPage').then(m => ({ default: m.DashboardPage })))
@@ -248,7 +247,7 @@ export default function App() {
             <Route path="/coding" element={<RoundPage key="coding" title="Coding Round" type="coding" pool={state.datasets.coding} build={(pool) => filterQuestions(pool, state.selectedCompanies).slice(0, 3)} state={state} setState={setState} proctoring={proctoring} setProctoring={setProctoring} />} />
             
             {/* Swapped legacy LiveInterview with our new AIInterviewer component */}
-            <Route path="/technical" element={<AIInterviewer sessionId={state.sessionId} token={user.token} role="Software Engineer" company={state.company || 'the company'} proctoring={proctoring} setProctoring={setProctoring} onComplete={(report) => { console.log('Final Report:', report); setState((s) => ({ ...s, roundStatus: { ...s.roundStatus, technical: 'completed' } })); window.location.href = '/report'; }} />} />
+            <Route path="/technical" element={<AIInterviewer sessionId={state.sessionId} token={user.token} resume={state.resume} role="Software Engineer" company={state.company || 'the company'} proctoring={proctoring} setProctoring={setProctoring} onComplete={(report) => { console.log('Final Report:', report); setState((s) => ({ ...s, roundStatus: { ...s.roundStatus, technical: 'completed' } })); window.location.href = '/report'; }} />} />
 
             <Route path="/hr" element={<RoundPage key="hr" title="HR Round" type="hr" pool={state.datasets.hr} build={(pool) => (state.datasets.hr || []).slice(0, 8)} state={state} setState={setState} proctoring={proctoring} setProctoring={setProctoring} />} />
 

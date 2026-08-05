@@ -6129,6 +6129,126 @@ label {
   height: calc(100% - 44px);
 }
 
+.aii-hero-panel {
+  width: 100%;
+  background: rgba(15, 23, 42, 0.9);
+  border-top: 1px solid rgba(255, 255, 255, 0.08);
+  padding: 1.5rem 1.25rem;
+  display: flex;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+.aii-avatar-stage {
+  display: grid;
+  grid-template-columns: 240px minmax(320px, 1fr);
+  gap: 1rem;
+  width: min(1200px, 100%);
+  align-items: center;
+  position: relative;
+}
+
+.aii-avatar--hero {
+  width: 240px;
+  height: 240px;
+  border-radius: 40px;
+  font-size: 3rem;
+  position: relative;
+  background: linear-gradient(180deg, rgba(99, 102, 241, 0.26), rgba(15, 23, 42, 0.8));
+  box-shadow: inset 0 0 0 1px rgba(255,255,255,0.08), 0 24px 70px rgba(0,0,0,0.35);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: white;
+  overflow: hidden;
+}
+
+.aii-avatar--hero span {
+  z-index: 1;
+}
+
+.aii-avatar--hero::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: radial-gradient(circle at 50% 30%, rgba(99, 102, 241, 0.12), transparent 50%);
+}
+
+.aii-avatar--speaking {
+  transform: scale(1.03);
+}
+
+.aii-avatar--thinking {
+  transform: translateY(-5px);
+}
+
+.aii-avatar--listening {
+  transform: translateY(2px);
+}
+
+.aii-avatar__mouth {
+  position: absolute;
+  left: 50%;
+  bottom: 28px;
+  width: 44px;
+  height: 14px;
+  background: rgba(255, 255, 255, 0.14);
+  border-radius: 999px;
+  transform-origin: center center;
+  transition: transform 0.07s ease;
+  transform: translateX(-50%);
+}
+
+.aii-subtitle-card {
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 24px;
+  padding: 1.25rem 1.5rem;
+  min-height: 128px;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  gap: 0.75rem;
+}
+
+.aii-subtitle-card__label {
+  font-size: 0.72rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: #a5b4fc;
+}
+
+.aii-subtitle-card__text {
+  margin: 0;
+  color: rgba(255, 255, 255, 0.92);
+  line-height: 1.6;
+  font-size: 1rem;
+  min-height: 4.5rem;
+}
+
+@media (max-width: 980px) {
+  .aii-avatar-stage {
+    grid-template-columns: 1fr;
+  }
+
+  .aii-avatar--hero {
+    width: 200px;
+    height: 200px;
+    margin: 0 auto;
+  }
+}
+
+@media (max-width: 700px) {
+  .aii-avatar-stage {
+    gap: 1rem;
+  }
+
+  .aii-subtitle-card {
+    padding: 1rem;
+  }
+}
+
 /* ── Chat Area ────────────────────────────────────────────────────────────── */
 
 .aii-chat {

@@ -4,6 +4,7 @@ import {
   Mic, Target, Building2, ListChecks, Clock, AlertTriangle,
   ArrowRight, Send, ChevronRight, Zap, Sparkles, TrendingUp,
   MessageSquare, Code2, CheckCircle2, XCircle, Volume2, Loader2, Play,
+  Settings2, RefreshCcw,
 } from 'lucide-react';
 import { useAssessmentProctoring } from '../proctoring/useAssessmentProctoring';
 import { ProctoringModal, ProctoringPanel } from '../proctoring/ProctoringUI';
@@ -217,10 +218,11 @@ const ThinkingIndicator = () => (
 );
 
 
-const LiveStatusPill = ({ isRecording, isSpeaking, isThinking, isConnecting }) => {
+const LiveStatusPill = ({ isRecording, isSpeaking, isThinking, isProcessing, isConnecting }) => {
   let label = 'Connected';
   let tone = 'idle';
   if (isRecording) { label = 'Listening'; tone = 'live'; }
+  else if (isProcessing) { label = 'Transcribing'; tone = 'processing'; }
   else if (isSpeaking) { label = 'Speaking'; tone = 'live'; }
   else if (isThinking) { label = 'Thinking'; tone = 'thinking'; }
   else if (isConnecting) { label = 'Connecting'; tone = 'thinking'; }
@@ -409,7 +411,7 @@ const ProgressBar = ({ current, total, stages }) => {
 
 // ── Main Component ──────────────────────────────────────────────────────────
 
-export default function AIInterviewer({ sessionId, token, role, company, onComplete, proctoring, setProctoring }) {
+export default function AIInterviewer({ sessionId, token, role, company, resume, onComplete, proctoring, setProctoring }) {
   const navigate = useNavigate();
 
   // ── State ───────────────────────────────────────────────────────────
@@ -418,21 +420,42 @@ export default function AIInterviewer({ sessionId, token, role, company, onCompl
 
   const [messages, setMessages] = useState([]);
   const [isThinking, setIsThinking] = useState(false);
+  const [isProcessing, setIsProcessing] = useState(false);
   const [isRecording, setIsRecording] = useState(false);
   const [isSpeaking, setIsSpeaking] = useState(false);
-  
-  // Force voice mode and disable text inputs
-  const voiceMode = true; 
-  
+  const [micPermission, setMicPermission] = useState('unknown');
+  const [statusMessage, setStatusMessage] = useState('Preparing your interview...');
+  const [browserTtsFallback, setBrowserTtsFallback] = useState(true);
+  const [showSettings, setShowSettings] = useState(false);
+  const [lastSpeechText, setLastSpeechText] = useState('');
+  const [audioAwaitingResponse, setAudioAwaitingResponse] = useState(false);
+  const [answerRecorded, setAnswerRecorded] = useState(false);
+  const [subtitleText, setSubtitleText] = useState('');
+  const [lipLevel, setLipLevel] = useState(0);
+  const lipSyncIntervalRef = useRef(null);
+
+  const openingIntro = "Hi, I'm Obi, your AI interviewer. I've reviewed your resume, and today we'll discuss your experience, projects, and technical skills. Let's get started.";
+
+  const voiceMode = true;
+
   const [interviewSessionId, setInterviewSessionId] = useState(null);
   const [progress, setProgress] = useState({ current: 0, total: 12 });
   const [currentStage, setCurrentStage] = useState('');
   const [finalReport, setFinalReport] = useState(null);
   const [error, setError] = useState(null);
   const [latency, setLatency] = useState(null);
-  const [resumableSession, setResumableSession] = useState(null); // P2: Resume support
-  const [reconnectAttempts, setReconnectAttempts] = useState(0); // P3: Reconnect tracking
+  const [resumableSession, setResumableSession] = useState(null);
+  const [reconnectAttempts, setReconnectAttempts] = useState(0);
   const [elapsedSec, setElapsedSec] = useState(0);
+  const [lastCandidateAnswer, setLastCandidateAnswer] = useState('');
+  const [resumeSummaryOpen, setResumeSummaryOpen] = useState(false);
+
+  const startedRef = useRef(false);
+  const fallbackAudioTimerRef = useRef(null);
+  const answerRecordedTimerRef = useRef(null);
+  const lastAudioTextRef = useRef('');
+  const lastAudioPlayedRef = useRef(false);
+  const requestingStartRef = useRef(false);
 
   // ── Code Editor State ──────────────────────────────────────────────
   const [code, setCode] = useState('');
@@ -488,27 +511,68 @@ export default function AIInterviewer({ sessionId, token, role, company, onCompl
     ? proctor.status.terminatedReason || 'Assessment terminated due to malpractice.'
     : '';
 
-  // ── Refs ────────────────────────────────────────────────────────────
+  const phaseRef = useRef(phase);
+  const reconnectAttemptsRef = useRef(reconnectAttempts);
+  const audioAwaitingRef = useRef(false);
+  const fallbackTtsTimeoutRef = useRef(null);
+  const lastAiMessageRef = useRef('');
   const wsRef = useRef(null);
-  const messagesEndRef = useRef(null);
+  const reconnectTimerRef = useRef(null);
   const mediaRecorderRef = useRef(null);
   const audioChunksRef = useRef([]);
   const audioContextRef = useRef(null);
-  const tokenRefreshRef = useRef(null); // P3: Token refresh timer
-  const reconnectTimerRef = useRef(null); // P3: Reconnect timer
+  const tokenRefreshRef = useRef(null);
+  const messagesEndRef = useRef(null);
   const textInputRef = useRef(null);
 
-  // ── Auto-scroll ──────────────────────────────────────────────────────
-  useEffect(() => {
-    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
-  }, [messages, isThinking]);
+  useEffect(() => { phaseRef.current = phase }, [phase]);
+  useEffect(() => { reconnectAttemptsRef.current = reconnectAttempts }, [reconnectAttempts]);
 
-  // ── P2: Check for resumable session on mount ──────────────────────────
+  const requestMicPermission = useCallback(async () => {
+    if (!navigator.mediaDevices?.getUserMedia) {
+      setMicPermission('unsupported');
+      return false;
+    }
+
+    try {
+      await navigator.mediaDevices.getUserMedia({ audio: true });
+      setMicPermission('granted');
+      return true;
+    } catch (err) {
+      setMicPermission('denied');
+      setError('Microphone access is required to continue. Please enable microphone permissions and refresh the page.');
+      setPhase('error');
+      return false;
+    }
+  }, []);
+
+  const clearAudioFallbackTimer = useCallback(() => {
+    if (fallbackTtsTimeoutRef.current) {
+      clearTimeout(fallbackTtsTimeoutRef.current);
+      fallbackTtsTimeoutRef.current = null;
+    }
+  }, []);
+
+  const clearLipSync = useCallback(() => {
+    if (lipSyncIntervalRef.current) {
+      clearInterval(lipSyncIntervalRef.current);
+      lipSyncIntervalRef.current = null;
+    }
+    setLipLevel(0);
+  }, []);
+
+  const startLipSync = useCallback(() => {
+    clearLipSync();
+    setLipLevel(0.3);
+    lipSyncIntervalRef.current = setInterval(() => {
+      setLipLevel(0.25 + Math.random() * 0.5);
+    }, 70);
+  }, [clearLipSync]);
+
   useEffect(() => {
     const checkResumable = async () => {
       if (!sessionId || !token) return;
       try {
-        // Look for any active interview sessions for this platform session
         const res = await fetch(`${API_BASE}/ai-interview/start`, {
           method: 'POST',
           headers: {
@@ -566,6 +630,14 @@ export default function AIInterviewer({ sessionId, token, role, company, onCompl
     }
   }, [phase, refreshToken]);
 
+  // ── Finalize AI Response ──────────────────────────────────────────────
+  const finishAiResponse = useCallback(() => {
+    setIsThinking(false);
+    setIsProcessing(false);
+    setAudioAwaitingResponse(false);
+    audioAwaitingRef.current = false;
+  }, []);
+
   // ── Speech Synthesis Helper for Obi ─────────────────────────────────
   const speakText = useCallback((text) => {
     if (!('speechSynthesis' in window) || !text) return;
@@ -575,14 +647,57 @@ export default function AIInterviewer({ sessionId, token, role, company, onCompl
       const utterance = new SpeechSynthesisUtterance(cleanText);
       utterance.rate = 1.0;
       utterance.pitch = 1.0;
+      setSubtitleText(cleanText);
       setIsSpeaking(true);
-      utterance.onend = () => setIsSpeaking(false);
-      utterance.onerror = () => setIsSpeaking(false);
+      startLipSync();
+      utterance.onend = () => {
+        setIsSpeaking(false);
+        clearLipSync();
+        finishAiResponse();
+      };
+      utterance.onerror = () => {
+        setIsSpeaking(false);
+        clearLipSync();
+        finishAiResponse();
+      };
       window.speechSynthesis.speak(utterance);
     } catch {
       setIsSpeaking(false);
+      clearLipSync();
+      finishAiResponse();
     }
-  }, []);
+  }, [finishAiResponse, startLipSync, clearLipSync]);
+
+  const queueAiMessage = useCallback((message, options = {}) => {
+    setIsThinking(false);
+    setIsSpeaking(false);
+    setIsProcessing(false);
+    setStatusMessage(options.status || 'Obi is speaking...');
+    setSubtitleText(message || '');
+    setAudioAwaitingResponse(true);
+    audioAwaitingRef.current = true;
+    lastAiMessageRef.current = message || '';
+
+    if (options.phase) {
+      setPhase(options.phase);
+    }
+
+    addMessage({
+      role: 'interviewer',
+      text: message,
+      ts: Date.now() / 1000,
+      isFollowUp: options.isFollowUp,
+      isTransition: options.isTransition,
+    });
+
+    clearAudioFallbackTimer();
+    fallbackTtsTimeoutRef.current = setTimeout(() => {
+      if (!audioAwaitingRef.current && browserTtsFallback) return;
+      if ('speechSynthesis' in window && message) {
+        speakText(message);
+      }
+    }, 800);
+  }, [browserTtsFallback, clearAudioFallbackTimer, speakText]);
 
   // ── WebSocket Message Handler ────────────────────────────────────────
   const handleWsMessage = useCallback((msg) => {
@@ -591,15 +706,25 @@ export default function AIInterviewer({ sessionId, token, role, company, onCompl
     switch (type) {
       case 'thinking':
         setIsThinking(true);
+        setIsProcessing(false);
+        break;
+
+      case 'processing':
+        setIsProcessing(true);
+        setIsThinking(false);
+        setIsSpeaking(false);
+        setStatusMessage('Transcribing your response…');
         break;
 
       case 'session_ready':
         setPhase('interviewing');
         setIsThinking(false);
-        if (msg.opening_text) {
-          addMessage({ role: 'interviewer', text: msg.opening_text, ts: Date.now() / 1000 });
-          speakText(msg.opening_text);
-        }
+        setIsProcessing(false);
+        queueAiMessage(msg.opening_text || openingIntro, {
+          status: 'Obi is joining the interview…',
+          phase: 'interviewing',
+          isTransition: true,
+        });
         break;
 
       case 'session_restored': { // P2: Session restored from checkpoint
@@ -608,43 +733,37 @@ export default function AIInterviewer({ sessionId, token, role, company, onCompl
         setProgress({ current: msg.questions_asked || 0, total: msg.max_questions || 12 });
         setCurrentStage(msg.current_stage || '');
         const restoreMsg = `Session restored. Continuing from question ${msg.questions_asked || 0}...`;
-        addMessage({
-          role: 'interviewer',
-          text: restoreMsg,
-          ts: Date.now() / 1000,
+        queueAiMessage(restoreMsg, {
+          status: 'Resuming your interview…',
+          phase: 'interviewing',
           isTransition: true,
         });
-        speakText(restoreMsg);
         break;
       }
 
       case 'question':
         setIsThinking(false);
         setPhase('interviewing');
-        addMessage({
-          role: 'interviewer',
-          text: msg.text,
-          ts: msg.timestamp || Date.now() / 1000,
-          isFollowUp: msg.is_follow_up,
-          questionId: msg.question_id,
-          stage: msg.stage,
-        });
-        speakText(msg.text);
         setCurrentStage(msg.stage || '');
         if (msg.questions_asked !== undefined) {
           setProgress({ current: msg.questions_asked, total: msg.max_questions || 12 });
         }
+        queueAiMessage(msg.text, {
+          status: 'Obi is asking the next question…',
+          phase: 'interviewing',
+          isFollowUp: msg.is_follow_up,
+          questionId: msg.question_id,
+          stage: msg.stage,
+        });
         break;
 
       case 'transition':
         setIsThinking(false);
-        addMessage({
-          role: 'interviewer',
-          text: msg.text,
-          ts: msg.timestamp || Date.now() / 1000,
+        queueAiMessage(msg.text, {
+          status: 'Obi is updating the interview…',
+          phase: 'interviewing',
           isTransition: true,
         });
-        speakText(msg.text);
         break;
 
       case 'coding_problem': { // Feature 9: live coding round
@@ -677,14 +796,18 @@ export default function AIInterviewer({ sessionId, token, role, company, onCompl
         break;
 
       case 'stt_result':
+        setIsProcessing(false);
         if (msg.is_final && msg.text) {
           addMessage({ role: 'candidate', text: msg.text, ts: Date.now() / 1000 });
+          setStatusMessage('Obi is thinking about your answer…');
         }
         break;
 
       case 'ai_response_text':
-        // Show text before audio arrives
-        setIsSpeaking(true);
+        queueAiMessage(msg.text, {
+          status: 'Obi is speaking…',
+          phase: 'interviewing',
+        });
         break;
 
       case 'error':
@@ -702,6 +825,10 @@ export default function AIInterviewer({ sessionId, token, role, company, onCompl
 
   // ── Audio Response Handler ────────────────────────────────────────────
   const handleAudioResponse = useCallback(async (arrayBuffer) => {
+    clearAudioFallbackTimer();
+    if ('speechSynthesis' in window) {
+      window.speechSynthesis.cancel();
+    }
     try {
       const audioCtx = audioContextRef.current || new (window.AudioContext || window.webkitAudioContext)();
       audioContextRef.current = audioCtx;
@@ -711,12 +838,20 @@ export default function AIInterviewer({ sessionId, token, role, company, onCompl
       source.connect(audioCtx.destination);
       source.start(0);
       setIsSpeaking(true);
-      source.onended = () => setIsSpeaking(false);
+      setIsProcessing(false);
+      startLipSync();
+      source.onended = () => {
+        setIsSpeaking(false);
+        clearLipSync();
+        finishAiResponse();
+      };
     } catch (err) {
       console.error('[AIInterviewer] Audio playback failed', err);
       setIsSpeaking(false);
+      clearLipSync();
+      finishAiResponse();
     }
-  }, []);
+  }, [finishAiResponse, startLipSync, clearLipSync, clearAudioFallbackTimer]);
 
   // ── P3: Auto-reconnect on disconnect ────────────────────────────────
   const reconnectWs = useCallback(() => {
@@ -730,7 +865,7 @@ export default function AIInterviewer({ sessionId, token, role, company, onCompl
     setReconnectAttempts(prev => prev + 1);
     setPhase('opening');
 
-    const wsUrl = `${getWsBase()}/ai-interview/ws?token=${token}&interview_session_id=${interviewSessionId}&session_id=${sessionId}`;
+    const wsUrl = `${getWsBase()}/ai-interview/ws/voice?token=${token}&interview_session_id=${interviewSessionId}&session_id=${sessionId}`;
     const ws = new WebSocket(wsUrl);
     wsRef.current = ws;
     ws.binaryType = 'arraybuffer';
@@ -753,12 +888,11 @@ export default function AIInterviewer({ sessionId, token, role, company, onCompl
     };
 
     ws.onclose = () => {
-      if (phase !== 'completed' && phase !== 'error') {
-        // Auto-reconnect after delay
+      if (phaseRef.current !== 'completed' && phaseRef.current !== 'error') {
         reconnectTimerRef.current = setTimeout(reconnectWs, 2000 * (reconnectAttempts + 1));
       }
     };
-  }, [interviewSessionId, token, sessionId, reconnectAttempts, phase, handleWsMessage, handleAudioResponse]);
+  }, [interviewSessionId, token, sessionId, reconnectAttempts, handleWsMessage, handleAudioResponse]);
 
   // Cleanup reconnect timer
   useEffect(() => {
@@ -769,25 +903,31 @@ export default function AIInterviewer({ sessionId, token, role, company, onCompl
   }, []);
 
   // ── Start Interview ──────────────────────────────────────────────────
-  const startInterview = useCallback(async () => {
+  const startInterview = useCallback(async (resumeExisting = true) => {
     setPhase('initializing');
+    setStatusMessage('Preparing your interview...');
     setError(null);
 
     try {
-      // Step 1: Initialize the session via REST
-      const res = await fetch(`${API_BASE}/ai-interview/start`, {
+      const shouldResume = resumeExisting && Boolean(resumableSession);
+      const endpoint = shouldResume ? '/ai-interview/resume' : '/ai-interview/start';
+      const url = `${API_BASE}${endpoint}`;
+      const body = shouldResume
+        ? JSON.stringify({ interview_session_id: resumableSession, session_id: sessionId })
+        : JSON.stringify({
+            session_id: sessionId,
+            role: role || 'Software Engineer',
+            company: company || 'the company',
+            max_questions: 12,
+            voice_enabled: voiceMode,
+          });
+      const res = await fetch(url, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
           Authorization: `Bearer ${token}`,
         },
-        body: JSON.stringify({
-          session_id: sessionId,
-          role: role || 'Software Engineer',
-          company: company || 'the company',
-          max_questions: 12,
-          voice_enabled: voiceMode,
-        }),
+        body,
       });
 
       if (!res.ok) {
@@ -798,16 +938,19 @@ export default function AIInterviewer({ sessionId, token, role, company, onCompl
       const data = await res.json();
       const ivSessionId = data.interview_session_id;
       setInterviewSessionId(ivSessionId);
+      if (data.status === 'resumable' && !resumableSession) {
+        setResumableSession(ivSessionId);
+      }
 
-      // Step 2: Connect WebSocket
-      const wsUrl = `${getWsBase()}/ai-interview/ws?token=${token}&interview_session_id=${ivSessionId}&session_id=${sessionId}`;
+      const wsUrl = `${getWsBase()}/ai-interview/ws/voice?token=${token}&interview_session_id=${ivSessionId}&session_id=${sessionId}`;
       const ws = new WebSocket(wsUrl);
       wsRef.current = ws;
       ws.binaryType = 'arraybuffer';
 
-      ws.onopen = () => {
+        ws.onopen = () => {
         console.log('[AIInterviewer] WebSocket connected');
         setPhase('opening');
+        setStatusMessage('Connecting to Obi...');
       };
 
       ws.onmessage = (event) => {
@@ -827,8 +970,7 @@ export default function AIInterviewer({ sessionId, token, role, company, onCompl
 
       ws.onclose = () => {
         console.log('[AIInterviewer] WebSocket closed');
-        if (phase !== 'completed' && phase !== 'error') {
-          // P3: Auto-reconnect after brief delay
+        if (phaseRef.current !== 'completed' && phaseRef.current !== 'error') {
           reconnectTimerRef.current = setTimeout(() => {
             if (wsRef.current === ws) {
               reconnectWs();
@@ -843,6 +985,21 @@ export default function AIInterviewer({ sessionId, token, role, company, onCompl
       setPhase('error');
     }
   }, [sessionId, token, role, company, voiceMode]);
+
+  // ── Auto-start on idle ───────────────────────────────────────────────
+  useEffect(() => {
+    if (phase !== 'idle' || requestingStartRef.current) return;
+    requestingStartRef.current = true;
+    requestMicPermission().then((allowed) => {
+      if (allowed) {
+        startInterview().finally(() => {
+          requestingStartRef.current = false;
+        });
+      } else {
+        requestingStartRef.current = false;
+      }
+    });
+  }, [phase, requestMicPermission, startInterview]);
 
   // ── Add Message Helper ───────────────────────────────────────────────
   const addMessage = (msg) => {
@@ -946,7 +1103,7 @@ export default function AIInterviewer({ sessionId, token, role, company, onCompl
   // ── End Interview ────────────────────────────────────────────────────
   const endInterview = useCallback(() => {
     if (wsRef.current && wsRef.current.readyState === WebSocket.OPEN) {
-      wsRef.current.send(JSON.stringify({ type: 'end' }));
+      wsRef.current.send(JSON.stringify({ type: 'end_voice' }));
       setIsThinking(true);
       setPhase('completing');
     }
@@ -963,6 +1120,7 @@ export default function AIInterviewer({ sessionId, token, role, company, onCompl
       wsRef.current?.close();
       audioContextRef.current?.close();
       clearTimeout(reconnectTimerRef.current);
+      clearTimeout(fallbackTtsTimeoutRef.current);
       clearInterval(tokenRefreshRef.current);
     };
   }, []);
@@ -1030,21 +1188,39 @@ export default function AIInterviewer({ sessionId, token, role, company, onCompl
             </ul>
           </div>
 
-          {error && <div className="aii-error"><AlertTriangle size="14" /> {error}</div>}
-          {proctorError && <div className="aii-error"><AlertTriangle size="14" /> Proctoring Error: {proctorError}</div>}
+          {resume && (
+            <div className="aii-resume-preview">
+              <div className="aii-resume-preview__header">
+                <span>Resume snapshot</span>
+                <button type="button" className="aii-link-button" onClick={() => setResumeSummaryOpen((open) => !open)}>
+                  {resumeSummaryOpen ? 'Hide' : 'Show'} summary
+                </button>
+              </div>
+              {resumeSummaryOpen && (
+                <div className="aii-resume-preview__content">
+                  {resume.parsed?.experience?.slice(0, 3).map((item, index) => (
+                    <div key={index} className="aii-resume-preview__item">
+                      <strong>{item.position || item.title}</strong>
+                      <span>{item.company || item.organization}</span>
+                    </div>
+                  ))}
+                  <p className="aii-resume-preview__note">Obi will use your resume to personalize questions.</p>
+                </div>
+              )}
+            </div>
+          )}
 
-          {/* P2: Resume Interview Button */}
           {resumableSession && (
             <button
               className="aii-start-btn aii-start-btn--ghost"
-              onClick={startInterview}
+              onClick={() => startInterview(true)}
             >
               <span>Resume Interview</span>
               <ArrowRight size="18" />
             </button>
           )}
 
-          <button className="aii-start-btn" onClick={startInterview}>
+          <button className="aii-start-btn" onClick={() => startInterview(false)}>
             <Mic size="18" />
             <span>{resumableSession ? 'Start New Interview' : 'Begin Interview'}</span>
             <ArrowRight size="18" />
@@ -1097,9 +1273,11 @@ export default function AIInterviewer({ sessionId, token, role, company, onCompl
                 isRecording={isRecording}
                 isSpeaking={isSpeaking}
                 isThinking={isThinking}
+                isProcessing={isProcessing}
                 isConnecting={phase === 'opening' || phase === 'initializing'}
               />
             </div>
+            <div className="aii-header__status-message">{statusMessage}</div>
           </div>
         </div>
 
@@ -1126,6 +1304,20 @@ export default function AIInterviewer({ sessionId, token, role, company, onCompl
           >
             <XCircle size="14" /> End
           </button>
+        </div>
+      </div>
+
+      {/* Interview Room Hero */}
+      <div className="aii-hero-panel">
+        <div className="aii-avatar-stage">
+          <div className={`aii-avatar aii-avatar--hero ${isSpeaking ? 'aii-avatar--speaking' : isThinking ? 'aii-avatar--thinking' : isRecording ? 'aii-avatar--listening' : ''}`}>
+            <span>O</span>
+            <div className="aii-avatar__mouth" style={{ transform: `scaleY(${0.85 + lipLevel})` }} />
+          </div>
+          <div className="aii-subtitle-card">
+            <div className="aii-subtitle-card__label">Live subtitle</div>
+            <p className="aii-subtitle-card__text">{subtitleText || 'Obi will speak here once the interview begins.'}</p>
+          </div>
         </div>
       </div>
 
@@ -1166,12 +1358,12 @@ export default function AIInterviewer({ sessionId, token, role, company, onCompl
           <div className="aii-init-message">
             <div className="aii-avatar aii-avatar--lg"><span>O</span></div>
             <div className="aii-spinner aii-spinner--sm" />
-            <p>Obi is reading your resume and preparing your interview…</p>
+            <p>{statusMessage || 'Obi is reading your resume and preparing your interview…'}</p>
           </div>
         )}
 
-        {messages.map(msg => (
-          <MessageBubble key={msg.id} message={msg} />
+        {messages.map((msg) => (
+          <MessageBubble key={msg.id || `${msg.role}-${msg.ts}`} message={msg} />
         ))}
 
         {isThinking && <ThinkingIndicator />}

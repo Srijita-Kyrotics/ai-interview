@@ -54,7 +54,7 @@ def _make_gemini_chat(session_state: dict[str, Any], role_key: str):
     model = genai.GenerativeModel(settings.gemini_model, system_instruction=system_instruction)
     return model.start_chat(history=[
         {"role": "user", "parts": ["(Interview started)"]},
-        {"role": "model", "parts": [f"Hi there! I'm Obi, your AI interviewer for this {role_key} round. I'm excited to get started. Let me begin with your first question."]}
+        {"role": "model", "parts": ["Begin the interview with a concise first question. Do not introduce yourself or give a robotic welcome message."]}
     ])
 
 
