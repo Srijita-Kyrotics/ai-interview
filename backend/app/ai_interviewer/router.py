@@ -218,6 +218,24 @@ async def start_ai_interview(
             message="An existing interview session was found. Use /resume to continue.",
         )
 
+    # Fail fast if the LLM stack is unavailable so the UI can surface a clear
+    # error instead of hanging forever on the "Connecting..." screen.
+    try:
+        from app.ai_interviewer.llm_providers import get_llm_registry
+
+        registry = get_llm_registry()
+        if not registry.available_providers:
+            raise GeminiUnavailableError(
+                "No LLM providers are configured. "
+                "Add GEMINI_API_KEY, OPENAI_API_KEY, or CLAUDE_API_KEY."
+            )
+    except GeminiUnavailableError as exc:
+        logger.error("AI interview startup blocked: no LLM provider configured", extra={"session_id": request.session_id, "error": str(exc)})
+        raise HTTPException(
+            status_code=503,
+            detail="Obi cannot start because no LLM API key is configured. Add GEMINI_API_KEY, OPENAI_API_KEY, or CLAUDE_API_KEY.",
+        ) from exc
+
     # Create the interview state
     interview_session_id = str(uuid.uuid4())
     initial_state = make_initial_state(
@@ -855,6 +873,24 @@ async def ai_interview_websocket(
 
 # ── Voice Interview WebSocket ──────────────────────────────────────────────────
 
+def _build_instant_greeting(state: dict) -> str:
+    """Build a greeting that needs no LLM call so Obi can speak instantly."""
+    parsed = state.get("resume_parsed") or {}
+    name = parsed.get("name") or ""
+    if not name:
+        email = state.get("candidate_email") or ""
+        name = email.split("@")[0] if email else ""
+    name = (name or "there").strip()
+    role = state.get("role") or "this role"
+    company = state.get("company") or "the company"
+    return (
+        f"Hi {name}, I'm Obi, your AI interviewer. "
+        f"I've reviewed your resume, and today we'll discuss your experience, "
+        f"projects, and technical skills for the {role} position at {company}. "
+        f"I'm preparing your questions now, so give me just a moment."
+    )
+
+
 @router.websocket("/ws/voice")
 async def voice_interview_websocket(
     websocket: WebSocket,
@@ -901,30 +937,93 @@ async def voice_interview_websocket(
     pipeline = VoicePipeline.from_settings()
 
     try:
-        # Initialize if needed
+        # Initialize if needed. LLM analysis (resume → plan → opening) can take
+        # 20-60s, so Obi greets the candidate IMMEDIATELY with a static greeting
+        # (no LLM dependency) and prepares questions in the background.
         if not runner._initialized:
-            opening_text = await runner.initialize()
-            opening_audio = await pipeline.tts.synthesize(opening_text)
+            await websocket.send_json({
+                "type": "progress",
+                "step": "Connecting to the interview engine…",
+            })
+
+            greeting = _build_instant_greeting(state)
             await websocket.send_json({
                 "type": "session_ready",
-                "opening_text": opening_text,
+                "opening_text": greeting,
                 "session_id": interview_session_id,
+                "phase": "greeting",
             })
-            if opening_audio:
-                await websocket.send_bytes(opening_audio)
+            try:
+                greeting_audio = await pipeline.tts.synthesize(greeting)
+            except Exception as exc:
+                logger.warning("Greeting TTS failed (voice)", extra={"error": str(exc)})
+                greeting_audio = b""
+            if greeting_audio:
+                await websocket.send_bytes(greeting_audio)
 
-            # Generate first question
-            first_q = await runner.generate_first_question()
-            first_q_audio = await pipeline.tts.synthesize(first_q)
+            first_q = ""
+            try:
+                await websocket.send_json({"type": "progress", "step": "Analyzing your resume…"})
+                await runner.initialize()
+                await websocket.send_json({"type": "progress", "step": "Preparing your first question…"})
+                first_q = await runner.generate_first_question()
+            except GeminiUnavailableError as e:
+                logger.error("Gemini API not configured (voice)", extra={"error": str(e)})
+                with contextlib.suppress(Exception):
+                    await websocket.send_json({
+                        "type": "error",
+                        "message": str(e),
+                        "error_code": "GEMINI_UNAVAILABLE",
+                    })
+                    await websocket.close(code=4003)
+                return
+            except RuntimeError as e:
+                logger.error("Gemini call failed (voice)", extra={"error": str(e)})
+                with contextlib.suppress(Exception):
+                    await websocket.send_json({
+                        "type": "error",
+                        "message": f"AI model error: {e}",
+                        "error_code": "GEMINI_ERROR",
+                    })
+                return
+            except Exception as e:
+                logger.exception("Unexpected init failure (voice)")
+                with contextlib.suppress(Exception):
+                    await websocket.send_json({
+                        "type": "error",
+                        "message": f"Could not initialize the interview: {e}",
+                        "error_code": "INIT_FAILED",
+                    })
+                return
+
+            # Keep the stored transcript aligned with what Obi actually spoke.
             state = runner.get_state()
-            current_q = state.get("current_question", {})
-            await websocket.send_json({
-                "type": "question",
-                "text": first_q,
-                "question_id": current_q.get("id", ""),
-            })
-            if first_q_audio:
-                await websocket.send_bytes(first_q_audio)
+            for entry in state.get("conversation_transcript", []):
+                if entry.get("role") == "interviewer" and entry.get("is_opening"):
+                    entry["text"] = greeting
+                    break
+            state["ai_response_text"] = greeting
+
+            if first_q:
+                try:
+                    first_q_audio = await pipeline.tts.synthesize(first_q)
+                except Exception as exc:
+                    logger.warning("Question TTS failed (voice)", extra={"error": str(exc)})
+                    first_q_audio = b""
+                current_q = state.get("current_question", {})
+                await websocket.send_json({
+                    "type": "question",
+                    "text": first_q,
+                    "question_id": current_q.get("id", ""),
+                })
+                if first_q_audio:
+                    await websocket.send_bytes(first_q_audio)
+            else:
+                await websocket.send_json({
+                    "type": "error",
+                    "message": "Could not prepare interview questions. Please try again.",
+                    "error_code": "QUESTION_FAILED",
+                })
         else:
             # Resuming: re-send last question (P2)
             state = runner.get_state()
@@ -974,6 +1073,45 @@ async def voice_interview_websocket(
                     if new_payload:
                         payload = new_payload
                         await websocket.send_json({"type": "token_refreshed"})
+                    continue
+
+                if msg_type == "answer":
+                    # Typed answers (used as fallback when the mic fails).
+                    transcript = (msg.get("text") or "").strip()
+                    if not transcript:
+                        continue
+
+                    await websocket.send_json({
+                        "type": "stt_result",
+                        "text": transcript,
+                        "is_final": True,
+                    })
+
+                    code_snapshot = msg.get("code") or None
+                    if code_snapshot and msg.get("language"):
+                        runner.state["current_code_snapshot_language"] = msg.get("language")
+
+                    await websocket.send_json({"type": "thinking", "stage": "answer"})
+                    result = await runner.process_answer(transcript, code_snapshot=code_snapshot)
+                    response_text = result.get("text", "")
+
+                    await websocket.send_json({
+                        "type": "ai_response_text",
+                        "text": response_text,
+                        "is_follow_up": result.get("is_follow_up", False),
+                    })
+
+                    response_audio = await pipeline.tts.synthesize(response_text)
+                    if response_audio:
+                        await websocket.send_bytes(response_audio)
+
+                    if result.get("should_end"):
+                        await _save_interview_result(session_id, interview_session_id, runner)
+                        await websocket.send_json({
+                            "type": "interview_complete",
+                            "report": result.get("final_report", {}),
+                        })
+                        break
                     continue
 
                 if msg_type == "audio_end":

@@ -97,8 +97,9 @@ describe('TerminatedPage', () => {
   it('renders termination message', async () => {
     const { TerminatedPage } = await import('../components/TerminatedPage')
     render(React.createElement(TerminatedPage))
-    expect(screen.getByText(/Test Terminated/)).toBeTruthy()
-    expect(screen.getByText(/terminated due to/)).toBeTruthy()
+    expect(screen.getByText(/Interview Ended/)).toBeTruthy()
+    expect(screen.getByText(/Repeated malpractice detection/)).toBeTruthy()
+    expect(screen.getByText(/Integrity score: 100%/)).toBeTruthy()
   })
 })
 

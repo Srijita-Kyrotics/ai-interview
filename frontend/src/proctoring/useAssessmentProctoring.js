@@ -9,6 +9,7 @@ const DEVTOOLS_THRESHOLD = 160
 const FACE_DETECT_INTERVAL_MS = 400
 const MODEL_RETRY_DELAY_MS = 5000
 const MODEL_MAX_RETRIES = 3
+const GRACE_PERIOD_MS = 15000
 
 const violationLabels = {
   tab_switch: 'Tab Switch',
@@ -62,24 +63,6 @@ function captureFrame(video) {
   return dataUrl
 }
 
-function hasVisibleFrame(video) {
-  if (!video || video.readyState < 2 || !video.videoWidth || !video.videoHeight) return false
-  const canvas = document.createElement('canvas')
-  canvas.width = 80
-  canvas.height = 60
-  const context = canvas.getContext('2d', { willReadFrequently: true })
-  context.drawImage(video, 0, 0, canvas.width, canvas.height)
-  const data = context.getImageData(0, 0, canvas.width, canvas.height).data
-  canvas.width = 0
-  canvas.height = 0
-  let litPixels = 0
-  for (let i = 0; i < data.length; i += 16) {
-    const brightness = (data[i] + data[i + 1] + data[i + 2]) / 3
-    if (brightness > 20) litPixels += 1
-  }
-  return litPixels > 60
-}
-
 function getPreferredMime() {
   const types = ['audio/webm;codecs=opus', 'audio/webm', 'audio/mp4', 'audio/ogg;codecs=opus']
   if (typeof MediaRecorder === 'undefined') return ''
@@ -99,7 +82,8 @@ export function useAssessmentProctoring({
   setProctoring,
   webcamVideoRef,
   webcamStream,
-  screenStream
+  screenStream,
+  voiceInterview = false
 }) {
   const [modal, setModal] = useState(null)
   const lastViolationAtRef = useRef(0)
@@ -113,6 +97,8 @@ export function useAssessmentProctoring({
   const lastSubmitTimeRef = useRef(0)
   const lookingAwaySinceRef = useRef(null)
   const headTurnSinceRef = useRef(null)
+  const startedAtRef = useRef(0)
+  const fullscreenEnteredRef = useRef(false)
 
   const requestFullscreen = useCallback(async () => {
     const el = document.documentElement
@@ -143,6 +129,10 @@ export function useAssessmentProctoring({
 
   const registerViolation = useCallback((kind, reason) => {
     const now = Date.now()
+    if (now - startedAtRef.current < GRACE_PERIOD_MS) {
+      console.warn(`[Proctoring] ignored during warm-up: ${kind} — ${reason}`)
+      return
+    }
     if (now - lastViolationAtRef.current < COOLDOWN_MS) return
     lastViolationAtRef.current = now
 
@@ -165,11 +155,14 @@ export function useAssessmentProctoring({
         violations: [...current.violations, violation],
         snapshots: snapshot ? [...current.snapshots.slice(-4), snapshot] : current.snapshots
       }
-      const nextState = nextWarnings > 3
-        ? terminate('Repeated malpractice detected.', baseState)
+      // 3-strike system: 1st and 2nd warnings are warnings only; the 3rd ends
+      // the interview. The user is never logged out.
+      const terminating = nextWarnings >= 3
+      const nextState = terminating
+        ? terminate(`Interview ended after ${nextWarnings} warnings: ${reason}`, baseState)
         : baseState
 
-      if (nextWarnings <= 3) {
+      if (!terminating) {
         setModal({ type: 'warning', warning: nextWarnings, reason })
       }
 
@@ -200,16 +193,21 @@ export function useAssessmentProctoring({
   useEffect(() => {
     if (!active) return undefined
     requestFullscreen()
+    startedAtRef.current = Date.now()
 
     const onVisibility = () => {
       if (document.hidden) registerViolation('tab_switch', 'You switched away from the assessment window.')
     }
     const onBlur = () => {
-      if (!document.hidden) registerViolation('tab_switch', 'Window focus was lost during the assessment.')
+      // A bare window blur is NOT verified evidence: the mic permission prompt,
+      // the screen-share picker and fullscreen transitions all steal focus.
+      // Only a truly hidden document is penalized (see onVisibility).
     }
     const onFullscreen = () => {
       const isFs = document.fullscreenElement || document.webkitFullscreenElement
-      if (!isFs) registerViolation('fullscreen_exit', 'Fullscreen exited.')
+      if (isFs) { fullscreenEnteredRef.current = true; return }
+      if (!fullscreenEnteredRef.current) return
+      registerViolation('fullscreen_exit', 'You exited fullscreen during the interview.')
     }
     const onFullscreenError = () => {
       // Fullscreen request failed — do not penalize, just log
@@ -249,6 +247,7 @@ export function useAssessmentProctoring({
     }, 1500)
 
     return () => {
+      fullscreenEnteredRef.current = false
       document.removeEventListener('visibilitychange', onVisibility)
       document.removeEventListener('fullscreenchange', onFullscreen)
       document.removeEventListener('fullscreenerror', onFullscreenError)
@@ -271,7 +270,7 @@ export function useAssessmentProctoring({
   }, [active, registerViolation, screenStream])
 
   useEffect(() => {
-    if (!active) return undefined
+    if (!active || voiceInterview) return undefined
     let mouseTimeout = null
 
     const onMouseMove = (e) => {
@@ -306,10 +305,10 @@ export function useAssessmentProctoring({
       document.removeEventListener('keydown', onMouse)
       if (mouseTimeout) clearTimeout(mouseTimeout)
     }
-  }, [active, registerViolation])
+  }, [active, registerViolation, voiceInterview])
 
   useEffect(() => {
-    if (!active || !webcamStream) return undefined
+    if (!active || !webcamStream || voiceInterview) return undefined
     let audioContext = null
     let analyser = null
     let audioTimeout = null
@@ -360,7 +359,7 @@ export function useAssessmentProctoring({
         try { audioContext.close() } catch { /* ignore */ }
       }
     }
-  }, [active, registerViolation, webcamStream])
+  }, [active, registerViolation, webcamStream, voiceInterview])
 
   useEffect(() => {
     if (!active || !webcamVideoRef?.current) return undefined
@@ -412,7 +411,13 @@ export function useAssessmentProctoring({
       if (cancelled || detectingRef.current) return
       detectingRef.current = true
       const video = webcamVideoRef.current
+      const cameraLive = webcamStream?.getVideoTracks?.().some((t) => t.readyState === 'live')
       try {
+        // No violations while the camera is starting or models are still
+        // loading — those are setup states, not evidence of malpractice.
+        if (!cameraLive || !faceModelsLoadedRef.current || Date.now() - startedAtRef.current < GRACE_PERIOD_MS) {
+          return
+        }
         if (objectModelRef.current && video?.readyState >= 2) {
           const detections = await objectModelRef.current.detect(video, 20, 0.15)
           if (detections?.length) {
@@ -423,7 +428,7 @@ export function useAssessmentProctoring({
           }
         }
 
-        if (faceModelsLoadedRef.current && video?.readyState >= 2) {
+        if (video?.readyState >= 2) {
           const detections = await faceapi.detectAllFaces(video, new faceapi.TinyFaceDetectorOptions({ inputSize: 160, scoreThreshold: 0.3 })).withFaceLandmarks()
           if (detections.length > 1) {
             registerViolation('multiple_faces', 'Multiple faces detected.')
@@ -482,11 +487,6 @@ export function useAssessmentProctoring({
               }
             }
           }
-          return
-        }
-
-        if (!hasVisibleFrame(video)) {
-          registerViolation('face_missing', 'Candidate not visible.')
         }
       } catch {
         // Detection error — will retry on next interval
@@ -500,7 +500,7 @@ export function useAssessmentProctoring({
       cancelled = true
       window.clearInterval(timer)
     }
-  }, [active, registerViolation, webcamVideoRef])
+  }, [active, registerViolation, webcamVideoRef, webcamStream, voiceInterview])
 
   return {
     modal,

@@ -1,5 +1,5 @@
 import React, { Suspense, useCallback, useEffect, useState } from 'react'
-import { Navigate, Route, Routes, useNavigate } from 'react-router-dom'
+import { Navigate, Route, Routes, useLocation, useNavigate } from 'react-router-dom'
 import { api, isTokenExpired, AUTH_EVENT } from './api'
 import { resetProctoringState, usePersistentProctoring } from './proctoring/proctoringState'
 import { processAptitudeText } from './utils/aptitudeFormat'
@@ -22,6 +22,30 @@ function PageLoader() {
     <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: '100vh' }}>
       <div className="spinner" />
     </div>
+  )
+}
+
+// Full-screen interview room: rendered outside the app Shell so Obi owns the
+// entire viewport (no sidebar / topbar chrome).
+function AiInterviewRoute({ state, setState, user, proctoring, setProctoring }) {
+  const navigate = useNavigate()
+  return (
+    <Suspense fallback={<PageLoader />}>
+      <AIInterviewer
+        sessionId={state.sessionId}
+        token={user.token}
+        resume={state.resume}
+        role="Software Engineer"
+        company={state.company || 'the company'}
+        proctoring={proctoring}
+        setProctoring={setProctoring}
+        onComplete={(report) => {
+          console.log('Final Report:', report)
+          setState((s) => ({ ...s, roundStatus: { ...s.roundStatus, technical: 'completed' } }))
+          navigate('/report', { replace: true })
+        }}
+      />
+    </Suspense>
   )
 }
 
@@ -113,6 +137,7 @@ function filterQuestions(questions, selectedCompanies) {
 export default function App() {
   const [user, setUser] = useState(getStoredUser)
   const navigate = useNavigate()
+  const location = useLocation()
   const [proctoring, setProctoring] = usePersistentProctoring()
   const [dataLoading, setDataLoading] = useState(true)
   const [dataError, setDataError] = useState(false)
@@ -218,6 +243,15 @@ export default function App() {
     return <TerminatedPage />
   }
 
+  // Dedicated full-screen interview room — no app chrome around it.
+  if (location.pathname === '/technical') {
+    return (
+      <ToastProvider>
+        <AiInterviewRoute state={state} setState={setState} user={user} proctoring={proctoring} setProctoring={setProctoring} />
+      </ToastProvider>
+    )
+  }
+
   if (dataLoading) {
     return (
       <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: '100vh' }}>
@@ -245,9 +279,6 @@ export default function App() {
             <Route path="/company" element={<CompanyPage state={state} setState={setState} user={user} />} />
             <Route path="/aptitude" element={<RoundPage key="aptitude" title="Aptitude Round" type="aptitude" pool={state.datasets.aptitude} build={buildAptitudeRound} state={state} setState={setState} proctoring={proctoring} setProctoring={setProctoring} />} />
             <Route path="/coding" element={<RoundPage key="coding" title="Coding Round" type="coding" pool={state.datasets.coding} build={(pool) => filterQuestions(pool, state.selectedCompanies).slice(0, 3)} state={state} setState={setState} proctoring={proctoring} setProctoring={setProctoring} />} />
-            
-            {/* Swapped legacy LiveInterview with our new AIInterviewer component */}
-            <Route path="/technical" element={<AIInterviewer sessionId={state.sessionId} token={user.token} resume={state.resume} role="Software Engineer" company={state.company || 'the company'} proctoring={proctoring} setProctoring={setProctoring} onComplete={(report) => { console.log('Final Report:', report); setState((s) => ({ ...s, roundStatus: { ...s.roundStatus, technical: 'completed' } })); window.location.href = '/report'; }} />} />
 
             <Route path="/hr" element={<RoundPage key="hr" title="HR Round" type="hr" pool={state.datasets.hr} build={(pool) => (state.datasets.hr || []).slice(0, 8)} state={state} setState={setState} proctoring={proctoring} setProctoring={setProctoring} />} />
 

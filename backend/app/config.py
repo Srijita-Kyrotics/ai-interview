@@ -38,9 +38,11 @@ class Settings(BaseSettings):
 
     # ── External APIs ─────────────────────────────────────────────────────
     gemini_api_key: str = Field("", alias="GEMINI_API_KEY")
-    gemini_model: str = Field("gemini-1.5-flash", alias="GEMINI_MODEL")
+    gemini_model: str = Field("gemini-2.5-flash-lite", alias="GEMINI_MODEL")
     openai_api_key: str = Field("", alias="OPENAI_API_KEY")
+    openai_base_url: str = Field("https://api.openai.com/v1", alias="OPENAI_BASE_URL")
     claude_api_key: str = Field("", alias="CLAUDE_API_KEY")
+    claude_base_url: str = Field("https://api.anthropic.com", alias="CLAUDE_BASE_URL")
     judge0_api_key: str = Field("", alias="JUDGE0_API_KEY")
     judge0_host: str = Field("judge0-ce.p.rapidapi.com", alias="JUDGE0_HOST")
     judge0_timeout: float = Field(10.0, alias="JUDGE0_TIMEOUT")
@@ -57,13 +59,14 @@ class Settings(BaseSettings):
 
     # ── AI Interviewer: LangGraph ─────────────────────────────────────────
     ai_interviewer_max_questions: int = Field(12, alias="AI_INTERVIEWER_MAX_QUESTIONS")
-    ai_interviewer_gemini_model: str = Field("gemini-1.5-pro", alias="AI_INTERVIEWER_GEMINI_MODEL")
+    ai_interviewer_gemini_model: str = Field("gemini-2.5-flash-lite", alias="AI_INTERVIEWER_GEMINI_MODEL")
     ai_interviewer_temperature: float = Field(0.7, alias="AI_INTERVIEWER_TEMPERATURE")
     ai_interviewer_session_ttl_hours: int = Field(4, alias="AI_INTERVIEWER_SESSION_TTL_HOURS")
 
     # ── CORS ──────────────────────────────────────────────────────────────
     allowed_origins: str = Field(
-        "http://localhost:5173,http://127.0.0.1:5173", alias="ALLOWED_ORIGINS"
+        "http://localhost:5173,http://127.0.0.1:5173,http://localhost:5174,http://127.0.0.1:5174,http://localhost:4173,http://127.0.0.1:4173",
+        alias="ALLOWED_ORIGINS",
     )
 
     # ── CSP ──────────────────────────────────────────────────────────────

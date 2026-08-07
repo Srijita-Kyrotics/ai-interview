@@ -417,13 +417,16 @@ function RoundPage({ title, items: itemsProp, pool, build, type, state, setState
     if (idx < items.length - 1) {
       setIdx(idx + 1)
     } else {
+      const ROUND_ORDER = ['aptitude', 'coding', 'technical', 'hr']
+      const nextIdx = ROUND_ORDER.indexOf(type) + 1
+      const nextStage = nextIdx < ROUND_ORDER.length ? ROUND_ORDER[nextIdx] : 'report'
       setState((s) => ({
         ...s,
-        stage: 'report',
+        stage: nextStage,
         roundTransition: true,
         roundStatus: { ...s.roundStatus, [type]: 'completed' }
       }))
-      navigate('/report')
+      navigate(`/${nextStage}`)
     }
   }
 

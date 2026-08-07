@@ -143,6 +143,8 @@ class OpenAIProvider(LLMProvider):
         model = kwargs.get("model", "gpt-4o")
         temperature = kwargs.get("temperature", 0.7)
         max_tokens = kwargs.get("max_tokens", 2048)
+        base_url = getattr(settings, "openai_base_url", "https://api.openai.com/v1").rstrip("/")
+        endpoint = f"{base_url}/chat/completions"
 
         headers = {
             "Authorization": f"Bearer {api_key}",
@@ -161,7 +163,7 @@ class OpenAIProvider(LLMProvider):
 
         async with httpx.AsyncClient(timeout=30) as client:
             resp = await client.post(
-                "https://api.openai.com/v1/chat/completions",
+                endpoint,
                 headers=headers,
                 json=payload,
             )
@@ -204,6 +206,8 @@ class ClaudeProvider(LLMProvider):
         model = kwargs.get("model", "claude-sonnet-4-20250514")
         temperature = kwargs.get("temperature", 0.7)
         max_tokens = kwargs.get("max_tokens", 2048)
+        base_url = getattr(settings, "claude_base_url", "https://api.anthropic.com").rstrip("/")
+        endpoint = f"{base_url}/v1/messages"
 
         headers = {
             "x-api-key": api_key,
@@ -222,7 +226,7 @@ class ClaudeProvider(LLMProvider):
 
         async with httpx.AsyncClient(timeout=30) as client:
             resp = await client.post(
-                "https://api.anthropic.com/v1/messages",
+                endpoint,
                 headers=headers,
                 json=payload,
             )
