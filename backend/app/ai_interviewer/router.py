@@ -237,15 +237,15 @@ async def start_ai_interview(
 
         registry = get_llm_registry()
         if not registry.available_providers:
-            raise GeminiUnavailableError(
+            raise LLMUnavailableError(
                 "No LLM providers are configured. "
-                "Add GEMINI_API_KEY, OPENAI_API_KEY, or CLAUDE_API_KEY."
+                "Add OPENROUTER_API_KEY, GEMINI_API_KEY, OPENAI_API_KEY, or CLAUDE_API_KEY."
             )
-    except GeminiUnavailableError as exc:
+    except LLMUnavailableError as exc:
         logger.error("AI interview startup blocked: no LLM provider configured", extra={"session_id": request.session_id, "error": str(exc)})
         raise HTTPException(
             status_code=503,
-            detail="Obi cannot start because no LLM API key is configured. Add GEMINI_API_KEY, OPENAI_API_KEY, or CLAUDE_API_KEY.",
+            detail="Obi cannot start because no LLM API key is configured. Add OPENROUTER_API_KEY, GEMINI_API_KEY, OPENAI_API_KEY, or CLAUDE_API_KEY.",
         ) from exc
 
     # Create the interview state
@@ -955,19 +955,12 @@ async def voice_interview_websocket(
         # 20-60s, so Obi greets the candidate IMMEDIATELY with a static greeting
         # (no LLM dependency) and prepares questions in the background.
         if not runner._initialized:
-<<<<<<< HEAD
-            async def _progress(status: str) -> None:
-                await websocket.send_json({"type": "status", "message": status})
-            opening_text = await runner.initialize(progress_cb=_progress)
-            opening_audio = await pipeline.tts.synthesize(opening_text)
-=======
             await websocket.send_json({
                 "type": "progress",
                 "step": "Connecting to the interview engine…",
             })
 
             greeting = _build_instant_greeting(state)
->>>>>>> origin/main
             await websocket.send_json({
                 "type": "session_ready",
                 "opening_text": greeting,
@@ -988,23 +981,23 @@ async def voice_interview_websocket(
                 await runner.initialize()
                 await websocket.send_json({"type": "progress", "step": "Preparing your first question…"})
                 first_q = await runner.generate_first_question()
-            except GeminiUnavailableError as e:
-                logger.error("Gemini API not configured (voice)", extra={"error": str(e)})
+            except LLMUnavailableError as e:
+                logger.error("LLM API not configured (voice)", extra={"error": str(e)})
                 with contextlib.suppress(Exception):
                     await websocket.send_json({
                         "type": "error",
                         "message": str(e),
-                        "error_code": "GEMINI_UNAVAILABLE",
+                        "error_code": "LLM_UNAVAILABLE",
                     })
                     await websocket.close(code=4003)
                 return
             except RuntimeError as e:
-                logger.error("Gemini call failed (voice)", extra={"error": str(e)})
+                logger.error("LLM call failed (voice)", extra={"error": str(e)})
                 with contextlib.suppress(Exception):
                     await websocket.send_json({
                         "type": "error",
                         "message": f"AI model error: {e}",
-                        "error_code": "GEMINI_ERROR",
+                        "error_code": "LLM_ERROR",
                     })
                 return
             except Exception as e:

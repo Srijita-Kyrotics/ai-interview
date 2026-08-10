@@ -11,10 +11,14 @@ def test_run_code_requires_auth(client):
     assert res.status_code == 401
 
 
-def test_start_requires_llm_provider(client, auth_header, monkeypatch):
+def test_start_uses_mock_when_no_llm_provider_is_configured(client, auth_header, monkeypatch):
+    monkeypatch.setattr("app.config.settings.openrouter_api_key", "", raising=False)
     monkeypatch.setattr("app.config.settings.gemini_api_key", "", raising=False)
     monkeypatch.setattr("app.config.settings.openai_api_key", "", raising=False)
     monkeypatch.setattr("app.config.settings.claude_api_key", "", raising=False)
+    monkeypatch.setattr(
+        "app.ai_interviewer.llm_providers._registry", None, raising=False
+    )
 
     create_res = client.post(
         "/ai-interview/create-session",
@@ -28,8 +32,9 @@ def test_start_requires_llm_provider(client, auth_header, monkeypatch):
         headers=auth_header(),
         json={"session_id": session_id, "role": "Software Engineer", "company": "Acme", "max_questions": 2},
     )
-    assert res.status_code == 503
-    assert "LLM API key" in res.json()["detail"]
+    assert res.status_code == 200
+    assert res.json()["status"] == "ready"
+    assert res.json()["interview_session_id"]
 
 
 def test_run_code_python_stdin_and_stdout(client, auth_header):
