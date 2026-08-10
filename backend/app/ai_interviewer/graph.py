@@ -63,6 +63,7 @@ manual step-by-step invocation via the WebSocket handler.
 
 from __future__ import annotations
 
+import asyncio
 import logging
 import time
 from typing import Literal
@@ -72,6 +73,7 @@ from langgraph.graph import END, START, StateGraph
 
 from app.ai_interviewer.nodes import (
     answer_analyzer_node,
+    claim_extractor_node,
     claim_verifier_node,
     closing_node,
     follow_up_generator_node,
@@ -348,24 +350,39 @@ class InterviewGraphRunner:
         logger.info("Restored interview runner from checkpoint", extra={"session": session_id})
         return runner
 
-    async def initialize(self) -> str:
+    async def initialize(self, progress_cb=None) -> str:
         """
-        Run the setup phase: resume_analyzer → interview_planner → opening.
+        Run the setup phase: resume_analyzer → (claim_extractor ∥ interview_planner) → opening.
         Returns the opening message text.
+
+        The claim extractor and interview planner both depend only on the
+        resume analysis, so they run concurrently — this cuts one full LLM
+        round-trip (~2-6s) out of the time before Obi starts speaking.
         """
         logger.info("Initializing interview graph", extra={"session": self.session_id})
 
+        async def _emit(status: str) -> None:
+            if progress_cb:
+                await progress_cb(status)
+
         # Run resume analyzer
+        await _emit("Analyzing your resume…")
         result = await resume_analyzer_node(self.state)
         self.state.update(result)
         self._checkpoint()
 
-        # Run interview planner
-        result = await interview_planner_node(self.state)
-        self.state.update(result)
+        # Claim extraction and interview planning run concurrently
+        await _emit("Planning the interview…")
+        claim_result, plan_result = await asyncio.gather(
+            claim_extractor_node(self.state),
+            interview_planner_node(self.state),
+        )
+        self.state.update(claim_result)
+        self.state.update(plan_result)
         self._checkpoint()
 
         # Generate opening message
+        await _emit("Preparing your opening…")
         result = await opening_node(self.state)
         self.state.update(result)
         self._checkpoint()
@@ -424,18 +441,21 @@ class InterviewGraphRunner:
             self.state.get("conversation_transcript", [])
         ) + [transcript_entry]
 
-        # Run answer analyzer
-        eval_result = await answer_analyzer_node(self.state)
-        self.state.update(eval_result)
-
-        # ── Feature 1: Verify claims after each answer ────────────────────
-        claim_result = await claim_verifier_node(self.state)
-        self.state.update(claim_result)
-
-        # ── Feature 7: System design evaluator (if in system design mode) ─
+        # ── Run answer analyzer + claim verifier in parallel ─────────────
+        # These LLM calls only read the answer/question and write disjoint
+        # state keys, so running them concurrently cuts per-turn latency from
+        # ~3 sequential round-trips to ~1 (the slowest of the batch).
+        analysis_coros = [
+            answer_analyzer_node(self.state),
+            claim_verifier_node(self.state),
+        ]
         if self.state.get("is_system_design_mode", False):
-            sd_result = await system_design_evaluator_node(self.state)
-            self.state.update(sd_result)
+            analysis_coros.append(system_design_evaluator_node(self.state))
+
+        results = await asyncio.gather(*analysis_coros)
+        eval_result = results[0]
+        for res in results:
+            self.state.update(res)
 
         # ── Feature 5: Track code evolution ───────────────────────────────
         if code_snapshot:

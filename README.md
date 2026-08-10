@@ -32,7 +32,7 @@ A full-stack, end-to-end mock interview platform that simulates real company hir
 - **Multi-round assessments**
   - **Aptitude** — Timed MCQ quiz (20s per question) with per-category scoring (quantitative, logical, verbal).
   - **Coding** — In-browser CodeMirror 6 code editor supporting Python, JavaScript, Java, and C++. Code is executed via the Judge0 API (with a seamless heuristic fallback if no API key is provided).
-  - **Technical & HR** — Dynamic, AI-generated interview questions powered by Google Gemini, tailored to the candidate's parsed skills and selected company.
+  - **Technical & HR** — Dynamic, AI-generated interview questions powered by the OpenRouter LLM, tailored to the candidate's parsed skills and selected company.
 
 ### AI Interviewer (LangGraph Pipeline)
 - **Structured interview pipeline** — A 10-node LangGraph state graph that autonomously conducts multi-stage interviews: resume analysis, interview planning, question generation, answer analysis, follow-up generation, stage advancement, scoring, and report generation.
@@ -132,7 +132,7 @@ AI-Interview-Coach-main/
 │   │   ├── db.py                      # PostgreSQL database layer
 │   │   ├── helpers.py                 # JWT, password hashing, utilities
 │   │   ├── resume_parser.py           # PDF/text resume parsing
-│   │   ├── interview_ws.py            # Legacy Gemini WebSocket interviewer
+│   │   ├── interview_ws.py            # Legacy WebSocket interviewer
 │   │   ├── ai_interviewer/            # NEW: LangGraph AI interviewer package
 │   │   │   ├── __init__.py
 │   │   │   ├── state.py               # TypedDict interview state schema
@@ -176,7 +176,7 @@ AI-Interview-Coach-main/
 │       └── components/
 │           ├── AIInterviewer.jsx       # NEW: LangGraph AI interviewer UI
 │           ├── CodeEditor.jsx          # CodeMirror 6 code editor
-│           ├── LiveInterview.jsx       # Legacy Gemini chat interviewer
+│           ├── LiveInterview.jsx       # Legacy chat interviewer
 │           ├── ChatInterview.jsx
 │           ├── AuthPage.jsx
 │           ├── Home.jsx
@@ -286,14 +286,14 @@ Copy `.env.example` to `.env` and configure:
 | Variable | Description | Default |
 |----------|-------------|---------|
 | `DATABASE_URL` | PostgreSQL connection string | `postgresql://postgres:postgres@localhost:5432/ai_interview` |
-| `GEMINI_API_KEY` | Google Gemini API key for AI questions/feedback | — |
+| `OPENROUTER_API_KEY` | OpenRouter API key (`sk-or-v1-...`) for all AI questions/feedback | — |
+| `OPENROUTER_MODEL` | OpenRouter model slug | `openai/gpt-4o-mini` |
 | `JWT_SECRET` | JWT signing secret (auto-generated if blank) | — |
 
 ### AI Interviewer — LLM
 
 | Variable | Description | Default |
 |----------|-------------|---------|
-| `AI_INTERVIEWER_GEMINI_MODEL` | Gemini model for interview intelligence | `gemini-1.5-pro` |
 | `AI_INTERVIEWER_MAX_QUESTIONS` | Max questions per interview | `12` |
 | `AI_INTERVIEWER_TEMPERATURE` | LLM temperature | `0.7` |
 | `AI_INTERVIEWER_SESSION_TTL_HOURS` | Session expiry in hours | `4` |
@@ -467,16 +467,16 @@ END
 
 | Node | Purpose | LLM Call |
 |------|---------|----------|
-| `resume_analyzer_node` | Parses resume, extracts skills, projects, red flags, and interview intelligence | Gemini (structured JSON) |
-| `interview_planner_node` | Creates multi-stage interview roadmap (warmup → technical → problem solving → behavioral) | Gemini (structured JSON) |
-| `opening_node` | Generates warm opening message with self-introduction | Gemini (structured JSON) |
-| `question_generator_node` | Generates next question based on stage, memory, previous evaluation, and resume | Gemini (structured JSON) |
-| `answer_analyzer_node` | Scores answer on 6 dimensions (technical, depth, clarity, confidence, completeness, communication) | Gemini (structured JSON) |
-| `follow_up_generator_node` | Generates targeted follow-up for shallow/vague answers with escalation levels 1-3 | Gemini (structured JSON) |
-| `stage_advance_node` | Checks if stage questions are exhausted, advances to next stage with transition message | Gemini (structured JSON) |
+| `resume_analyzer_node` | Parses resume, extracts skills, projects, red flags, and interview intelligence | LLM (structured JSON) |
+| `interview_planner_node` | Creates multi-stage interview roadmap (warmup → technical → problem solving → behavioral) | LLM (structured JSON) |
+| `opening_node` | Generates warm opening message with self-introduction | LLM (structured JSON) |
+| `question_generator_node` | Generates next question based on stage, memory, previous evaluation, and resume | LLM (structured JSON) |
+| `answer_analyzer_node` | Scores answer on 6 dimensions (technical, depth, clarity, confidence, completeness, communication) | LLM (structured JSON) |
+| `follow_up_generator_node` | Generates targeted follow-up for shallow/vague answers with escalation levels 1-3 | LLM (structured JSON) |
+| `stage_advance_node` | Checks if stage questions are exhausted, advances to next stage with transition message | LLM (structured JSON) |
 | `scoring_node` | Aggregates all evaluations into weighted FinalScores | Pure computation |
-| `report_generator_node` | Generates comprehensive hiring report with strengths, weaknesses, rationale | Gemini (structured JSON) |
-| `closing_node` | Generates professional closing message | Gemini (structured JSON) |
+| `report_generator_node` | Generates comprehensive hiring report with strengths, weaknesses, rationale | LLM (structured JSON) |
+| `closing_node` | Generates professional closing message | LLM (structured JSON) |
 
 ### State Schema (`state.py`)
 
@@ -576,7 +576,7 @@ Candidate speaks → MediaRecorder (WebM/opus)
   → Binary audio sent via WebSocket
   → Server: Deepgram STT → text transcript
   → Server: InterviewGraphRunner.process_answer(transcript, code)
-  → Server: Gemini LLM generates response
+  → Server: OpenRouter LLM generates response
   → Server: ElevenLabs TTS → audio bytes
   → Binary TTS audio sent back to client
   → Web Audio API plays response
@@ -625,7 +625,7 @@ The integrity score starts at **100**. Sessions with excessive violations are fl
 | **Frontend Framework** | React 18, Vite 6, React Router DOM 6 |
 | **Styling** | Tailwind CSS 3.4, Custom CSS (dark theme) |
 | **Code Editor** | CodeMirror 6 (Python, JS, Java, C++ support) |
-| **AI/LLM** | Google Gemini 1.5 Pro (interview), Gemini 1.5 Flash (scoring) |
+| **AI/LLM** | OpenRouter (single provider; any model slug via `OPENROUTER_MODEL`) |
 | **Voice — STT** | Deepgram Nova-3, Groq Whisper, OpenAI Whisper |
 | **Voice — TTS** | ElevenLabs Turbo v2.5, OpenAI TTS |
 | **Orchestration** | LangGraph 0.2 (10-node state graph) |
@@ -691,11 +691,11 @@ The included `nginx.conf` handles:
 
 ## Development Notes
 
-- **API Keys (Optional)** — The platform supports `GEMINI_API_KEY` for dynamic AI questions/feedback and `JUDGE0_API_KEY` for real code execution. Without these, the system falls back to static JSON questions and heuristic code validation.
+- **API Keys (Optional)** — The platform supports `OPENROUTER_API_KEY` for dynamic AI questions/feedback and `JUDGE0_API_KEY` for real code execution. Without these, the system falls back to a deterministic offline mock LLM and heuristic code validation.
 - **JWT Secret** — Set `JWT_SECRET` in `.env` for production. If blank, a random secret is auto-generated and persisted to `backend/.jwt_secret`.
 - **Database** — Users, sessions, OTPs, CAPTCHAs, and proctoring logs are stored in PostgreSQL (or SQLite in dev). Restarting does not clear data.
 - **Aptitude Bank** — Run `python backend/scripts/build_aptitude_bank.py` to regenerate the aptitude question bank.
 - **CORS** — Default allows `localhost:5173`. Restrict before public deployment.
-- **Two Interview Systems** — The legacy `LiveInterview.jsx` (simple Gemini chat) coexists with the new `AIInterviewer.jsx` (LangGraph pipeline). The `/technical` and `/hr` routes currently use the new AI Interviewer.
+- **Two Interview Systems** — The legacy `LiveInterview.jsx` (simple chat interviewer) coexists with the new `AIInterviewer.jsx` (LangGraph pipeline). The `/technical` and `/hr` routes currently use the new AI Interviewer.
 - **WebSocket Protocol** — Voice interview uses binary frames for audio and JSON text frames for control messages. The `audio_end` message optionally includes `code` and `language` fields for live coding.
 - **Rate Limiting** — DB-backed rate limiting on code execution, AI requests, OTP sends, and admin operations. Works across multiple Uvicorn workers.

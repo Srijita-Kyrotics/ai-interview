@@ -1,0 +1,40 @@
+# Dev override — hot reload without image rebuilds.
+#
+# Usage:
+#   docker compose -f docker-compose.yml -f docker-compose.dev.yml up -d --build
+#
+#   - backend  : bind-mounts ./backend and runs uvicorn --reload (auto-restarts
+#                on every source change)
+#   - frontend-dev : Vite dev server on http://localhost:5173 (HMR), proxying
+#                API/WebSocket calls to the backend. The production nginx
+#                container on :80 stays running and serves the last built dist.
+#
+# To keep only the production stack running afterwards:
+#   docker compose -f docker-compose.yml -f docker-compose.dev.yml down
+#   docker compose up -d
+
+services:
+  backend:
+    volumes:
+      - ./backend:/app
+    command: uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
+    environment:
+      PYTHONUNBUFFERED: 1
+
+  frontend-dev:
+    image: node:20-slim
+    working_dir: /app
+    command: sh -c "npm install && npm run dev -- --host 0.0.0.0 --port 5173"
+    environment:
+      VITE_BACKEND_PROXY: http://backend:8000
+    ports:
+      - "5173:5173"
+    volumes:
+      - ./frontend:/app
+      - frontend_node_modules:/app/node_modules
+    depends_on:
+      - backend
+    restart: unless-stopped
+
+volumes:
+  frontend_node_modules:

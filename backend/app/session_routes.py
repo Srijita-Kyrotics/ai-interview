@@ -5,7 +5,6 @@ import re
 import uuid
 from typing import Any
 
-import google.generativeai as genai
 import httpx
 from fastapi import APIRouter, Depends, File, HTTPException, UploadFile
 from pydantic import BaseModel
@@ -152,19 +151,6 @@ class UploadQuestionsRequest(BaseModel):
 def score_open_round(answers: list[dict[str, Any]], round_key: str) -> int:
     if not answers:
         return 0
-
-    gemini_key = settings.gemini_api_key
-    if gemini_key:
-        try:
-            genai.configure(api_key=gemini_key)
-            model = genai.GenerativeModel(settings.gemini_model)
-            prompt = f"Score the following {round_key} interview answers out of 100 based on quality, clarity, and depth. Answers: {json.dumps(answers)}. Only return the integer score from 0 to 100."
-            response = model.generate_content(prompt)
-            match = re.search(r'\b(100|\d{1,2})\b', response.text)
-            if match:
-                return int(match.group(1))
-        except Exception:
-            pass
 
     total_score = 0
     for ans in answers:
@@ -659,7 +645,7 @@ def get_proctoring_report(session_id: str, user: dict[str, Any] = Depends(get_cu
 
 
 @router.post("/ai/questions")
-def generate_ai_questions(payload: AIQuestionsRequest, user: dict[str, Any] = Depends(require_candidate)):
+async def generate_ai_questions(payload: AIQuestionsRequest, user: dict[str, Any] = Depends(require_candidate)):
     if not _check_rate_limit(f"ai:{user['email']}", settings.ai_rate_limit, settings.ai_rate_window):
         raise HTTPException(status_code=429, detail="Too many AI requests. Please wait.")
     state = load_session(payload.session_id)
@@ -668,34 +654,47 @@ def generate_ai_questions(payload: AIQuestionsRequest, user: dict[str, Any] = De
     if state.get("user_id", "") != user["email"] and user["role"] not in ("recruiter", "admin"):
         raise HTTPException(status_code=403, detail="Not your session")
 
-    gemini_key = settings.gemini_api_key
-    if not gemini_key:
-        return {"error": "Gemini API key not configured"}
-
-    genai.configure(api_key=gemini_key)
-    model = genai.GenerativeModel(settings.gemini_model)
-
     resume = state.get("resume", {})
     skills = sanitize_for_ai(", ".join(resume.get("skills", [])))
     company = sanitize_for_ai(state.get("selectedCompany", "Unknown"))
+    question_count = max(1, min(int(payload.count), 20))
 
-    prompt = f"Generate {payload.count} {payload.round_type} interview questions for a candidate applying to {company} with skills in {skills}. Respond with a JSON array of objects, each containing a 'question' string and an 'id' integer."
+    # Serve repeat requests instantly from the DB-backed cache.
+    cache_key = f"ai_q:{payload.round_type}:{company}:{skills[:80]}:{question_count}"
+    cached = cache_get(cache_key)
+    if cached is not None:
+        return {"questions": cached, "cached": True}
+
+    prompt = (
+        f"Generate exactly {question_count} {payload.round_type} interview questions "
+        f"for a candidate applying to {company} with skills in {skills}. "
+        "Respond with a JSON array of objects, each containing a 'question' string and an 'id' integer."
+    )
 
     try:
-        response = model.generate_content(prompt)
-        text = response.text
-        start = text.find('[')
-        end = text.rfind(']') + 1
-        if start != -1 and end != 0:
-            questions = json.loads(text[start:end])
-            return {"questions": questions}
-        return {"error": "Failed to parse AI response"}
+        from app.ai_interviewer.llm_providers import get_llm_registry
+
+        result = await get_llm_registry().generate_json(
+            "You are an expert technical interviewer. Respond with valid JSON only.",
+            prompt,
+        )
+        if isinstance(result, dict) and "questions" in result:
+            questions = result["questions"]
+        elif isinstance(result, list):
+            questions = result
+        elif isinstance(result, dict) and any(isinstance(v, list) for v in result.values()):
+            questions = next(v for v in result.values() if isinstance(v, list))
+        else:
+            questions = []
+        if questions:
+            cache_set(cache_key, questions, ttl=3600)
+        return {"questions": questions}
     except Exception as e:
         return {"error": str(e)}
 
 
 @router.post("/ai/feedback")
-def generate_ai_feedback(payload: AIFeedbackRequest, user: dict[str, Any] = Depends(require_candidate)):
+async def generate_ai_feedback(payload: AIFeedbackRequest, user: dict[str, Any] = Depends(require_candidate)):
     if not _check_rate_limit(f"ai:{user['email']}", settings.ai_rate_limit, settings.ai_rate_window):
         raise HTTPException(status_code=429, detail="Too many AI requests. Please wait.")
     state = load_session(payload.session_id)
@@ -703,29 +702,21 @@ def generate_ai_feedback(payload: AIFeedbackRequest, user: dict[str, Any] = Depe
         return {"error": "No active session"}
     if state.get("user_id", "") != user["email"] and user["role"] not in ("recruiter", "admin"):
         raise HTTPException(status_code=403, detail="Not your session")
-
-    gemini_key = settings.gemini_api_key
-    if not gemini_key:
-        return {"error": "Gemini API key not configured"}
-
-    genai.configure(api_key=gemini_key)
-    model = genai.GenerativeModel(settings.gemini_model)
 
     answers = state.get("answers", {})
     sanitized_answers = {k: sanitize_for_ai(json.dumps(v)) for k, v in answers.items()}
     prompt = f"Review the following interview answers and provide personalised feedback. Answers: {json.dumps(sanitized_answers)}. Provide strengths, weaknesses, and 3 concrete recommendations in JSON format: {{ 'strengths': ['...'], 'weaknesses': ['...'], 'recommendations': ['...'], 'feedback': {{'technical': '...', 'hr': '...'}} }}"
 
     try:
-        response = model.generate_content(prompt)
-        text = response.text
-        start = text.find('{')
-        end = text.rfind('}') + 1
-        if start != -1 and end != 0:
-            feedback = json.loads(text[start:end])
-            state["aiFeedback"] = feedback
-            save_session(payload.session_id, state)
-            return {"feedback": feedback}
-        return {"error": "Failed to parse AI response"}
+        from app.ai_interviewer.llm_providers import get_llm_registry
+
+        feedback = await get_llm_registry().generate_json(
+            "You are an expert hiring manager. Respond with valid JSON only.",
+            prompt,
+        )
+        state["aiFeedback"] = feedback
+        save_session(payload.session_id, state)
+        return {"feedback": feedback}
     except Exception as e:
         return {"error": str(e)}
 

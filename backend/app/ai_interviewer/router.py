@@ -57,12 +57,12 @@ import logging
 import time
 import uuid
 
-from fastapi import APIRouter, Depends, Header, HTTPException, Query, WebSocket, WebSocketDisconnect
+from fastapi import APIRouter, Body, Depends, Header, HTTPException, Query, WebSocket, WebSocketDisconnect
 from pydantic import BaseModel
 from starlette.websockets import WebSocketState
 
 from app.ai_interviewer.graph import InterviewGraphRunner
-from app.ai_interviewer.nodes import GeminiUnavailableError
+from app.ai_interviewer.nodes import LLMUnavailableError
 from app.ai_interviewer.state import make_initial_state
 from app.ai_interviewer.state_store import InterviewStateStore, get_state_store
 from app.ai_interviewer.voice import VoicePipeline
@@ -146,17 +146,29 @@ Education: Bachelor of Technology in Computer Science
 Certifications: Data Structures and Algorithms, System Design"""
 
 
+class CreateSessionRequest(BaseModel):
+    resume_text: str = ""
+
+
 @router.post("/create-session", response_model=dict)
-async def create_ai_interview_session(user: dict = Depends(get_current_user)):
+async def create_ai_interview_session(
+    request: CreateSessionRequest = Body(default=CreateSessionRequest()),
+    user: dict = Depends(get_current_user),
+):
     """
     Create a platform session for the direct AI interview flow.
 
     Lets a candidate jump straight into the Obi interview without a prior
-    resume upload. The session is seeded with a generic resume so the
-    interview pipeline always has resume context to work from.
+    resume upload. If `resume_text` is provided it is parsed and used to
+    personalize the interview; otherwise the session is seeded with a
+    generic resume so the pipeline always has resume context to work from.
     """
     session_id = str(uuid.uuid4())
-    resume = parse_resume_text(DEFAULT_AI_INTERVIEW_RESUME, "direct-ai-interview.txt")
+    resume_text = request.resume_text.strip()
+    if resume_text:
+        resume = parse_resume_text(resume_text, "pasted-resume.txt")
+    else:
+        resume = parse_resume_text(DEFAULT_AI_INTERVIEW_RESUME, "direct-ai-interview.txt")
     user_id = user.get("email", "")
     state = {
         "sessionId": session_id,
@@ -554,7 +566,9 @@ async def ai_interview_websocket(
         await websocket.send_json({"type": "thinking", "message": "Analyzing your resume..."})
 
         if not runner._initialized:
-            opening_text = await runner.initialize()
+            async def _progress(status: str) -> None:
+                await websocket.send_json({"type": "status", "message": status})
+            opening_text = await runner.initialize(progress_cb=_progress)
             await websocket.send_json({
                 "type": "session_ready",
                 "opening_text": opening_text,
@@ -788,16 +802,16 @@ async def ai_interview_websocket(
                     break
                 continue
 
-    except GeminiUnavailableError as e:
+    except LLMUnavailableError as e:
         logger.error(
-            "Gemini API not configured",
+            "LLM API not configured",
             extra={"error": str(e), "session": interview_session_id}
         )
         try:
             await websocket.send_json({
                 "type": "error",
                 "message": str(e),
-                "error_code": "GEMINI_UNAVAILABLE",
+                "error_code": "LLM_UNAVAILABLE",
             })
             await websocket.close(code=4003)
         except Exception:
@@ -903,7 +917,9 @@ async def voice_interview_websocket(
     try:
         # Initialize if needed
         if not runner._initialized:
-            opening_text = await runner.initialize()
+            async def _progress(status: str) -> None:
+                await websocket.send_json({"type": "status", "message": status})
+            opening_text = await runner.initialize(progress_cb=_progress)
             opening_audio = await pipeline.tts.synthesize(opening_text)
             await websocket.send_json({
                 "type": "session_ready",
@@ -977,14 +993,18 @@ async def voice_interview_websocket(
                     continue
 
                 if msg_type == "audio_end":
-                    # Process buffered audio
-                    if not audio_buffer:
+                    browser_transcript = (msg.get("transcript") or "").strip()
+                    if not audio_buffer and not browser_transcript:
                         continue
 
                     await websocket.send_json({"type": "processing"})
 
-                    # STT
-                    transcript = await pipeline.audio_to_text(bytes(audio_buffer))
+                    # A transcript from the browser SpeechRecognition fallback
+                    # takes priority (works with no cloud STT key). Otherwise
+                    # run the configured STT provider on the buffered audio.
+                    transcript = browser_transcript
+                    if not transcript and audio_buffer:
+                        transcript = (await pipeline.audio_to_text(bytes(audio_buffer))) or ""
                     audio_buffer.clear()
 
                     if not transcript:
@@ -1044,13 +1064,13 @@ async def voice_interview_websocket(
                     })
                     break
 
-    except GeminiUnavailableError as e:
-        logger.error("Gemini API not configured (voice)", extra={"error": str(e)})
+    except LLMUnavailableError as e:
+        logger.error("LLM API not configured (voice)", extra={"error": str(e)})
         try:
             await websocket.send_json({
                 "type": "error",
                 "message": str(e),
-                "error_code": "GEMINI_UNAVAILABLE",
+                "error_code": "LLM_UNAVAILABLE",
             })
             await websocket.close(code=4003)
         except Exception:

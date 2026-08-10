@@ -37,10 +37,9 @@ class Settings(BaseSettings):
     smtp_from: str = Field("", alias="SMTP_FROM")
 
     # ── External APIs ─────────────────────────────────────────────────────
-    gemini_api_key: str = Field("", alias="GEMINI_API_KEY")
-    gemini_model: str = Field("gemini-1.5-flash", alias="GEMINI_MODEL")
     openai_api_key: str = Field("", alias="OPENAI_API_KEY")
-    claude_api_key: str = Field("", alias="CLAUDE_API_KEY")
+    openrouter_api_key: str = Field("", alias="OPENROUTER_API_KEY")
+    openrouter_model: str = Field("openai/gpt-4o-mini", alias="OPENROUTER_MODEL")
     judge0_api_key: str = Field("", alias="JUDGE0_API_KEY")
     judge0_host: str = Field("judge0-ce.p.rapidapi.com", alias="JUDGE0_HOST")
     judge0_timeout: float = Field(10.0, alias="JUDGE0_TIMEOUT")
@@ -57,7 +56,6 @@ class Settings(BaseSettings):
 
     # ── AI Interviewer: LangGraph ─────────────────────────────────────────
     ai_interviewer_max_questions: int = Field(12, alias="AI_INTERVIEWER_MAX_QUESTIONS")
-    ai_interviewer_gemini_model: str = Field("gemini-1.5-pro", alias="AI_INTERVIEWER_GEMINI_MODEL")
     ai_interviewer_temperature: float = Field(0.7, alias="AI_INTERVIEWER_TEMPERATURE")
     ai_interviewer_session_ttl_hours: int = Field(4, alias="AI_INTERVIEWER_SESSION_TTL_HOURS")
 

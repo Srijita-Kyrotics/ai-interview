@@ -9,6 +9,7 @@ import {
 import { useAssessmentProctoring } from '../proctoring/useAssessmentProctoring';
 import { ProctoringModal, ProctoringPanel } from '../proctoring/ProctoringUI';
 import { CodeEditor } from './CodeEditor';
+import ObiAvatar from './ObiAvatar';
 import { clearStoredUser } from '../api';
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -432,7 +433,9 @@ export default function AIInterviewer({ sessionId, token, role, company, resume,
   const [answerRecorded, setAnswerRecorded] = useState(false);
   const [subtitleText, setSubtitleText] = useState('');
   const [lipLevel, setLipLevel] = useState(0);
+  const [audioLevel, setAudioLevel] = useState(0);
   const lipSyncIntervalRef = useRef(null);
+  const audioMonitorRef = useRef(null);
 
   const openingIntro = "Hi, I'm Obi, your AI interviewer. I've reviewed your resume, and today we'll discuss your experience, projects, and technical skills. Let's get started.";
 
@@ -449,13 +452,13 @@ export default function AIInterviewer({ sessionId, token, role, company, resume,
   const [elapsedSec, setElapsedSec] = useState(0);
   const [lastCandidateAnswer, setLastCandidateAnswer] = useState('');
   const [resumeSummaryOpen, setResumeSummaryOpen] = useState(false);
+  const [resumeText, setResumeText] = useState('');
 
   const startedRef = useRef(false);
   const fallbackAudioTimerRef = useRef(null);
   const answerRecordedTimerRef = useRef(null);
   const lastAudioTextRef = useRef('');
   const lastAudioPlayedRef = useRef(false);
-  const requestingStartRef = useRef(false);
 
   // ── Code Editor State ──────────────────────────────────────────────
   const [code, setCode] = useState('');
@@ -468,6 +471,8 @@ export default function AIInterviewer({ sessionId, token, role, company, resume,
   const [codingProblem, setCodingProblem] = useState(null); // Feature 9: live coding round
   const languageRef = useRef('python');
   useEffect(() => { languageRef.current = language; }, [language]);
+  const codeRef = useRef('');
+  useEffect(() => { codeRef.current = code; }, [code]);
 
   const formatElapsed = (sec) => {
     const m = Math.floor(sec / 60).toString().padStart(2, '0');
@@ -495,8 +500,15 @@ export default function AIInterviewer({ sessionId, token, role, company, resume,
   const [userStream, setUserStream] = useState(null);
   const [screenStream, setScreenStream] = useState(null);
 
+  // Video proctoring is DISABLED for now (we only want to validate voice +
+  // interview flow). To re-enable later: set to `true`, request camera +
+  // screen streams, and assign them to `webcamStream`/`screenStream` below.
+  const proctoringEnabled = false;
+
   const proctor = useAssessmentProctoring({
-    active: phase === 'interviewing' || phase === 'opening' || phase === 'initializing',
+    active: proctoringEnabled && (
+      phase === 'interviewing' || phase === 'opening' || phase === 'initializing'
+    ),
     round: 'technical',
     sessionId,
     navigate,
@@ -524,6 +536,11 @@ export default function AIInterviewer({ sessionId, token, role, company, resume,
   const tokenRefreshRef = useRef(null);
   const messagesEndRef = useRef(null);
   const textInputRef = useRef(null);
+  const speechRecognitionRef = useRef(null);
+  const browserTranscriptRef = useRef('');
+  const pendingAudioRef = useRef(null);
+  const audioEndSentRef = useRef(false);
+  const audioEndTimerRef = useRef(null);
 
   useEffect(() => { phaseRef.current = phase }, [phase]);
   useEffect(() => { reconnectAttemptsRef.current = reconnectAttempts }, [reconnectAttempts]);
@@ -568,6 +585,36 @@ export default function AIInterviewer({ sessionId, token, role, company, resume,
       setLipLevel(0.25 + Math.random() * 0.5);
     }, 70);
   }, [clearLipSync]);
+
+  // ── Real-audio level monitor ──────────────────────────────────────────
+  // When the backend sends TTS audio we attach an AnalyserNode so the
+  // avatar mouth + waveform move with the actual audio being played
+  // (this replaces the random lip-sync during real TTS playback).
+  const stopAudioLevelMonitor = useCallback(() => {
+    if (audioMonitorRef.current) {
+      cancelAnimationFrame(audioMonitorRef.current);
+      audioMonitorRef.current = null;
+    }
+    setAudioLevel(0);
+  }, []);
+
+  const startAudioLevelMonitor = useCallback((analyser) => {
+    stopAudioLevelMonitor();
+    const data = new Uint8Array(analyser.frequencyBinCount);
+    let last = 0;
+    const tick = () => {
+      analyser.getByteFrequencyData(data);
+      let sum = 0;
+      for (let i = 0; i < data.length; i += 1) sum += data[i];
+      const avg = sum / data.length / 255;
+      const smoothed = last + (avg - last) * 0.4;
+      last = smoothed;
+      setAudioLevel(smoothed);
+      setLipLevel(0.18 + Math.min(smoothed * 3.2, 0.9));
+      audioMonitorRef.current = requestAnimationFrame(tick);
+    };
+    tick();
+  }, [stopAudioLevelMonitor]);
 
   useEffect(() => {
     const checkResumable = async () => {
@@ -651,24 +698,28 @@ export default function AIInterviewer({ sessionId, token, role, company, resume,
       setIsSpeaking(true);
       startLipSync();
       utterance.onend = () => {
+        stopAudioLevelMonitor();
         setIsSpeaking(false);
         clearLipSync();
         finishAiResponse();
       };
       utterance.onerror = () => {
+        stopAudioLevelMonitor();
         setIsSpeaking(false);
         clearLipSync();
         finishAiResponse();
       };
       window.speechSynthesis.speak(utterance);
     } catch {
+      stopAudioLevelMonitor();
       setIsSpeaking(false);
       clearLipSync();
       finishAiResponse();
     }
-  }, [finishAiResponse, startLipSync, clearLipSync]);
+  }, [finishAiResponse, startLipSync, clearLipSync, stopAudioLevelMonitor]);
 
   const queueAiMessage = useCallback((message, options = {}) => {
+    stopAudioLevelMonitor();
     setIsThinking(false);
     setIsSpeaking(false);
     setIsProcessing(false);
@@ -681,7 +732,6 @@ export default function AIInterviewer({ sessionId, token, role, company, resume,
     if (options.phase) {
       setPhase(options.phase);
     }
-
     addMessage({
       role: 'interviewer',
       text: message,
@@ -697,7 +747,7 @@ export default function AIInterviewer({ sessionId, token, role, company, resume,
         speakText(message);
       }
     }, 800);
-  }, [browserTtsFallback, clearAudioFallbackTimer, speakText]);
+  }, [browserTtsFallback, clearAudioFallbackTimer, speakText, stopAudioLevelMonitor]);
 
   // ── WebSocket Message Handler ────────────────────────────────────────
   const handleWsMessage = useCallback((msg) => {
@@ -714,6 +764,12 @@ export default function AIInterviewer({ sessionId, token, role, company, resume,
         setIsThinking(false);
         setIsSpeaking(false);
         setStatusMessage('Transcribing your response…');
+        break;
+
+      case 'status':
+        if (msg.message) {
+          setStatusMessage(msg.message);
+        }
         break;
 
       case 'session_ready':
@@ -835,23 +891,28 @@ export default function AIInterviewer({ sessionId, token, role, company, resume,
       const audioData = await audioCtx.decodeAudioData(arrayBuffer);
       const source = audioCtx.createBufferSource();
       source.buffer = audioData;
-      source.connect(audioCtx.destination);
+      const analyser = audioCtx.createAnalyser();
+      analyser.fftSize = 256;
+      source.connect(analyser);
+      analyser.connect(audioCtx.destination);
       source.start(0);
       setIsSpeaking(true);
       setIsProcessing(false);
-      startLipSync();
+      startAudioLevelMonitor(analyser);
       source.onended = () => {
+        stopAudioLevelMonitor();
         setIsSpeaking(false);
         clearLipSync();
         finishAiResponse();
       };
     } catch (err) {
       console.error('[AIInterviewer] Audio playback failed', err);
+      stopAudioLevelMonitor();
       setIsSpeaking(false);
       clearLipSync();
       finishAiResponse();
     }
-  }, [finishAiResponse, startLipSync, clearLipSync, clearAudioFallbackTimer]);
+  }, [finishAiResponse, startLipSync, clearLipSync, clearAudioFallbackTimer, startAudioLevelMonitor, stopAudioLevelMonitor]);
 
   // ── P3: Auto-reconnect on disconnect ────────────────────────────────
   const reconnectWs = useCallback(() => {
@@ -910,12 +971,35 @@ export default function AIInterviewer({ sessionId, token, role, company, resume,
 
     try {
       const shouldResume = resumeExisting && Boolean(resumableSession);
+      let activeSessionId = sessionId;
+
+      if (!shouldResume) {
+        const pastedResume = resumeText.trim();
+        if (pastedResume) {
+          // Seed a fresh session with the pasted resume so Obi can
+          // personalize questions to the candidate's actual background.
+          const createRes = await fetch(`${API_BASE}/ai-interview/create-session`, {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              Authorization: `Bearer ${token}`,
+            },
+            body: JSON.stringify({ resume_text: pastedResume }),
+          });
+          if (!createRes.ok) {
+            throw new Error('Failed to create interview session');
+          }
+          const createData = await createRes.json();
+          activeSessionId = createData.session_id;
+        }
+      }
+
       const endpoint = shouldResume ? '/ai-interview/resume' : '/ai-interview/start';
       const url = `${API_BASE}${endpoint}`;
       const body = shouldResume
-        ? JSON.stringify({ interview_session_id: resumableSession, session_id: sessionId })
+        ? JSON.stringify({ interview_session_id: resumableSession, session_id: activeSessionId })
         : JSON.stringify({
-            session_id: sessionId,
+            session_id: activeSessionId,
             role: role || 'Software Engineer',
             company: company || 'the company',
             max_questions: 12,
@@ -942,7 +1026,7 @@ export default function AIInterviewer({ sessionId, token, role, company, resume,
         setResumableSession(ivSessionId);
       }
 
-      const wsUrl = `${getWsBase()}/ai-interview/ws/voice?token=${token}&interview_session_id=${ivSessionId}&session_id=${sessionId}`;
+      const wsUrl = `${getWsBase()}/ai-interview/ws/voice?token=${token}&interview_session_id=${ivSessionId}&session_id=${activeSessionId}`;
       const ws = new WebSocket(wsUrl);
       wsRef.current = ws;
       ws.binaryType = 'arraybuffer';
@@ -984,22 +1068,20 @@ export default function AIInterviewer({ sessionId, token, role, company, resume,
       setError(err.message);
       setPhase('error');
     }
-  }, [sessionId, token, role, company, voiceMode]);
+  }, [sessionId, token, role, company, voiceMode, resumeText, resumableSession]);
 
-  // ── Auto-start on idle ───────────────────────────────────────────────
-  useEffect(() => {
-    if (phase !== 'idle' || requestingStartRef.current) return;
-    requestingStartRef.current = true;
-    requestMicPermission().then((allowed) => {
-      if (allowed) {
-        startInterview().finally(() => {
-          requestingStartRef.current = false;
-        });
-      } else {
-        requestingStartRef.current = false;
-      }
-    });
-  }, [phase, requestMicPermission, startInterview]);
+  // ── Explicit start (Begin button) ────────────────────────────────────
+  // The interview only starts on user action — no surprise mic/camera
+  // requests on page load.
+  const beginInterview = useCallback(async (resumeExisting = true) => {
+    const allowed = await requestMicPermission();
+    if (!allowed) {
+      setError('Microphone permission is required to start the voice interview.');
+      setPhase('idle');
+      return;
+    }
+    startInterview(resumeExisting);
+  }, [requestMicPermission, startInterview]);
 
   // ── Add Message Helper ───────────────────────────────────────────────
   const addMessage = (msg) => {
@@ -1058,12 +1140,61 @@ export default function AIInterviewer({ sessionId, token, role, company, resume,
   }, [code, language, stdin, token, isRunning]);
 
   // ── Voice Recording ──────────────────────────────────────────────────
+  // Sends `audio_end` with the browser-transcribed text when available, so
+  // the backend can skip cloud STT (no API key required). If the browser
+  // SpeechRecognition API is unavailable or returns nothing, the raw audio
+  // bytes are still sent for the configured STT provider.
+  const sendAudioEnd = useCallback((transcript) => {
+    if (audioEndSentRef.current) return;
+    audioEndSentRef.current = true;
+    clearTimeout(audioEndTimerRef.current);
+    const ws = wsRef.current;
+    if (!ws || ws.readyState !== WebSocket.OPEN) return;
+    if (pendingAudioRef.current) ws.send(pendingAudioRef.current);
+    ws.send(JSON.stringify({
+      type: 'audio_end',
+      code: codeRef.current || undefined,
+      language: codeRef.current ? languageRef.current : undefined,
+      transcript: (transcript || browserTranscriptRef.current || '').trim(),
+    }));
+    setIsThinking(true);
+  }, []);
+
   const startRecording = useCallback(async () => {
     try {
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
       const recorder = new MediaRecorder(stream, { mimeType: 'audio/webm;codecs=opus' });
       mediaRecorderRef.current = recorder;
       audioChunksRef.current = [];
+      browserTranscriptRef.current = '';
+      audioEndSentRef.current = false;
+      pendingAudioRef.current = null;
+
+      const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+      if (SR) {
+        const recognition = new SR();
+        speechRecognitionRef.current = recognition;
+        recognition.lang = 'en-US';
+        recognition.continuous = true;
+        recognition.interimResults = false;
+        recognition.maxAlternatives = 1;
+        recognition.onresult = (event) => {
+          const parts = [];
+          for (let i = 0; i < event.results.length; i += 1) {
+            if (event.results[i].isFinal) parts.push(event.results[i][0].transcript);
+          }
+          if (parts.length) browserTranscriptRef.current = parts.join(' ').trim();
+        };
+        recognition.onerror = (event) => {
+          console.warn('[AIInterviewer] Browser STT error:', event.error);
+        };
+        recognition.onend = () => {
+          // Only fire once the mic has actually been released.
+          if (!audioEndSentRef.current && mediaRecorderRef.current?.state !== 'recording') {
+            sendAudioEnd();
+          }
+        };
+      }
 
       recorder.ondataavailable = (e) => {
         if (e.data.size > 0) audioChunksRef.current.push(e.data);
@@ -1071,27 +1202,30 @@ export default function AIInterviewer({ sessionId, token, role, company, resume,
 
       recorder.onstop = async () => {
         const blob = new Blob(audioChunksRef.current, { type: 'audio/webm' });
-        const arrayBuffer = await blob.arrayBuffer();
-        const ws = wsRef.current;
-        if (ws && ws.readyState === WebSocket.OPEN) {
-          ws.send(arrayBuffer);
-          ws.send(JSON.stringify({
-            type: 'audio_end',
-            code: code || undefined,
-            language: code ? language : undefined,
-          }));
-          setIsThinking(true);
+        pendingAudioRef.current = await blob.arrayBuffer();
+        const sr = speechRecognitionRef.current;
+        if (sr) {
+          try { sr.stop(); } catch (err) { /* already stopped */ }
+          // Safety net: never block the answer on the browser STT.
+          audioEndTimerRef.current = setTimeout(() => {
+            if (!audioEndSentRef.current) sendAudioEnd();
+          }, 3000);
+        } else {
+          sendAudioEnd();
         }
         stream.getTracks().forEach(t => t.stop());
       };
 
       recorder.start(250); // collect data every 250ms
+      if (speechRecognitionRef.current) {
+        try { speechRecognitionRef.current.start(); } catch (err) { /* already started */ }
+      }
       setIsRecording(true);
     } catch (err) {
       console.error('[AIInterviewer] Microphone access failed', err);
       setError('Microphone access denied. Please allow mic access and try again.');
     }
-  }, []);
+  }, [sendAudioEnd]);
 
   const stopRecording = useCallback(() => {
     if (mediaRecorderRef.current && mediaRecorderRef.current.state === 'recording') {
@@ -1121,7 +1255,9 @@ export default function AIInterviewer({ sessionId, token, role, company, resume,
       audioContextRef.current?.close();
       clearTimeout(reconnectTimerRef.current);
       clearTimeout(fallbackTtsTimeoutRef.current);
+      clearTimeout(audioEndTimerRef.current);
       clearInterval(tokenRefreshRef.current);
+      try { speechRecognitionRef.current?.stop(); } catch (err) { /* ignore */ }
     };
   }, []);
 
@@ -1210,17 +1346,28 @@ export default function AIInterviewer({ sessionId, token, role, company, resume,
             </div>
           )}
 
+          <div className="aii-start-card__resume">
+            <label htmlFor="aii-resume-text">Paste your resume (optional)</label>
+            <textarea
+              id="aii-resume-text"
+              value={resumeText}
+              onChange={(e) => setResumeText(e.target.value)}
+              placeholder="Paste your resume text here so Obi can personalize questions to your background…"
+              rows={5}
+            />
+          </div>
+
           {resumableSession && (
             <button
               className="aii-start-btn aii-start-btn--ghost"
-              onClick={() => startInterview(true)}
+              onClick={() => beginInterview(true)}
             >
               <span>Resume Interview</span>
               <ArrowRight size="18" />
             </button>
           )}
 
-          <button className="aii-start-btn" onClick={() => startInterview(false)}>
+          <button className="aii-start-btn" onClick={() => beginInterview(false)}>
             <Mic size="18" />
             <span>{resumableSession ? 'Start New Interview' : 'Begin Interview'}</span>
             <ArrowRight size="18" />
@@ -1253,22 +1400,32 @@ export default function AIInterviewer({ sessionId, token, role, company, resume,
   }
 
   // ── Interview Room ────────────────────────────────────────────────────
+  const avatarState = isSpeaking
+    ? 'speaking'
+    : isThinking || isProcessing
+      ? 'thinking'
+      : isRecording
+        ? 'listening'
+        : reconnectAttempts > 0
+          ? 'error'
+          : phase === 'opening' || phase === 'initializing'
+            ? 'connecting'
+            : 'idle';
+
+  const stageStatusText =
+    phase === 'initializing' || phase === 'opening' ? statusMessage : '';
+
   return (
-    <div className="aii-container aii-container--active">
+    <div className="aii-container aii-container--active aii-room">
       <ProctoringModal modal={proctor.modal} onClose={proctor.dismissModal} />
       {/* Header */}
-      <div className="aii-header">
+      <div className="aii-header aii-room__header">
         <div className="aii-header__interviewer">
-          <div className="aii-avatar">
-            <span>O</span>
-            {(phase === 'opening' || phase === 'initializing') && (
-              <span className="aii-avatar__pulse" />
-            )}
-          </div>
+          <ObiAvatar compact state={avatarState} lipLevel={lipLevel} audioLevel={audioLevel} />
           <div>
             <div className="aii-header__name">Obi</div>
             <div className="aii-header__subrow">
-              <span className="aii-header__title">Senior Engineer · AI Interviewer</span>
+              <span className="aii-header__title">AI Technical Interviewer</span>
               <LiveStatusPill
                 isRecording={isRecording}
                 isSpeaking={isSpeaking}
@@ -1277,7 +1434,6 @@ export default function AIInterviewer({ sessionId, token, role, company, resume,
                 isConnecting={phase === 'opening' || phase === 'initializing'}
               />
             </div>
-            <div className="aii-header__status-message">{statusMessage}</div>
           </div>
         </div>
 
@@ -1285,7 +1441,7 @@ export default function AIInterviewer({ sessionId, token, role, company, resume,
           <div className="aii-header__stats">
             <div className="aii-stat">
               <Clock size="14" />
-              <span>{formatElapsed(elapsedSec)}</span>
+              <span>Interview · {formatElapsed(elapsedSec)}</span>
             </div>
             <div className="aii-stat">
               <ListChecks size="14" />
@@ -1302,22 +1458,8 @@ export default function AIInterviewer({ sessionId, token, role, company, resume,
             disabled={phase !== 'interviewing'}
             title="End Interview"
           >
-            <XCircle size="14" /> End
+            <XCircle size="14" /> End Interview
           </button>
-        </div>
-      </div>
-
-      {/* Interview Room Hero */}
-      <div className="aii-hero-panel">
-        <div className="aii-avatar-stage">
-          <div className={`aii-avatar aii-avatar--hero ${isSpeaking ? 'aii-avatar--speaking' : isThinking ? 'aii-avatar--thinking' : isRecording ? 'aii-avatar--listening' : ''}`}>
-            <span>O</span>
-            <div className="aii-avatar__mouth" style={{ transform: `scaleY(${0.85 + lipLevel})` }} />
-          </div>
-          <div className="aii-subtitle-card">
-            <div className="aii-subtitle-card__label">Live subtitle</div>
-            <p className="aii-subtitle-card__text">{subtitleText || 'Obi will speak here once the interview begins.'}</p>
-          </div>
         </div>
       </div>
 
@@ -1330,153 +1472,162 @@ export default function AIInterviewer({ sessionId, token, role, company, resume,
         />
       )}
 
-      {/* Tab Bar */}
-      <div className="aii-tabs" role="tablist">
-        <button
-          role="tab"
-          aria-selected={activeTab === 'chat'}
-          className={`aii-tab-btn ${activeTab === 'chat' ? 'aii-tab-btn--active' : ''}`}
-          onClick={() => setActiveTab('chat')}
-        >
-          <MessageSquare size="14" />
-          Chat
-        </button>
-        <button
-          role="tab"
-          aria-selected={activeTab === 'code'}
-          className={`aii-tab-btn ${activeTab === 'code' ? 'aii-tab-btn--active' : ''}`}
-          onClick={() => setActiveTab('code')}
-        >
-          <Code2 size="14" />
-          Code
-        </button>
+      {/* Interview Room Stage — Obi is the main visual focus */}
+      <div className="aii-room__stage">
+        <ObiAvatar state={avatarState} lipLevel={lipLevel} audioLevel={audioLevel} statusText={stageStatusText} />
+        <div className="aii-subtitle-card">
+          <div className="aii-subtitle-card__label"><Volume2 size="12" /> Live subtitle</div>
+          <p className="aii-subtitle-card__text">{subtitleText || 'Obi will speak here once the interview begins.'}</p>
+        </div>
       </div>
 
-      {/* Chat Area */}
-      <div className={`aii-chat ${activeTab !== 'chat' ? 'aii-chat--hidden' : ''}`}>
+      {/* Session Panel: tabs + chat + code */}
+      <div className="aii-room__panel">
+        <div className="aii-tabs" role="tablist">
+          <button
+            role="tab"
+            aria-selected={activeTab === 'chat'}
+            className={`aii-tab-btn ${activeTab === 'chat' ? 'aii-tab-btn--active' : ''}`}
+            onClick={() => setActiveTab('chat')}
+          >
+            <MessageSquare size="14" />
+            Chat
+          </button>
+          <button
+            role="tab"
+            aria-selected={activeTab === 'code'}
+            className={`aii-tab-btn ${activeTab === 'code' ? 'aii-tab-btn--active' : ''}`}
+            onClick={() => setActiveTab('code')}
+          >
+            <Code2 size="14" />
+            Code
+          </button>
+        </div>
+
         {phase === 'initializing' && (
           <div className="aii-init-message">
-            <div className="aii-avatar aii-avatar--lg"><span>O</span></div>
+            <ObiAvatar compact state="connecting" />
             <div className="aii-spinner aii-spinner--sm" />
             <p>{statusMessage || 'Obi is reading your resume and preparing your interview…'}</p>
           </div>
         )}
 
-        {messages.map((msg) => (
-          <MessageBubble key={msg.id || `${msg.role}-${msg.ts}`} message={msg} />
-        ))}
+        <div className={`aii-chat ${activeTab !== 'chat' ? 'aii-chat--hidden' : ''}`}>
+          {messages.map((msg) => (
+            <MessageBubble key={msg.id || `${msg.role}-${msg.ts}`} message={msg} />
+          ))}
 
-        {isThinking && <ThinkingIndicator />}
+          {isThinking && <ThinkingIndicator />}
 
-        <div ref={messagesEndRef} />
-      </div>
-
-      {/* Code Area */}
-      {activeTab === 'code' && (
-        <div className="aii-code-area">
-          {codingProblem && (
-            <div className="aii-problem">
-              <div className="aii-problem__header">
-                <span className={`aii-problem__diff aii-problem__diff--${codingProblem.difficulty || 'medium'}`}>
-                  {codingProblem.difficulty || 'medium'}
-                </span>
-                <h3>{codingProblem.title || 'Coding Challenge'}</h3>
-                {codingProblem.topic && <span className="aii-problem__topic">{codingProblem.topic}</span>}
-              </div>
-              <p className="aii-problem__desc">{codingProblem.description}</p>
-              {(codingProblem.examples || []).length > 0 && (
-                <div className="aii-problem__examples">
-                  {(codingProblem.examples || []).map((ex, i) => (
-                    <div className="aii-problem__example" key={i}>
-                      {ex.input && <pre>Input:    {ex.input}</pre>}
-                      {ex.output && <pre>Output:   {ex.output}</pre>}
-                      {ex.explanation && <pre>Explain:  {ex.explanation}</pre>}
-                    </div>
-                  ))}
-                </div>
-              )}
-              {(codingProblem.constraints || []).length > 0 && (
-                <div className="aii-problem__constraints">
-                  {(codingProblem.constraints || []).map((c, i) => (
-                    <span key={i}>{c}</span>
-                  ))}
-                </div>
-              )}
-            </div>
-          )}
-          <div className="aii-code-toolbar">
-            <div className="aii-lang-selector">
-              {LANGUAGE_OPTIONS.map(opt => (
-                <button
-                  key={opt.key}
-                  className={`aii-lang-btn ${language === opt.key ? 'aii-lang-btn--active' : ''}`}
-                  onClick={() => setLanguage(opt.key)}
-                >
-                  {opt.label}
-                </button>
-              ))}
-            </div>
-            <span className="aii-code-hint">
-              Code written here is shared with Obi for evaluation
-            </span>
-            <button
-              className="aii-run-btn"
-              onClick={runCode}
-              disabled={isRunning || !code.trim()}
-              title="Run code and see output"
-            >
-              {isRunning ? <><Loader2 size="14" className="aii-spin" /> Running…</> : <><Play size="14" /> Run Code</>}
-            </button>
-            <button
-              className="aii-submit-code-btn"
-              onClick={() => {
-                const submission = `Here is my code solution in ${language}:\n\`\`\`${language}\n${code}\n\`\`\`\nExecution Output:\n${runOutput || '(Code executed)'}`;
-                sendAnswer(submission);
-                setActiveTab('chat');
-              }}
-              disabled={isThinking || !code.trim()}
-              title="Send this solution to Obi for evaluation"
-            >
-              <Send size="14" /> Submit to Obi
-            </button>
-          </div>
-          <div className="aii-code-editor-wrap">
-            <CodeEditor
-              value={code}
-              onChange={setCode}
-              language={language}
-              questionTitle="Live Code"
-            />
-          </div>
-          <div className="aii-run-panel">
-            <div className="aii-run-panel__row">
-              <input
-                className="aii-stdin-input"
-                placeholder="Optional stdin — e.g. 1 2 3"
-                value={stdin}
-                onChange={(e) => setStdin(e.target.value)}
-                disabled={isRunning}
-              />
-              {runStatus && (
-                <span
-                  className={`aii-run-status aii-run-status--${runStatus.toLowerCase().includes('successfully') ? 'good' : 'bad'}`}
-                >
-                  {runStatus.toLowerCase().includes('successfully')
-                    ? <><CheckCircle2 size="13" /> {runStatus}</>
-                    : <><AlertTriangle size="13" /> {runStatus}</>}
-                </span>
-              )}
-            </div>
-            {runOutput && (
-              <pre className="aii-run-output">{runOutput}</pre>
-            )}
-          </div>
+          <div ref={messagesEndRef} />
         </div>
-      )}
+
+        {activeTab === 'code' && (
+          <div className="aii-code-area">
+            {codingProblem && (
+              <div className="aii-problem">
+                <div className="aii-problem__header">
+                  <span className={`aii-problem__diff aii-problem__diff--${codingProblem.difficulty || 'medium'}`}>
+                    {codingProblem.difficulty || 'medium'}
+                  </span>
+                  <h3>{codingProblem.title || 'Coding Challenge'}</h3>
+                  {codingProblem.topic && <span className="aii-problem__topic">{codingProblem.topic}</span>}
+                </div>
+                <p className="aii-problem__desc">{codingProblem.description}</p>
+                {(codingProblem.examples || []).length > 0 && (
+                  <div className="aii-problem__examples">
+                    {(codingProblem.examples || []).map((ex, i) => (
+                      <div className="aii-problem__example" key={i}>
+                        {ex.input && <pre>Input:    {ex.input}</pre>}
+                        {ex.output && <pre>Output:   {ex.output}</pre>}
+                        {ex.explanation && <pre>Explain:  {ex.explanation}</pre>}
+                      </div>
+                    ))}
+                  </div>
+                )}
+                {(codingProblem.constraints || []).length > 0 && (
+                  <div className="aii-problem__constraints">
+                    {(codingProblem.constraints || []).map((c, i) => (
+                      <span key={i}>{c}</span>
+                    ))}
+                  </div>
+                )}
+              </div>
+            )}
+            <div className="aii-code-toolbar">
+              <div className="aii-lang-selector">
+                {LANGUAGE_OPTIONS.map(opt => (
+                  <button
+                    key={opt.key}
+                    className={`aii-lang-btn ${language === opt.key ? 'aii-lang-btn--active' : ''}`}
+                    onClick={() => setLanguage(opt.key)}
+                  >
+                    {opt.label}
+                  </button>
+                ))}
+              </div>
+              <span className="aii-code-hint">
+                Code written here is shared with Obi for evaluation
+              </span>
+              <button
+                className="aii-run-btn"
+                onClick={runCode}
+                disabled={isRunning || !code.trim()}
+                title="Run code and see output"
+              >
+                {isRunning ? <><Loader2 size="14" className="aii-spin" /> Running…</> : <><Play size="14" /> Run Code</>}
+              </button>
+              <button
+                className="aii-submit-code-btn"
+                onClick={() => {
+                  const submission = `Here is my code solution in ${language}:\n\`\`\`${language}\n${code}\n\`\`\`\nExecution Output:\n${runOutput || '(Code executed)'}`;
+                  sendAnswer(submission);
+                  setActiveTab('chat');
+                }}
+                disabled={isThinking || !code.trim()}
+                title="Send this solution to Obi for evaluation"
+              >
+                <Send size="14" /> Submit to Obi
+              </button>
+            </div>
+            <div className="aii-code-editor-wrap">
+              <CodeEditor
+                value={code}
+                onChange={setCode}
+                language={language}
+                questionTitle="Live Code"
+              />
+            </div>
+            <div className="aii-run-panel">
+              <div className="aii-run-panel__row">
+                <input
+                  className="aii-stdin-input"
+                  placeholder="Optional stdin — e.g. 1 2 3"
+                  value={stdin}
+                  onChange={(e) => setStdin(e.target.value)}
+                  disabled={isRunning}
+                />
+                {runStatus && (
+                  <span
+                    className={`aii-run-status aii-run-status--${runStatus.toLowerCase().includes('successfully') ? 'good' : 'bad'}`}
+                  >
+                    {runStatus.toLowerCase().includes('successfully')
+                      ? <><CheckCircle2 size="13" /> {runStatus}</>
+                      : <><AlertTriangle size="13" /> {runStatus}</>}
+                  </span>
+                )}
+              </div>
+              {runOutput && (
+                <pre className="aii-run-output">{runOutput}</pre>
+              )}
+            </div>
+          </div>
+        )}
+      </div>
 
       {/* Input Area */}
       {phase === 'interviewing' && (
-        <div className="aii-input-area">
+        <div className="aii-input-area aii-room__controls">
           <div className="aii-voice-controls">
             <div className="aii-voice-row">
               <div className="aii-mic-wrap">
@@ -1551,7 +1702,7 @@ export default function AIInterviewer({ sessionId, token, role, company, resume,
 
       {phase === 'completing' && (
         <div className="aii-completing">
-          <div className="aii-avatar aii-avatar--lg"><span>O</span></div>
+          <ObiAvatar compact state="thinking" />
           <div className="aii-spinner aii-spinner--sm" />
           <p>Generating your interview report…</p>
         </div>

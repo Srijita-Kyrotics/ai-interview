@@ -6,7 +6,6 @@ import logging
 import time
 from typing import Any
 
-import google.generativeai as genai
 from fastapi import APIRouter, Query, WebSocket, WebSocketDisconnect
 from starlette.websockets import WebSocketState
 
@@ -19,13 +18,13 @@ logger = logging.getLogger("ai_interview")
 router = APIRouter()
 
 
-def _make_gemini_chat(session_state: dict[str, Any], role_key: str):
+def _make_system_prompt(session_state: dict[str, Any], role_key: str) -> str:
     company = sanitize_for_ai(session_state.get("selectedCompany", "a tech company"))
     resume = session_state.get("resume", {})
     skills = sanitize_for_ai(", ".join(resume.get("skills", []))) or "general software engineering"
     name = resume.get("name", "the candidate")
 
-    system_instruction = (
+    return (
         f"You are Obi, a professional, friendly, and thorough AI interviewer at {company}. "
         f"You are interviewing {name} for a {role_key} role. "
         f"Their skills include: {skills}.\n\n"
@@ -51,11 +50,15 @@ def _make_gemini_chat(session_state: dict[str, Any], role_key: str):
         "and real-world architecture. Adapt depth to the candidate's level."
     )
 
-    model = genai.GenerativeModel(settings.gemini_model, system_instruction=system_instruction)
-    return model.start_chat(history=[
-        {"role": "user", "parts": ["(Interview started)"]},
-        {"role": "model", "parts": ["Begin the interview with a concise first question. Do not introduce yourself or give a robotic welcome message."]}
-    ])
+
+async def _chat_reply(system_prompt: str, history: list[dict[str, str]], user_content: str) -> str:
+    """Append a user message, call the LLM, append the reply, and return it."""
+    from app.ai_interviewer.llm_providers import get_llm_registry
+
+    history.append({"role": "user", "content": user_content})
+    reply = await get_llm_registry().generate_text(system_prompt, history)
+    history.append({"role": "assistant", "content": reply})
+    return reply
 
 
 def _save_conversation(session_id: str, conversation_log: list[dict[str, str]], round_key: str,
@@ -128,15 +131,13 @@ async def interview_websocket(
         await websocket.close(code=4003)
         return
 
-    gemini_key = settings.gemini_api_key
-    if not gemini_key:
-        await websocket.send_json({"type": "error", "message": "Gemini API key not configured"})
-        await websocket.close(code=4004)
-        return
-
-    # ── Setup Gemini ──────────────────────────────────────────────────────
-    genai.configure(api_key=gemini_key)
-    chat = _make_gemini_chat(state, round_key)
+    # ── Setup LLM ────────────────────────────────────────────────────────
+    system_prompt = _make_system_prompt(state, round_key)
+    # Seed the conversation history with the interviewer opening turn.
+    history: list[dict[str, str]] = [
+        {"role": "user", "content": "(Interview started)"},
+        {"role": "assistant", "content": "Begin the interview with a concise first question. Do not introduce yourself or give a robotic welcome message."},
+    ]
 
     # ── State ─────────────────────────────────────────────────────────────
     conversation_log: list[dict[str, str]] = []
@@ -154,10 +155,10 @@ async def interview_websocket(
     })
 
     try:
-        response = await chat.send_message_async(
-            "Introduce yourself briefly as Obi and ask your first interview question."
+        first_q = await _chat_reply(
+            system_prompt, history,
+            "Introduce yourself briefly as Obi and ask your first interview question.",
         )
-        first_q = response.text.strip()
         await websocket.send_json({
             "type": "ai_message",
             "text": first_q,
@@ -166,12 +167,12 @@ async def interview_websocket(
         conversation_log.append({"role": "interviewer", "text": first_q})
         question_count += 1
     except Exception as e:
-        logger.error("Gemini first question failed", extra={"error": str(e)})
-        error_msg = f"Gemini API failed: {e}. Please check your GEMINI_API_KEY configuration."
+        logger.error("LLM first question failed", extra={"error": str(e)})
+        error_msg = f"AI interviewer failed: {e}. Please check your OPENROUTER_API_KEY configuration."
         await websocket.send_json({
             "type": "error",
             "message": error_msg,
-            "error_code": "GEMINI_ERROR",
+            "error_code": "LLM_ERROR",
         })
         await websocket.close(code=4003)
         return
@@ -207,7 +208,7 @@ async def interview_websocket(
 
                 conversation_log.append({"role": "candidate", "text": text})
 
-                # Build context for Gemini
+                # Build context for the LLM
                 context_parts = []
                 if latest_code:
                     context_parts.append(
@@ -228,8 +229,7 @@ async def interview_websocket(
                 await websocket.send_json({"type": "thinking", "timestamp": time.time()})
 
                 try:
-                    response = await chat.send_message_async(prompt)
-                    ai_text = response.text.strip()
+                    ai_text = await _chat_reply(system_prompt, history, prompt)
                     conversation_log.append({"role": "interviewer", "text": ai_text})
                     question_count += 1
 
@@ -248,7 +248,7 @@ async def interview_websocket(
                         break
 
                 except Exception as e:
-                    logger.error("Gemini response failed", extra={"error": str(e)})
+                    logger.error("LLM response failed", extra={"error": str(e)})
                     await websocket.send_json({
                         "type": "ai_message",
                         "text": "Could you repeat that? I had a small technical issue.",
@@ -279,8 +279,7 @@ async def interview_websocket(
                 await websocket.send_json({"type": "thinking", "timestamp": time.time()})
 
                 try:
-                    response = await chat.send_message_async(review_prompt)
-                    review_text = response.text.strip()
+                    review_text = await _chat_reply(system_prompt, history, review_prompt)
                     code_review_text = review_text
                     conversation_log.append({"role": "interviewer", "text": f"[Code Review] {review_text}"})
 
@@ -290,7 +289,7 @@ async def interview_websocket(
                         "timestamp": time.time(),
                     })
                 except Exception as e:
-                    logger.error("Gemini code review failed", extra={"error": str(e)})
+                    logger.error("LLM code review failed", extra={"error": str(e)})
                     await websocket.send_json({"type": "error", "message": "Code review failed"})
                 continue
 

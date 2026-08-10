@@ -19,3 +19,5 @@ playwright-report/
 blob-report/
 .playwright/
 *.log
+docker-compose-log*.txt
+docker-config.txt

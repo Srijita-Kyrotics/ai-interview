@@ -78,22 +78,20 @@ logger = logging.getLogger("ai_interview.nodes")
 # Nodes call _call_llm_json() which routes through the provider registry.
 # The registry handles failover, retry, and circuit breaking.
 
-class GeminiUnavailableError(Exception):
+class LLMUnavailableError(Exception):
     """Raised when no LLM provider is configured or all providers are unavailable."""
     pass
 
 
 async def _call_llm_json(system: str, prompt: str) -> dict:
     """
-    Call an LLM with a JSON response, return parsed dict.
+    Call the LLM with a JSON response, return parsed dict.
 
     Routes through the provider registry which handles:
-    - Provider selection (Gemini > OpenAI > Claude)
-    - Automatic failover on errors
     - Retry with exponential backoff
     - Circuit breaker protection
 
-    Raises GeminiUnavailableError if no providers are available.
+    Raises LLMUnavailableError if no providers are available.
     Raises RuntimeError if all providers fail.
     """
     from app.ai_interviewer.llm_providers import (
@@ -105,16 +103,16 @@ async def _call_llm_json(system: str, prompt: str) -> dict:
     registry = get_llm_registry()
 
     if not registry.available_providers:
-        raise GeminiUnavailableError(
+        raise LLMUnavailableError(
             "No LLM providers are configured. "
-            "Obi requires at least one LLM API key to function. "
-            "Set GEMINI_API_KEY, OPENAI_API_KEY, or CLAUDE_API_KEY."
+            "Obi requires an LLM API key to function. "
+            "Set OPENROUTER_API_KEY in the environment."
         )
 
     try:
         return await registry.generate_json(system, prompt)
     except LLMProviderUnavailableError as e:
-        raise GeminiUnavailableError(str(e)) from e
+        raise LLMUnavailableError(str(e)) from e
     except LLMProviderError as e:
         raise RuntimeError(f"LLM call failed: {e}") from e
 
@@ -181,29 +179,6 @@ async def resume_analyzer_node(state: InterviewState) -> dict:
     updated_memory = dict(state["memory"])
     updated_memory["unresolved_claims"] = unresolved
 
-    # ── Feature 1: Extract structured resume claims ───────────────────────
-    claim_prompt = CLAIM_EXTRACTOR_PROMPT.format(
-        resume_analysis=json.dumps(result, indent=2)[:4000],
-        role=state["role"],
-    )
-    claim_result = await _call_llm_json(
-        CLAIM_EXTRACTOR_SYSTEM,
-        claim_prompt,
-    )
-
-    resume_claims: list[ResumeClaim] = []
-    for raw_claim in claim_result.get("claims", []):
-        claim_id = str(uuid.uuid4())[:8]
-        resume_claims.append(ResumeClaim(
-            claim_id=claim_id,
-            claim_text=raw_claim.get("claim_text", ""),
-            source=raw_claim.get("source", "resume"),
-            skill=raw_claim.get("skill", ""),
-            verification_status="UNVERIFIED",
-            verification_evidence=[],
-            asked_question_ids=[],
-        ))
-
     # ── Feature 4: Seed difficulty from resume seniority ──────────────────
     seniority = result.get("seniority_level", "mid")
     seniority_map = {"junior": 1, "mid": 2, "senior": 3, "staff": 4}
@@ -224,17 +199,54 @@ async def resume_analyzer_node(state: InterviewState) -> dict:
             "candidate": analysis["candidate_name"],
             "seniority": analysis["seniority_level"],
             "red_flags": len(analysis["red_flags"]),
-            "claims_extracted": len(resume_claims),
         }
     )
 
     return {
         "resume_analysis": analysis,
         "memory": updated_memory,
-        "resume_claims": resume_claims,
         "difficulty_level": difficulty,
         "phase": "planning",
     }
+
+
+# ══════════════════════════════════════════════════════════════════════════════
+# NODE 1B: Claim Extractor
+# ══════════════════════════════════════════════════════════════════════════════
+# Runs concurrently with the interview planner during initialization — it only
+# depends on the resume analysis, so there is no need to serialize the two
+# LLM calls.
+
+async def claim_extractor_node(state: InterviewState) -> dict:
+    """
+    Feature 1: Extracts structured, verifiable claims from the resume analysis.
+    """
+    logger.info("Executing claim_extractor_node", extra={"session": state["session_id"]})
+
+    analysis = state.get("resume_analysis", {})
+    claim_prompt = CLAIM_EXTRACTOR_PROMPT.format(
+        resume_analysis=json.dumps(analysis, indent=2)[:4000],
+        role=state["role"],
+    )
+    claim_result = await _call_llm_json(
+        CLAIM_EXTRACTOR_SYSTEM,
+        claim_prompt,
+    )
+
+    resume_claims: list[ResumeClaim] = []
+    for raw_claim in claim_result.get("claims", []):
+        claim_id = str(uuid.uuid4())[:8]
+        resume_claims.append(ResumeClaim(
+            claim_id=claim_id,
+            claim_text=raw_claim.get("claim_text", ""),
+            source=raw_claim.get("source", "resume"),
+            skill=raw_claim.get("skill", ""),
+            verification_status="UNVERIFIED",
+            verification_evidence=[],
+            asked_question_ids=[],
+        ))
+
+    return {"resume_claims": resume_claims}
 
 
 # ══════════════════════════════════════════════════════════════════════════════
@@ -1287,16 +1299,7 @@ async def opening_node(state: InterviewState) -> dict:
     stages = plan.get("stages", [])
     first_stage = stages[0] if stages else {}
 
-    seniority_map = {
-        "junior": "Mid-Level",
-        "mid": "Senior",
-        "senior": "Staff",
-        "staff": "Principal",
-    }
-    seniority = seniority_map.get(analysis.get("seniority_level", "mid"), "Senior")
-
     prompt = INTERVIEW_OPENING_PROMPT.format(
-        seniority=seniority,
         company=state["company"],
         candidate_name=analysis.get("candidate_name", ""),
         role=state["role"],
