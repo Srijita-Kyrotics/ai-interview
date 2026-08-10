@@ -37,9 +37,14 @@ class Settings(BaseSettings):
     smtp_from: str = Field("", alias="SMTP_FROM")
 
     # ── External APIs ─────────────────────────────────────────────────────
-    openai_api_key: str = Field("", alias="OPENAI_API_KEY")
     openrouter_api_key: str = Field("", alias="OPENROUTER_API_KEY")
     openrouter_model: str = Field("openai/gpt-4o-mini", alias="OPENROUTER_MODEL")
+    gemini_api_key: str = Field("", alias="GEMINI_API_KEY")
+    gemini_model: str = Field("gemini-2.5-flash-lite", alias="GEMINI_MODEL")
+    openai_api_key: str = Field("", alias="OPENAI_API_KEY")
+    openai_base_url: str = Field("https://api.openai.com/v1", alias="OPENAI_BASE_URL")
+    claude_api_key: str = Field("", alias="CLAUDE_API_KEY")
+    claude_base_url: str = Field("https://api.anthropic.com", alias="CLAUDE_BASE_URL")
     judge0_api_key: str = Field("", alias="JUDGE0_API_KEY")
     judge0_host: str = Field("judge0-ce.p.rapidapi.com", alias="JUDGE0_HOST")
     judge0_timeout: float = Field(10.0, alias="JUDGE0_TIMEOUT")
@@ -61,7 +66,8 @@ class Settings(BaseSettings):
 
     # ── CORS ──────────────────────────────────────────────────────────────
     allowed_origins: str = Field(
-        "http://localhost:5173,http://127.0.0.1:5173", alias="ALLOWED_ORIGINS"
+        "http://localhost:5173,http://127.0.0.1:5173,http://localhost:5174,http://127.0.0.1:5174,http://localhost:4173,http://127.0.0.1:4173",
+        alias="ALLOWED_ORIGINS",
     )
 
     # ── CSP ──────────────────────────────────────────────────────────────

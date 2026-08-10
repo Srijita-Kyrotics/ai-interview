@@ -108,4 +108,19 @@ describe('api.post', () => {
       })
     )
   })
+
+  it('adds ok=true for backend JSON payloads that do not include an ok flag', async () => {
+    const mockFetch = vi.fn().mockResolvedValue({
+      ok: true,
+      text: () => Promise.resolve(JSON.stringify({ message: 'Login successful.', token: 'abc' })),
+    })
+    vi.stubGlobal('fetch', mockFetch)
+
+    const result = await api.post('/auth/login', { email: 'hello@example.com', password: 'StrongPass123' })
+    expect(result).toEqual({
+      message: 'Login successful.',
+      token: 'abc',
+      ok: true,
+    })
+  })
 })

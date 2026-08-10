@@ -60,16 +60,18 @@ async def lifespan(app):
     cleanup_expired_cache()
 
     try:
-        from app.ai_interviewer.state_store import get_redis, get_state_store
+        from app.ai_interviewer.state_store import get_state_store
 
-        get_redis()
         store = get_state_store()
-        if store.health_check():
-            logger.info("Redis connected for interview state persistence")
+        if store.backend == "redis":
+            logger.info("Interview state store: Redis connected (persistent)")
         else:
-            logger.warning("Redis health check failed — interview state will not persist")
+            logger.warning(
+                "Interview state store: in-memory fallback (Redis unavailable) — "
+                "state will NOT survive a process restart"
+            )
     except Exception as exc:
-        logger.warning("Redis not available: %s — interview state will not persist", exc)
+        logger.warning("Interview state store: in-memory fallback (%s)", exc)
 
     logger.info("Application started", extra={"environment": settings.environment})
     yield
@@ -105,7 +107,7 @@ async def add_security_headers(request, call_next):
     response.headers["X-Content-Type-Options"] = "nosniff"
     response.headers["X-Frame-Options"] = "DENY"
     response.headers["Referrer-Policy"] = "strict-origin-when-cross-origin"
-    response.headers["Permissions-Policy"] = "camera=(), microphone=(), geolocation=()"
+    response.headers["Permissions-Policy"] = "camera=(self), microphone=(self), geolocation=()"
     response.headers["Content-Security-Policy"] = (
         "default-src 'self'; "
         "script-src 'self'; "
@@ -122,10 +124,13 @@ async def add_security_headers(request, call_next):
 def health_check():
     db_ok = check_db_health()
     redis_ok = False
+    state_store = "unavailable"
     try:
         from app.ai_interviewer.state_store import get_state_store
 
-        redis_ok = get_state_store().health_check()
+        store = get_state_store()
+        state_store = store.backend
+        redis_ok = store.backend == "redis" and store.health_check()
     except Exception:
         pass
 
@@ -137,6 +142,7 @@ def health_check():
             "status": status,
             "database": "ok" if db_ok else "unreachable",
             "redis": "ok" if redis_ok else "unavailable",
+            "state_store": state_store,
             "environment": settings.environment,
         },
     )

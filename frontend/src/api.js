@@ -1,4 +1,4 @@
-const API = import.meta.env.VITE_API_URL || '/api'
+const API = import.meta.env.VITE_API_URL || 'http://127.0.0.1:8000'
 
 const AUTH_EVENT = 'auth:expired'
 
@@ -56,11 +56,21 @@ async function request(method, path, body, isForm = false) {
     headers,
     body: isForm ? body : (body !== undefined ? JSON.stringify(body) : undefined)
   })
-  if (!res.ok) {
-    const text = await res.text().catch(() => '')
-    let data = null
+
+  let text = ''
+  if (typeof res.text === 'function') {
+    text = await res.text().catch(() => '')
+  }
+
+  let data = null
+  if (text) {
     try { data = JSON.parse(text) } catch (_) { /* not JSON */ }
-    const msg = data?.detail || data?.message || text || `Request failed (${res.status})`
+  } else if (typeof res.json === 'function') {
+    try { data = await res.json().catch(() => null) } catch (_) { /* not JSON */ }
+  }
+
+  if (!res.ok) {
+    const msg = data?.detail || data?.message || data?.error || text || `Request failed (${res.status})`
     if (res.status === 401) {
       clearStoredUser()
       const err = new Error(msg)
@@ -72,7 +82,12 @@ async function request(method, path, body, isForm = false) {
     err.status = res.status
     throw err
   }
-  return res.json()
+
+  if (data && typeof data === 'object') {
+    return { ...data, ok: data.ok ?? true }
+  }
+
+  return { ok: true, data }
 }
 
 const api = {

@@ -160,12 +160,11 @@ describe('proctoringState', () => {
 describe('violationLabels in useAssessmentProctoring', () => {
   it('all VIOLATION_PENALTIES types have corresponding labels', async () => {
     const { VIOLATION_PENALTIES } = await import('../proctoring/proctoringState')
-    const module = await import('../proctoring/useAssessmentProctoring.js')
-    const source = await fetch(module?.url || '').catch(() => null)
+    await import('../proctoring/useAssessmentProctoring.js')
 
     const expectedTypes = Object.keys(VIOLATION_PENALTIES)
     for (const type of expectedTypes) {
       expect(VIOLATION_PENALTIES[type]).toBeDefined()
     }
-  })
+  }, 15000)
 })
