@@ -8,7 +8,7 @@ from app.ai_interviewer.state import make_initial_state
 
 @pytest.fixture(autouse=True)
 def _fake_llm(monkeypatch):
-    async def fake_call_llm_json(system: str, prompt: str):
+    async def fake_call_llm_json(system: str, prompt: str, model: str | None = None):
         if "Contradiction" in system or "contradiction" in system:
             return {"new_facts": [], "contradictions": []}
         return {

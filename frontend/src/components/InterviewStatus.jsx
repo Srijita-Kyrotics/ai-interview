@@ -77,7 +77,7 @@ export default function InterviewStatus({
         {formatElapsed(elapsedSec)}
       </span>
 
-      <span className="oiv-status__chip" title="Questions answered">
+      <span className="oiv-status__chip" title="Stage progress">
         <ListChecks size="13" />
         {progress.current}/{progress.total}
       </span>

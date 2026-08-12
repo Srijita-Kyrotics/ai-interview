@@ -12,10 +12,7 @@ def test_run_code_requires_auth(client):
 
 
 def test_start_uses_mock_when_no_llm_provider_is_configured(client, auth_header, monkeypatch):
-    monkeypatch.setattr("app.config.settings.openrouter_api_key", "", raising=False)
-    monkeypatch.setattr("app.config.settings.gemini_api_key", "", raising=False)
     monkeypatch.setattr("app.config.settings.openai_api_key", "", raising=False)
-    monkeypatch.setattr("app.config.settings.claude_api_key", "", raising=False)
     monkeypatch.setattr(
         "app.ai_interviewer.llm_providers._registry", None, raising=False
     )

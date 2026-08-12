@@ -1,8 +1,8 @@
-import React, { useState, useEffect, useRef, useCallback } from 'react';
+import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
-  Mic, Target, Building2, ListChecks, Clock, AlertTriangle,
-  ArrowRight, Send, ChevronRight, Zap, Sparkles, TrendingUp,
+  Mic, Target, ListChecks, Clock, AlertTriangle,
+  ArrowRight, Send, ChevronRight, Zap, TrendingUp,
   MessageSquare, Code2, CheckCircle2, XCircle, Volume2, Loader2, Play,
   Settings2, RefreshCcw,
 } from 'lucide-react';
@@ -11,6 +11,7 @@ import { ProctoringModal, ProctoringPanel } from '../proctoring/ProctoringUI';
 import { CodeEditor } from './CodeEditor';
 import ObiAvatar from './ObiAvatar';
 import { clearStoredUser } from '../api';
+import { ROLE_MAPPINGS } from '../constants';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // AI INTERVIEWER COMPONENT
@@ -21,6 +22,33 @@ const API_BASE = import.meta.env.VITE_API_URL || '/api';
 const getWsBase = () =>
   import.meta.env.VITE_WS_URL ||
   `${window.location.protocol === 'https:' ? 'wss' : 'ws'}://${window.location.host}/api`;
+
+// Obi asks at most MAX_QUESTIONS questions (follow-ups count toward the cap).
+// The estimate assumes ~2.5 minutes per question including reading + answering.
+const DEFAULT_ROLE = 'Software Engineer';
+const MAX_QUESTIONS = 12;
+const MINUTES_PER_QUESTION = 3.5;
+const ESTIMATED_MINUTES = Math.round((MAX_QUESTIONS * MINUTES_PER_QUESTION) / 5) * 5;
+
+// Infer the target role from resume skills so a different resume automatically
+// targets a different role. Mirrors the scoring used on the company page.
+function inferRoleFromResume(resume) {
+  const skills = (resume && resume.skills) || [];
+  if (!skills.length) return null;
+  const userSkills = skills.map((s) => String(s).toLowerCase());
+  let bestRole = null;
+  let bestScore = 0;
+  Object.entries(ROLE_MAPPINGS).forEach(([roleName, meta]) => {
+    const matched = meta.keywords.filter((kw) =>
+      userSkills.some((us) => us.includes(kw))
+    );
+    if (matched.length > bestScore) {
+      bestScore = matched.length;
+      bestRole = roleName;
+    }
+  });
+  return bestRole;
+}
 
 // ── Sub-components ────────────────────────────────────────────────────────────
 
@@ -402,7 +430,7 @@ const ProgressBar = ({ current, total, stages }) => {
         <div className="aii-progress__fill" style={{ width: `${pct}%` }} />
       </div>
       <div className="aii-progress__info">
-        <span>Question {current} of {total}</span>
+        <span>Stage {current} of {total}</span>
         {stages?.currentStage && <span className="aii-progress__stage">{stages.currentStage}</span>}
       </div>
     </div>
@@ -442,7 +470,7 @@ export default function AIInterviewer({ sessionId, token, role, company, resume,
   const voiceMode = true;
 
   const [interviewSessionId, setInterviewSessionId] = useState(null);
-  const [progress, setProgress] = useState({ current: 0, total: 12 });
+  const [progress, setProgress] = useState({ current: 1, total: 1 });
   const [currentStage, setCurrentStage] = useState('');
   const [finalReport, setFinalReport] = useState(null);
   const [error, setError] = useState(null);
@@ -453,6 +481,12 @@ export default function AIInterviewer({ sessionId, token, role, company, resume,
   const [lastCandidateAnswer, setLastCandidateAnswer] = useState('');
   const [resumeSummaryOpen, setResumeSummaryOpen] = useState(false);
   const [resumeText, setResumeText] = useState('');
+  const [resumeFile, setResumeFile] = useState(null);
+  const [uploadedSessionId, setUploadedSessionId] = useState(null);
+  const [uploadedResume, setUploadedResume] = useState(null);
+  const [uploadingResume, setUploadingResume] = useState(false);
+  const [resumeUploadError, setResumeUploadError] = useState('');
+  const resumeFileInputRef = useRef(null);
 
   const startedRef = useRef(false);
   const fallbackAudioTimerRef = useRef(null);
@@ -468,6 +502,8 @@ export default function AIInterviewer({ sessionId, token, role, company, resume,
   const [runOutput, setRunOutput] = useState('');
   const [runStatus, setRunStatus] = useState('');
   const [isRunning, setIsRunning] = useState(false);
+  const [testResults, setTestResults] = useState(null); // visible test-case results
+  const [isTesting, setIsTesting] = useState(false);
   const [codingProblem, setCodingProblem] = useState(null); // Feature 9: live coding round
   const languageRef = useRef('python');
   useEffect(() => { languageRef.current = language; }, [language]);
@@ -497,13 +533,53 @@ export default function AIInterviewer({ sessionId, token, role, company, resume,
 
   // ── Proctoring State ────────────────────────────────────────────────
   const videoRef = useRef(null);
+  const userStreamRef = useRef(null);
   const [userStream, setUserStream] = useState(null);
   const [screenStream, setScreenStream] = useState(null);
 
-  // Video proctoring is DISABLED for now (we only want to validate voice +
-  // interview flow). To re-enable later: set to `true`, request camera +
-  // screen streams, and assign them to `webcamStream`/`screenStream` below.
-  const proctoringEnabled = false;
+  // Camera-based video proctoring is enabled for the Obi round. The camera is
+  // optional (requested gracefully): if it is denied, tab-switch / fullscreen /
+  // devtools checks still run and face detection simply stays off.
+  const proctoringEnabled = true;
+
+  // The proctoring hook terminates the interview on the 3rd warning. Route
+  // that through phase so the UI stops, the WS closes and we never keep
+  // recording after the assessment ended.
+  const handleProctorSetState = useCallback((updater) => {
+    setPhase((currentPhase) => {
+      const next = typeof updater === 'function' ? updater({ stage: currentPhase }) : updater;
+      if (next && next.stage === 'terminated') {
+        try {
+          if (mediaRecorderRef.current && mediaRecorderRef.current.state === 'recording') {
+            mediaRecorderRef.current.stop();
+          }
+        } catch (err) { /* ignore */ }
+        try { speechRecognitionRef.current?.stop(); } catch (err) { /* ignore */ }
+        try { wsRef.current?.close(); } catch (err) { /* ignore */ }
+      }
+      return next && next.stage === 'terminated' ? 'terminated' : currentPhase;
+    });
+  }, []);
+
+  const requestCameraPermission = useCallback(async () => {
+    if (!navigator.mediaDevices?.getUserMedia) return null;
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ video: true, audio: false });
+      userStreamRef.current = stream;
+      setUserStream(stream);
+      return stream;
+    } catch (err) {
+      console.warn('[AIInterviewer] Camera unavailable — proctoring runs without face detection.', err);
+      return null;
+    }
+  }, []);
+
+  const stopCamera = useCallback(() => {
+    const stream = userStreamRef.current;
+    if (stream) stream.getTracks().forEach((track) => track.stop());
+    userStreamRef.current = null;
+    setUserStream(null);
+  }, []);
 
   const proctor = useAssessmentProctoring({
     active: proctoringEnabled && (
@@ -512,16 +588,40 @@ export default function AIInterviewer({ sessionId, token, role, company, resume,
     round: 'technical',
     sessionId,
     navigate,
-    setState: () => {}, 
+    setState: handleProctorSetState,
     proctoring,
     setProctoring,
     webcamVideoRef: videoRef,
     webcamStream: userStream,
-    screenStream
+    screenStream,
+    voiceInterview: true
   });
   const proctorError = proctor.status.assessmentStatus === 'Terminated Due To Malpractice'
     ? proctor.status.terminatedReason || 'Assessment terminated due to malpractice.'
     : '';
+
+  // Feed the webcam stream into the hidden proctoring video element.
+  useEffect(() => {
+    const video = videoRef.current;
+    if (video && userStream) {
+      video.srcObject = userStream;
+      video.play?.().catch(() => {
+        // Muted inline playback is normally automatic; a failed play simply
+        // leaves camera-based detection on standby rather than blocking Obi.
+      });
+    }
+    return () => {
+      if (video) video.srcObject = null;
+    };
+  }, [userStream]);
+
+  // The webcam belongs only to the live interview. Stop it immediately once
+  // Obi finishes, fails to start, or proctoring terminates the session.
+  useEffect(() => {
+    if (phase === 'completed' || phase === 'error' || phase === 'terminated') {
+      stopCamera();
+    }
+  }, [phase, stopCamera]);
 
   const phaseRef = useRef(phase);
   const reconnectAttemptsRef = useRef(reconnectAttempts);
@@ -541,6 +641,8 @@ export default function AIInterviewer({ sessionId, token, role, company, resume,
   const pendingAudioRef = useRef(null);
   const audioEndSentRef = useRef(false);
   const audioEndTimerRef = useRef(null);
+  const audioQueueRef = useRef([]);
+  const isPlayingAudioRef = useRef(false);
 
   useEffect(() => { phaseRef.current = phase }, [phase]);
   useEffect(() => { reconnectAttemptsRef.current = reconnectAttempts }, [reconnectAttempts]);
@@ -628,9 +730,9 @@ export default function AIInterviewer({ sessionId, token, role, company, resume,
           },
           body: JSON.stringify({
             session_id: sessionId,
-            role: role || 'Software Engineer',
+            role: inferRoleFromResume(resume) || role || DEFAULT_ROLE,
             company: company || 'the company',
-            max_questions: 12,
+            max_questions: MAX_QUESTIONS,
             voice_enabled: voiceMode,
           }),
         });
@@ -645,7 +747,7 @@ export default function AIInterviewer({ sessionId, token, role, company, resume,
       }
     };
     checkResumable();
-  }, [sessionId, token, role, company, voiceMode]);
+  }, [sessionId, token, role, company, voiceMode, resume]);
 
   // ── P3: Token Refresh ───────────────────────────────────────────────
   const refreshToken = useCallback(async () => {
@@ -686,14 +788,28 @@ export default function AIInterviewer({ sessionId, token, role, company, resume,
   }, []);
 
   // ── Speech Synthesis Helper for Obi ─────────────────────────────────
+  const pickNaturalVoice = useCallback(() => {
+    if (!('speechSynthesis' in window)) return null;
+    const voices = window.speechSynthesis.getVoices();
+    if (!voices.length) return null;
+    const natural = voices.find(v => /Google US English|Microsoft (Aria|Jenny|Guy|Ava) Natural/i.test(v.name));
+    if (natural) return natural;
+    const en = voices.find(v => /en[-_]US/i.test(v.lang) && /Samantha|Daniel|Karen/i.test(v.name));
+    if (en) return en;
+    return voices.find(v => /en/i.test(v.lang)) || null;
+  }, []);
+
   const speakText = useCallback((text) => {
     if (!('speechSynthesis' in window) || !text) return;
     try {
       window.speechSynthesis.cancel();
       const cleanText = text.replace(/[*#_`]/g, ''); // Strip markdown
       const utterance = new SpeechSynthesisUtterance(cleanText);
-      utterance.rate = 1.0;
-      utterance.pitch = 1.0;
+      const voice = pickNaturalVoice();
+      if (voice) utterance.voice = voice;
+      utterance.lang = 'en-US';
+      utterance.rate = 0.95;
+      utterance.pitch = 1.05;
       setSubtitleText(cleanText);
       setIsSpeaking(true);
       startLipSync();
@@ -716,7 +832,7 @@ export default function AIInterviewer({ sessionId, token, role, company, resume,
       clearLipSync();
       finishAiResponse();
     }
-  }, [finishAiResponse, startLipSync, clearLipSync, stopAudioLevelMonitor]);
+  }, [finishAiResponse, startLipSync, clearLipSync, stopAudioLevelMonitor, pickNaturalVoice]);
 
   const queueAiMessage = useCallback((message, options = {}) => {
     stopAudioLevelMonitor();
@@ -746,7 +862,7 @@ export default function AIInterviewer({ sessionId, token, role, company, resume,
       if ('speechSynthesis' in window && message) {
         speakText(message);
       }
-    }, 800);
+    }, 4000);
   }, [browserTtsFallback, clearAudioFallbackTimer, speakText, stopAudioLevelMonitor]);
 
   // ── WebSocket Message Handler ────────────────────────────────────────
@@ -786,9 +902,13 @@ export default function AIInterviewer({ sessionId, token, role, company, resume,
       case 'session_restored': { // P2: Session restored from checkpoint
         setPhase('interviewing');
         setIsThinking(false);
-        setProgress({ current: msg.questions_asked || 0, total: msg.max_questions || 12 });
+        setProgress({
+          current: (msg.stage_index ?? 0) + 1,
+          total: msg.total_stages || 1,
+        });
         setCurrentStage(msg.current_stage || '');
-        const restoreMsg = `Session restored. Continuing from question ${msg.questions_asked || 0}...`;
+        const restoredProgress = msg.main_questions_asked ?? msg.questions_asked ?? 0;
+        const restoreMsg = `Session restored. Continuing from question ${restoredProgress}...`;
         queueAiMessage(restoreMsg, {
           status: 'Resuming your interview…',
           phase: 'interviewing',
@@ -801,8 +921,11 @@ export default function AIInterviewer({ sessionId, token, role, company, resume,
         setIsThinking(false);
         setPhase('interviewing');
         setCurrentStage(msg.stage || '');
-        if (msg.questions_asked !== undefined) {
-          setProgress({ current: msg.questions_asked, total: msg.max_questions || 12 });
+        if (msg.stage_index !== undefined) {
+          setProgress({
+            current: msg.stage_index + 1,
+            total: msg.total_stages || 1,
+          });
         }
         queueAiMessage(msg.text, {
           status: 'Obi is asking the next question…',
@@ -879,16 +1002,24 @@ export default function AIInterviewer({ sessionId, token, role, company, resume,
     }
   }, [speakText]);
 
-  // ── Audio Response Handler ────────────────────────────────────────────
-  const handleAudioResponse = useCallback(async (arrayBuffer) => {
-    clearAudioFallbackTimer();
-    if ('speechSynthesis' in window) {
-      window.speechSynthesis.cancel();
+  // ── Serialized Audio Playback Queue ─────────────────────────────────
+  // The backend streams TTS as multiple MP3 chunks. Every binary message is
+  // queued here and played one at a time so chunks never overlap. The
+  // fallback timer / isAwaiting flag only reset once the whole queue drains.
+  const playNextAudioChunk = useCallback(() => {
+    const queue = audioQueueRef.current;
+    if (!queue.length) {
+      isPlayingAudioRef.current = false;
+      stopAudioLevelMonitor();
+      setIsSpeaking(false);
+      clearLipSync();
+      finishAiResponse();
+      return;
     }
-    try {
-      const audioCtx = audioContextRef.current || new (window.AudioContext || window.webkitAudioContext)();
-      audioContextRef.current = audioCtx;
-      const audioData = await audioCtx.decodeAudioData(arrayBuffer);
+    const arrayBuffer = queue.shift();
+    const audioCtx = audioContextRef.current || new (window.AudioContext || window.webkitAudioContext)();
+    audioContextRef.current = audioCtx;
+    audioCtx.decodeAudioData(arrayBuffer).then((audioData) => {
       const source = audioCtx.createBufferSource();
       source.buffer = audioData;
       const analyser = audioCtx.createAnalyser();
@@ -900,19 +1031,28 @@ export default function AIInterviewer({ sessionId, token, role, company, resume,
       setIsProcessing(false);
       startAudioLevelMonitor(analyser);
       source.onended = () => {
-        stopAudioLevelMonitor();
-        setIsSpeaking(false);
-        clearLipSync();
-        finishAiResponse();
+        if (audioContextRef.current === audioCtx) {
+          stopAudioLevelMonitor();
+        }
+        playNextAudioChunk();
       };
-    } catch (err) {
+    }).catch((err) => {
       console.error('[AIInterviewer] Audio playback failed', err);
-      stopAudioLevelMonitor();
-      setIsSpeaking(false);
-      clearLipSync();
-      finishAiResponse();
+      playNextAudioChunk();
+    });
+  }, [finishAiResponse, clearLipSync, startAudioLevelMonitor, stopAudioLevelMonitor]);
+
+  const handleAudioResponse = useCallback((arrayBuffer) => {
+    clearAudioFallbackTimer();
+    if ('speechSynthesis' in window) {
+      window.speechSynthesis.cancel();
     }
-  }, [finishAiResponse, startLipSync, clearLipSync, clearAudioFallbackTimer, startAudioLevelMonitor, stopAudioLevelMonitor]);
+    audioQueueRef.current.push(arrayBuffer);
+    if (!isPlayingAudioRef.current) {
+      isPlayingAudioRef.current = true;
+      playNextAudioChunk();
+    }
+  }, [clearAudioFallbackTimer, playNextAudioChunk]);
 
   // ── P3: Auto-reconnect on disconnect ────────────────────────────────
   const reconnectWs = useCallback(() => {
@@ -963,6 +1103,64 @@ export default function AIInterviewer({ sessionId, token, role, company, resume,
     };
   }, []);
 
+  // ── Resume File Upload ────────────────────────────────────────────────
+  const handleResumeFile = useCallback(async (e) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    const ext = file.name.split('.').pop().toLowerCase();
+    if (!['pdf', 'txt'].includes(ext)) {
+      setResumeUploadError('Only PDF or TXT files are supported.');
+      return;
+    }
+    if (file.size > 10 * 1024 * 1024) {
+      setResumeUploadError('File must be under 10 MB.');
+      return;
+    }
+
+    setUploadingResume(true);
+    setResumeUploadError('');
+    setResumeFile(file);
+    try {
+      const fd = new FormData();
+      fd.append('file', file);
+      const res = await fetch(`${API_BASE}/ai-interview/upload-resume`, {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${token}` },
+        body: fd,
+      });
+      if (!res.ok) {
+        if (res.status === 401) clearStoredUser();
+        const errData = await res.json().catch(() => ({}));
+        throw new Error(errData.detail || 'Failed to parse the resume.');
+      }
+      const data = await res.json();
+      setUploadedSessionId(data.session_id);
+      setUploadedResume(data.resume || null);
+      setResumeText('');
+    } catch (err) {
+      setResumeUploadError(err.message || 'Could not parse the resume.');
+      setResumeFile(null);
+      setUploadedSessionId(null);
+      setUploadedResume(null);
+    } finally {
+      setUploadingResume(false);
+    }
+  }, [token]);
+
+  const clearUploadedResume = useCallback(() => {
+    setResumeFile(null);
+    setUploadedSessionId(null);
+    setUploadedResume(null);
+    setResumeUploadError('');
+    if (resumeFileInputRef.current) resumeFileInputRef.current.value = '';
+  }, []);
+
+  // Role is derived from the uploaded (or pre-loaded) resume via ROLE_MAPPINGS,
+  // so uploading a different resume changes the target role automatically.
+  const effectiveRole = useMemo(() => {
+    return inferRoleFromResume(uploadedResume || resume) || role || DEFAULT_ROLE;
+  }, [uploadedResume, resume, role]);
+
   // ── Start Interview ──────────────────────────────────────────────────
   const startInterview = useCallback(async (resumeExisting = true) => {
     setPhase('initializing');
@@ -975,7 +1173,10 @@ export default function AIInterviewer({ sessionId, token, role, company, resume,
 
       if (!shouldResume) {
         const pastedResume = resumeText.trim();
-        if (pastedResume) {
+        if (uploadedSessionId) {
+          // A resume file was uploaded → use its session directly.
+          activeSessionId = uploadedSessionId;
+        } else if (pastedResume) {
           // Seed a fresh session with the pasted resume so Obi can
           // personalize questions to the candidate's actual background.
           const createRes = await fetch(`${API_BASE}/ai-interview/create-session`, {
@@ -1000,9 +1201,9 @@ export default function AIInterviewer({ sessionId, token, role, company, resume,
         ? JSON.stringify({ interview_session_id: resumableSession, session_id: activeSessionId })
         : JSON.stringify({
             session_id: activeSessionId,
-            role: role || 'Software Engineer',
+            role: effectiveRole,
             company: company || 'the company',
-            max_questions: 12,
+            max_questions: MAX_QUESTIONS,
             voice_enabled: voiceMode,
           });
       const res = await fetch(url, {
@@ -1068,7 +1269,7 @@ export default function AIInterviewer({ sessionId, token, role, company, resume,
       setError(err.message);
       setPhase('error');
     }
-  }, [sessionId, token, role, company, voiceMode, resumeText, resumableSession]);
+  }, [sessionId, token, effectiveRole, company, voiceMode, resumeText, resumableSession, uploadedSessionId]);
 
   // ── Explicit start (Begin button) ────────────────────────────────────
   // The interview only starts on user action — no surprise mic/camera
@@ -1080,8 +1281,9 @@ export default function AIInterviewer({ sessionId, token, role, company, resume,
       setPhase('idle');
       return;
     }
+    await requestCameraPermission(); // optional — never blocks the interview
     startInterview(resumeExisting);
-  }, [requestMicPermission, startInterview]);
+  }, [requestMicPermission, requestCameraPermission, startInterview]);
 
   // ── Add Message Helper ───────────────────────────────────────────────
   const addMessage = (msg) => {
@@ -1138,6 +1340,34 @@ export default function AIInterviewer({ sessionId, token, role, company, resume,
       setIsRunning(false);
     }
   }, [code, language, stdin, token, isRunning]);
+
+  // ── Run Tests (visible test cases) ───────────────────────────────────
+  const runTests = useCallback(async () => {
+    const cases = codingProblem?.visible_test_cases || [];
+    if (!code.trim() || isRunning || isTesting || cases.length === 0) return;
+    setIsTesting(true);
+    setTestResults(null);
+    try {
+      const res = await fetch(`${API_BASE}/ai-interview/judge`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({ language, code, test_cases: cases }),
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        setTestResults({ error: data.detail || data.message || `Judge failed (${res.status})` });
+        return;
+      }
+      setTestResults(data);
+    } catch (err) {
+      setTestResults({ error: 'Could not contact judge service.' });
+    } finally {
+      setIsTesting(false);
+    }
+  }, [code, language, token, codingProblem, isRunning, isTesting]);
 
   // ── Voice Recording ──────────────────────────────────────────────────
   // Sends `audio_end` with the browser-transcribed text when available, so
@@ -1258,6 +1488,9 @@ export default function AIInterviewer({ sessionId, token, role, company, resume,
       clearTimeout(audioEndTimerRef.current);
       clearInterval(tokenRefreshRef.current);
       try { speechRecognitionRef.current?.stop(); } catch (err) { /* ignore */ }
+      const stream = userStreamRef.current;
+      if (stream) stream.getTracks().forEach((track) => track.stop());
+      userStreamRef.current = null;
     };
   }, []);
 
@@ -1275,13 +1508,13 @@ export default function AIInterviewer({ sessionId, token, role, company, resume,
               <span>O</span>
               <i />
             </div>
-            <span className="aii-start-card__tag">AI Interview · Voice Enabled</span>
+            <span className="aii-start-card__tag">Obi · AI Interviewer</span>
           </div>
-          <h2 className="aii-start-card__title">Technical Interview with Obi</h2>
+          <h2 className="aii-start-card__title">Technical Interview</h2>
           <p className="aii-start-card__sub">
-            You'll be interviewed by <strong>Obi</strong>, our AI Senior Engineer.
-            Obi has read your resume and will ask targeted technical questions —
-            then dig deeper based on your answers.
+            You will be interviewed by <strong>Obi</strong>, who has read your
+            resume and will ask targeted technical questions — then dig deeper
+            based on your answers.
           </p>
 
           <div className="aii-start-card__details">
@@ -1289,38 +1522,30 @@ export default function AIInterviewer({ sessionId, token, role, company, resume,
               <span className="aii-detail-item__icon"><Target size="18" /></span>
               <div>
                 <strong>Role</strong>
-                <p>{role || 'Software Engineer'}</p>
-              </div>
-            </div>
-            <div className="aii-detail-item">
-              <span className="aii-detail-item__icon"><Building2 size="18" /></span>
-              <div>
-                <strong>Company</strong>
-                <p>{company || 'the company'}</p>
+                <p>{effectiveRole}</p>
               </div>
             </div>
             <div className="aii-detail-item">
               <span className="aii-detail-item__icon"><ListChecks size="18" /></span>
               <div>
                 <strong>Questions</strong>
-                <p>~12 adaptive questions</p>
+                <p>Adaptive</p>
               </div>
             </div>
             <div className="aii-detail-item">
               <span className="aii-detail-item__icon"><Clock size="18" /></span>
               <div>
                 <strong>Duration</strong>
-                <p>~30–45 minutes</p>
+                <p>~{ESTIMATED_MINUTES} minutes</p>
               </div>
             </div>
           </div>
 
           <div className="aii-start-card__tips">
-            <div className="aii-start-card__tips-title"><Sparkles size="14" /> Before you begin</div>
+            <div className="aii-start-card__tips-title">Before you begin</div>
             <ul>
-              <li>Speak clearly and be specific — vague answers get follow-up questions</li>
-              <li>Explain your reasoning, not just the outcome</li>
-              <li>It's okay to think before answering</li>
+              <li>Answer in detail — Obi will ask follow-ups based on what you say</li>
+              <li>Speak clearly, and allow your microphone when prompted</li>
             </ul>
           </div>
 
@@ -1347,7 +1572,36 @@ export default function AIInterviewer({ sessionId, token, role, company, resume,
           )}
 
           <div className="aii-start-card__resume">
-            <label htmlFor="aii-resume-text">Paste your resume (optional)</label>
+            <label>Upload your resume (PDF or TXT) so Obi can read it before starting</label>
+            <div className={`aii-file-upload${resumeFile ? ' aii-file-upload--done' : ''}`}>
+              <input
+                ref={resumeFileInputRef}
+                type="file"
+                id="aii-resume-file"
+                accept=".pdf,.txt"
+                onChange={handleResumeFile}
+                disabled={uploadingResume}
+              />
+              <div className="aii-file-upload__hint">
+                {uploadingResume ? (
+                  <><Loader2 className="aii-spin" size="18" /> Parsing resume…</>
+                ) : resumeFile ? (
+                  <><CheckCircle2 size="18" /> {resumeFile.name} — Obi will use it for your interview.</>
+                ) : (
+                  <>Drop your PDF here or <u>browse</u></>
+                )}
+              </div>
+              {resumeFile && !uploadingResume && (
+                <button type="button" className="aii-file-upload__remove" onClick={clearUploadedResume} aria-label="Remove resume file">
+                  <XCircle size="16" />
+                </button>
+              )}
+            </div>
+            {resumeUploadError && <p className="aii-form-error">{resumeUploadError}</p>}
+          </div>
+
+          <div className="aii-start-card__resume">
+            <label htmlFor="aii-resume-text">Or paste your resume text (optional)</label>
             <textarea
               id="aii-resume-text"
               value={resumeText}
@@ -1445,7 +1699,7 @@ export default function AIInterviewer({ sessionId, token, role, company, resume,
             </div>
             <div className="aii-stat">
               <ListChecks size="14" />
-              <span>{progress.current}/{progress.total}</span>
+              <span>Stage {progress.current}/{progress.total}</span>
             </div>
           </div>
           {currentStage && (
@@ -1577,6 +1831,16 @@ export default function AIInterviewer({ sessionId, token, role, company, resume,
               >
                 {isRunning ? <><Loader2 size="14" className="aii-spin" /> Running…</> : <><Play size="14" /> Run Code</>}
               </button>
+              {(codingProblem?.visible_test_cases || []).length > 0 && (
+                <button
+                  className="aii-test-btn"
+                  onClick={runTests}
+                  disabled={isRunning || isTesting || !code.trim()}
+                  title="Run your code against the visible test cases"
+                >
+                  {isTesting ? <><Loader2 size="14" className="aii-spin" /> Testing…</> : <><CheckCircle2 size="14" /> Run Tests</>}
+                </button>
+              )}
               <button
                 className="aii-submit-code-btn"
                 onClick={() => {
@@ -1621,6 +1885,36 @@ export default function AIInterviewer({ sessionId, token, role, company, resume,
                 <pre className="aii-run-output">{runOutput}</pre>
               )}
             </div>
+            {testResults && (
+              <div className="aii-test-results">
+                {testResults.error ? (
+                  <div className="aii-test-results__error">
+                    <AlertTriangle size="14" /> {testResults.error}
+                  </div>
+                ) : (
+                  <>
+                    <div className={`aii-test-summary ${testResults.passed === testResults.total ? 'aii-test-summary--good' : 'aii-test-summary--bad'}`}>
+                      <CheckCircle2 size="14" />
+                      {testResults.passed}/{testResults.total} tests passed
+                      {testResults.compile_error ? ' — compilation failed' : ` — ${testResults.score}%`}
+                    </div>
+                    <div className="aii-test-cases">
+                      {(testResults.results || []).map((r, i) => (
+                        <div key={i} className={`aii-test-case aii-test-case--${r.status === 'passed' ? 'pass' : 'fail'}`}>
+                          <span className="aii-test-case__tag">{r.status === 'passed' ? 'PASS' : (r.status || 'FAIL').toUpperCase()}</span>
+                          <div className="aii-test-case__body">
+                            <code>in:  {r.input || '(empty)'}</code>
+                            <code>exp: {r.expected || '(empty)'}</code>
+                            <code>got: {r.output || '(no output)'}</code>
+                            {r.time_ms != null && <code className="aii-test-case__time">{r.time_ms}ms</code>}
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </>
+                )}
+              </div>
+            )}
           </div>
         )}
       </div>
@@ -1663,7 +1957,7 @@ export default function AIInterviewer({ sessionId, token, role, company, resume,
             </div>
 
             {/* Hidden Video Feed for Proctoring */}
-            <video ref={videoRef} autoPlay muted playsInline style={{ display: 'none' }} />
+            <video ref={videoRef} autoPlay muted playsInline aria-hidden="true" style={{ display: 'none' }} />
 
             <div className="aii-text-row">
               <input

@@ -8,7 +8,6 @@ Run from repo root:
 from __future__ import annotations
 
 import json
-import math
 import sys
 from collections import Counter, defaultdict, deque
 from pathlib import Path
@@ -368,7 +367,7 @@ def solve_135(data: list[str]) -> str:
     def matches(word, pat):
         if len(word) != len(pat):
             return False
-        return all(p == "." or p == w for w, p in zip(word, pat))
+        return all(p == "." or p == w for w, p in zip(word, pat, strict=False))
 
     for line in data:
         parts = line.split()
@@ -400,11 +399,15 @@ def solve_141(data: list[str]) -> str:
         b = (r // 3) * 3 + c // 3
         for d in "123456789":
             if d not in rows[r] and d not in cols[c] and d not in boxes[b]:
-                rows[r].add(d); cols[c].add(d); boxes[b].add(d)
+                rows[r].add(d)
+                cols[c].add(d)
+                boxes[b].add(d)
                 board[r][c] = d
                 if bt(i + 1):
                     return True
-                rows[r].remove(d); cols[c].remove(d); boxes[b].remove(d)
+                rows[r].remove(d)
+                cols[c].remove(d)
+                boxes[b].remove(d)
                 board[r][c] = "."
         return False
 
@@ -425,11 +428,15 @@ def solve_142(data: list[str]) -> str:
         for c in range(n):
             if c in cols or r - c in diag1 or r + c in diag2:
                 continue
-            cols.add(c); diag1.add(r - c); diag2.add(r + c)
+            cols.add(c)
+            diag1.add(r - c)
+            diag2.add(r + c)
             board[r][c] = "Q"
             bt(r + 1)
             board[r][c] = "."
-            cols.remove(c); diag1.remove(r - c); diag2.remove(r + c)
+            cols.remove(c)
+            diag1.remove(r - c)
+            diag2.remove(r + c)
 
     bt(0)
     return "\n\n".join(res)
@@ -557,11 +564,11 @@ def solve_158(data: list[str]) -> str:
             right[i] = right[i + 1]
     total, res = -1, []
     for m in range(k, len(win) - k):
-        l = left[m - k]
-        r = right[m + k]
-        if win[l] + win[m] + win[r] > total:
-            total = win[l] + win[m] + win[r]
-            res = [l, m, r]
+        left_index = left[m - k]
+        right_index = right[m + k]
+        if win[left_index] + win[m] + win[right_index] > total:
+            total = win[left_index] + win[m] + win[right_index]
+            res = [left_index, m, right_index]
     return " ".join(map(str, res))
 
 
@@ -840,13 +847,12 @@ def solve_179(data: list[str]) -> str:
 def solve_180(data: list[str]) -> str:
     k = int(data[0])
     wages, quality = nums(data[1]), nums(data[2])
-    n = len(quality)
-    workers = sorted((w / q, q, w) for q, w in zip(quality, wages))
+    workers = sorted((w / q, q, w) for q, w in zip(quality, wages, strict=False))
     import heapq
     pool = []
     sumq = 0
     best = float("inf")
-    for ratio, q, w in workers:
+    for ratio, q, _w in workers:
         heapq.heappush(pool, -q)
         sumq += q
         if len(pool) > k:
@@ -903,7 +909,6 @@ def solve_183(data: list[str]) -> str:
 
 def solve_184(data: list[str]) -> str:
     stickers, target = data[0].split(), data[1]
-    n = len(stickers)
     smap = [Counter(s) for s in stickers]
     memo = {}
 
@@ -934,19 +939,19 @@ def solve_184(data: list[str]) -> str:
 
 def solve_185(data: list[str]) -> str:
     s = data[0]
-    l, r = 0, len(s) - 1
+    left_index, right_index = 0, len(s) - 1
     count = 0
     left = ""
     right = ""
-    while l < r:
-        left += s[l]
-        right = s[r] + right
+    while left_index < right_index:
+        left += s[left_index]
+        right = s[right_index] + right
         if left == right:
             count += 2
             left = right = ""
-        l += 1
-        r -= 1
-    if left or right or l == r:
+        left_index += 1
+        right_index -= 1
+    if left or right or left_index == right_index:
         count += 1
     return str(count)
 
@@ -1351,14 +1356,13 @@ def solve_176(data: list[str]) -> str:
 
 
 def solve_177(data: list[str]) -> str:
-    n = int(data[0])
     arr = nums(data[1])
     out = []
     for line in data[2:]:
         parts = line.split()
         if parts[0] == "query":
-            l, r = int(parts[1]), int(parts[2])
-            out.append(str(sum(arr[l:r + 1])))
+            left_index, right_index = int(parts[1]), int(parts[2])
+            out.append(str(sum(arr[left_index:right_index + 1])))
         else:
             i, v = int(parts[1]), int(parts[2])
             arr[i] = v
@@ -1416,10 +1420,7 @@ SOLVERS = {
 
 
 def main() -> int:
-    questions = json.loads(
-        (ROOT / "shared" / "coding_questions.json").read_text(encoding="utf-8")
-    )
-    by_id = {q["id"]: q for q in questions}
+    json.loads((ROOT / "shared" / "coding_questions.json").read_text(encoding="utf-8"))
     mismatches = 0
     for qid, solver in sorted(SOLVERS.items()):
         cases = TEST_CASES.get(qid)

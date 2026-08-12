@@ -5675,13 +5675,11 @@ label {
 
 .aii-start-card__title {
   font-size: 1.75rem;
-  font-weight: 800;
+  font-weight: 700;
   text-align: center;
   margin: 0 0 0.75rem;
-  background: linear-gradient(120deg, #a78bfa, #6366f1, #818cf8);
-  -webkit-background-clip: text;
-  -webkit-text-fill-color: transparent;
-  background-clip: text;
+  color: #ffffff;
+  letter-spacing: -0.01em;
 }
 
 .aii-start-card__sub {
@@ -5694,18 +5692,20 @@ label {
 
 .aii-start-card__details {
   display: grid;
-  grid-template-columns: 1fr 1fr;
+  grid-template-columns: repeat(3, 1fr);
   gap: 0.75rem;
   margin-bottom: 1.5rem;
 }
 
 .aii-detail-item {
   display: flex;
-  align-items: flex-start;
-  gap: 0.625rem;
-  background: rgba(255, 255, 255, 0.06);
+  flex-direction: column;
+  align-items: center;
+  gap: 0.35rem;
+  background: rgba(255, 255, 255, 0.045);
   border-radius: 12px;
-  padding: 0.75rem;
+  padding: 1rem 0.5rem;
+  text-align: center;
 }
 
 .aii-detail-item__icon {
@@ -5715,16 +5715,17 @@ label {
 
 .aii-detail-item strong {
   display: block;
-  font-size: 0.75rem;
+  font-size: 0.68rem;
+  font-weight: 600;
   text-transform: uppercase;
-  letter-spacing: 0.05em;
-  color: rgba(255, 255, 255, 0.5);
+  letter-spacing: 0.09em;
+  color: rgba(255, 255, 255, 0.45);
   margin-bottom: 0.15rem;
 }
 
 .aii-detail-item p {
   margin: 0;
-  font-size: 0.9rem;
+  font-size: 0.92rem;
   font-weight: 600;
   color: white;
 }
@@ -5762,13 +5763,14 @@ label {
 /* ── Tips ────────────────────────────────────────────────────────────────── */
 
 .aii-start-card__tips {
-  background: rgba(99, 102, 241, 0.1);
-  border: 1px solid rgba(99, 102, 241, 0.2);
+  background: rgba(255, 255, 255, 0.035);
+  border: 1px solid rgba(255, 255, 255, 0.08);
   border-radius: 12px;
-  padding: 1rem;
+  padding: 1rem 1.25rem;
   margin-bottom: 1.5rem;
   font-size: 0.875rem;
-  color: rgba(255, 255, 255, 0.8);
+  color: rgba(255, 255, 255, 0.75);
+  line-height: 1.7;
 }
 
 .aii-start-card__tips strong {
@@ -5793,19 +5795,19 @@ label {
   gap: 0.5rem;
   padding: 0.875rem 1.5rem;
   border: none;
-  border-radius: 12px;
-  background: linear-gradient(135deg, #6366f1, #8b5cf6);
+  border-radius: 10px;
+  background: #4f46e5;
   color: white;
   font-size: 1rem;
   font-weight: 700;
   cursor: pointer;
   transition: all 0.2s ease;
-  box-shadow: 0 8px 24px rgba(99, 102, 241, 0.4);
+  box-shadow: 0 1px 0 rgba(255, 255, 255, 0.12) inset, 0 4px 12px rgba(0, 0, 0, 0.25);
 }
 
 .aii-start-btn:hover {
-  transform: translateY(-2px);
-  box-shadow: 0 12px 32px rgba(99, 102, 241, 0.5);
+  background: #4338ca;
+  box-shadow: 0 1px 0 rgba(255, 255, 255, 0.12) inset, 0 6px 16px rgba(0, 0, 0, 0.3);
 }
 
 .aii-start-btn:active { transform: translateY(0); }
@@ -6119,6 +6121,106 @@ label {
   border-radius: 10px;
   overflow: hidden;
   border: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+/* Visible test-case judge results (coding round) */
+.aii-test-btn {
+  flex-shrink: 0;
+  padding: 7px 16px;
+  border: 1px solid rgba(52, 211, 153, 0.5);
+  border-radius: 8px;
+  background: rgba(52, 211, 153, 0.12);
+  color: #6ee7b7;
+  font-size: 0.78rem;
+  font-weight: 600;
+  font-family: 'Inter', sans-serif;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.aii-test-btn:hover:not(:disabled) {
+  background: rgba(52, 211, 153, 0.25);
+  color: #a7f3d0;
+}
+
+.aii-test-btn:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+.aii-test-results {
+  flex-shrink: 0;
+  border-radius: 10px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  background: rgba(255, 255, 255, 0.03);
+  padding: 0.5rem 0.75rem;
+  max-height: 220px;
+  overflow-y: auto;
+}
+
+.aii-test-summary {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  font-size: 0.75rem;
+  font-weight: 700;
+  margin-bottom: 0.4rem;
+}
+
+.aii-test-summary--good { color: #34d399; }
+.aii-test-summary--bad { color: #fca5a5; }
+
+.aii-test-results__error {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  font-size: 0.75rem;
+  color: #fca5a5;
+}
+
+.aii-test-cases {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+}
+
+.aii-test-case {
+  display: flex;
+  gap: 0.5rem;
+  align-items: flex-start;
+  padding: 0.35rem 0.5rem;
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.04);
+}
+
+.aii-test-case--pass { border-left: 3px solid #34d399; }
+.aii-test-case--fail { border-left: 3px solid #f87171; }
+
+.aii-test-case__tag {
+  flex-shrink: 0;
+  font-size: 0.62rem;
+  font-weight: 800;
+  letter-spacing: 0.04em;
+  padding: 2px 6px;
+  border-radius: 4px;
+}
+
+.aii-test-case--pass .aii-test-case__tag { color: #34d399; background: rgba(52, 211, 153, 0.12); }
+.aii-test-case--fail .aii-test-case__tag { color: #fca5a5; background: rgba(248, 113, 113, 0.12); }
+
+.aii-test-case__body {
+  display: flex;
+  flex-direction: column;
+  gap: 0.15rem;
+  min-width: 0;
+  font-family: 'JetBrains Mono', 'Fira Code', 'Consolas', monospace;
+  font-size: 0.7rem;
+  color: rgba(255, 255, 255, 0.7);
+  word-break: break-word;
+}
+
+.aii-test-case__time {
+  color: rgba(255, 255, 255, 0.4);
 }
 
 .aii-code-editor-wrap .leetcode-editor-shell {
@@ -6800,15 +6902,8 @@ label {
 
 /* ── Ambient background ────────────────────────────────────────────── */
 .aii-container {
-  background-color: #0e0c26;
-  background-image:
-    radial-gradient(1200px 620px at 12% -10%, rgba(99, 102, 241, 0.20), transparent 60%),
-    radial-gradient(1000px 540px at 105% 112%, rgba(139, 92, 246, 0.16), transparent 60%),
-    radial-gradient(900px 460px at 80% -6%, rgba(6, 182, 212, 0.10), transparent 55%),
-    linear-gradient(rgba(255, 255, 255, 0.02) 1px, transparent 1px),
-    linear-gradient(90deg, rgba(255, 255, 255, 0.02) 1px, transparent 1px),
-    linear-gradient(160deg, #0b0a1e 0%, #131233 50%, #161536 100%);
-  background-size: auto, auto, auto, 48px 48px, 48px 48px, auto;
+  background-color: #0b0b12;
+  background-image: radial-gradient(1000px 500px at 70% -10%, rgba(79, 70, 229, 0.10), transparent 60%);
 }
 
 /* ── Start card ────────────────────────────────────────────────────── */
@@ -6864,7 +6959,7 @@ label {
   border-radius: 999px;
 }
 
-.aii-start-card__title { font-size: 1.85rem; }
+.aii-start-card__title { font-size: 1.7rem; }
 
 .aii-start-card__sub strong { color: #c7d2fe; }
 
@@ -6876,15 +6971,15 @@ label {
 .aii-detail-item__icon { color: #a5b4fc; }
 
 .aii-start-card__tips {
-  background: linear-gradient(135deg, rgba(99, 102, 241, 0.14), rgba(139, 92, 246, 0.1));
-  border-color: rgba(99, 102, 241, 0.25);
+  background: rgba(255, 255, 255, 0.03);
+  border-color: rgba(255, 255, 255, 0.09);
 }
 
 .aii-start-card__tips-title {
   display: flex;
   align-items: center;
   gap: 6px;
-  color: #c4b5fd;
+  color: rgba(255, 255, 255, 0.9);
   font-weight: 700;
   font-size: 0.78rem;
   text-transform: uppercase;
@@ -6934,6 +7029,89 @@ label {
 
 .aii-start-card__resume textarea::placeholder {
   color: rgba(255, 255, 255, 0.35);
+}
+
+.aii-file-upload {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  padding: 0.7rem 0.8rem;
+  border: 1px dashed rgba(255, 255, 255, 0.25);
+  border-radius: 10px;
+  background: rgba(255, 255, 255, 0.05);
+  transition: border-color 0.2s ease, background 0.2s ease;
+}
+
+.aii-file-upload input[type='file'] {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  opacity: 0;
+  cursor: pointer;
+}
+
+.aii-file-upload input[type='file']:disabled {
+  cursor: wait;
+}
+
+.aii-file-upload:hover {
+  border-color: rgba(99, 102, 241, 0.6);
+  background: rgba(255, 255, 255, 0.07);
+}
+
+.aii-file-upload--done {
+  border-style: solid;
+  border-color: rgba(52, 211, 153, 0.5);
+}
+
+.aii-file-upload--done input[type='file'] {
+  pointer-events: none;
+}
+
+.aii-file-upload__hint {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  font-size: 0.82rem;
+  color: rgba(255, 255, 255, 0.7);
+  pointer-events: none;
+}
+
+.aii-file-upload--done .aii-file-upload__hint {
+  color: rgba(52, 211, 153, 0.95);
+}
+
+.aii-file-upload__remove {
+  margin-left: auto;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border: none;
+  background: transparent;
+  color: rgba(255, 255, 255, 0.55);
+  cursor: pointer;
+  padding: 0.2rem;
+}
+
+.aii-file-upload__remove:hover {
+  color: #f87171;
+}
+
+.aii-form-error {
+  margin-top: 0.4rem;
+  font-size: 0.78rem;
+  color: #f87171;
+  text-align: left;
+}
+
+.aii-spin {
+  animation: aii-spin 1s linear infinite;
+}
+
+@keyframes aii-spin {
+  to { transform: rotate(360deg); }
 }
 
 .aii-start-btn--ghost {

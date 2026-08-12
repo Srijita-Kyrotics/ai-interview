@@ -11,6 +11,54 @@ const MODEL_RETRY_DELAY_MS = 5000
 const MODEL_MAX_RETRIES = 3
 const GRACE_PERIOD_MS = 15000
 
+// Objects COCO-SSD flags as suspicious. `laptop` is deliberately excluded:
+// candidates are using a laptop to take the interview, so it is in the webcam
+// frame by definition and would otherwise be a guaranteed false positive.
+export const SUSPICIOUS_OBJECTS = ['cell phone', 'tv', 'remote']
+// Minimum confidence before an object detection counts (COCO-SSD default is
+// 0.5; the old 0.15 flagged anything vaguely phone-shaped).
+const OBJECT_DETECT_THRESHOLD = 0.5
+const OBJECT_DETECT_MAX_DETECTIONS = 10
+// The object must be seen for this long across consecutive frames before it is
+// reported — a phone simply passing through the frame is not evidence.
+const SUSPICIOUS_SUSTAINED_MS = 3000
+// A face clipped by the frame edge must persist this long before it counts.
+const HALF_FACE_SUSTAINED_MS = 2500
+// DevTools must be detected for this long (multiple consecutive checks) and
+// must exceed the startup baseline by more than the threshold before firing.
+const DEVTOOLS_SUSTAINED_MS = 3000
+const DEVTOOLS_BASELINE_GRACE_MS = 4000
+// Background-voice: speech-band (250–3400 Hz) average level and sustain time.
+const BACKGROUND_VOICE_THRESHOLD = 30
+const BACKGROUND_VOICE_SUSTAINED_MS = 6000
+const VOICE_BAND_START_HZ = 250
+const VOICE_BAND_END_HZ = 3400
+
+// Keep the three noisy signals testable and conservative. A warning is only
+// created after the caller has also applied its duration/cooldown policy.
+export function getSuspiciousObjectClass(detections = []) {
+  return detections
+    .filter((detection) => (
+      SUSPICIOUS_OBJECTS.includes(detection?.class) &&
+      Number(detection.score) >= OBJECT_DETECT_THRESHOLD
+    ))
+    .sort((a, b) => b.score - a.score)[0]?.class || null
+}
+
+export function isDevtoolsGapOpen(gap, baseline) {
+  return Number.isFinite(gap) && Number.isFinite(baseline) &&
+    gap > baseline + DEVTOOLS_THRESHOLD
+}
+
+export function getVoiceBandAverage(data, bandStart, bandEnd) {
+  const start = Math.max(0, Math.floor(bandStart))
+  const end = Math.min(data?.length || 0, Math.ceil(bandEnd))
+  if (end <= start) return 0
+  let sum = 0
+  for (let index = start; index < end; index += 1) sum += data[index]
+  return sum / (end - start)
+}
+
 const violationLabels = {
   tab_switch: 'Tab Switch',
   fullscreen_exit: 'Fullscreen Exit',
@@ -88,7 +136,11 @@ export function useAssessmentProctoring({
   const [modal, setModal] = useState(null)
   const lastViolationAtRef = useRef(0)
   const faceMissingSinceRef = useRef(null)
+  const halfFaceSinceRef = useRef(null)
+  const suspiciousObjectRef = useRef(null)
   const devtoolsOpenRef = useRef(false)
+  const devtoolsSinceRef = useRef(null)
+  const devtoolsBaselineRef = useRef(null)
   const detectingRef = useRef(false)
   const modelRetriesRef = useRef(0)
   const faceModelsLoadedRef = useRef(false)
@@ -240,10 +292,34 @@ export function useAssessmentProctoring({
     window.addEventListener('blur', onBlur)
     window.addEventListener('keydown', onKeyDown, true)
 
+    // DevTools detection is notoriously flaky: OS DPI scaling, browser zoom
+    // and window/fullscreen transitions all change the outer/inner window gap.
+    // We baseline the gap shortly after start, then only flag when the gap is
+    // clearly wider than baseline for several consecutive checks.
+    devtoolsBaselineRef.current = null
     const devtoolsTimer = window.setInterval(() => {
-      const open = window.outerWidth - window.innerWidth > DEVTOOLS_THRESHOLD || window.outerHeight - window.innerHeight > DEVTOOLS_THRESHOLD
-      if (open && !devtoolsOpenRef.current) registerViolation('devtools', 'Developer tools attempt detected.')
-      devtoolsOpenRef.current = open
+      const now = Date.now()
+      if (now - startedAtRef.current < DEVTOOLS_BASELINE_GRACE_MS) return
+      const gap = Math.max(
+        window.outerWidth - window.innerWidth,
+        window.outerHeight - window.innerHeight
+      )
+      if (devtoolsBaselineRef.current === null) {
+        devtoolsBaselineRef.current = Math.max(0, gap)
+        devtoolsSinceRef.current = null
+        return
+      }
+      const open = isDevtoolsGapOpen(gap, devtoolsBaselineRef.current)
+      if (open) {
+        if (devtoolsSinceRef.current === null) devtoolsSinceRef.current = now
+        else if (now - devtoolsSinceRef.current > DEVTOOLS_SUSTAINED_MS && !devtoolsOpenRef.current) {
+          registerViolation('devtools', 'Developer tools attempt detected.')
+          devtoolsOpenRef.current = true
+        }
+      } else {
+        devtoolsSinceRef.current = null
+        devtoolsOpenRef.current = false
+      }
     }, 1500)
 
     return () => {
@@ -258,6 +334,9 @@ export function useAssessmentProctoring({
       window.removeEventListener('blur', onBlur)
       window.removeEventListener('keydown', onKeyDown, true)
       window.clearInterval(devtoolsTimer)
+      devtoolsBaselineRef.current = null
+      devtoolsSinceRef.current = null
+      devtoolsOpenRef.current = false
     }
   }, [active, registerViolation, requestFullscreen])
 
@@ -322,20 +401,26 @@ export function useAssessmentProctoring({
         analyser.fftSize = 512
         source.connect(analyser)
 
+        const sampleRate = audioContext.sampleRate || 44100
+        const binWidth = sampleRate / analyser.fftSize
+        const bandStart = Math.max(1, Math.floor(VOICE_BAND_START_HZ / binWidth))
+        const bandEnd = Math.min(analyser.frequencyBinCount, Math.ceil(VOICE_BAND_END_HZ / binWidth))
+
         const dataArray = new Uint8Array(analyser.frequencyBinCount)
         let voiceActiveSince = null
 
         const checkAudio = () => {
           if (cancelled) return
           analyser.getByteFrequencyData(dataArray)
-          let sum = 0
-          for (let i = 0; i < dataArray.length; i++) sum += dataArray[i]
-          const average = sum / dataArray.length
+          // Average only the human speech band (250–3400 Hz). Averaging all
+          // bins makes low-frequency hum, fans and broadband keyboard noise
+          // look like "voice"; band-limiting cuts most of those false hits.
+          const average = getVoiceBandAverage(dataArray, bandStart, bandEnd)
 
-          if (average > 15) {
+          if (average > BACKGROUND_VOICE_THRESHOLD) {
             if (voiceActiveSince === null) {
               voiceActiveSince = Date.now()
-            } else if (Date.now() - voiceActiveSince > 5000) {
+            } else if (Date.now() - voiceActiveSince > BACKGROUND_VOICE_SUSTAINED_MS) {
               registerViolation('background_voice', 'Sustained background voice detected.')
               voiceActiveSince = null
             }
@@ -419,11 +504,20 @@ export function useAssessmentProctoring({
           return
         }
         if (objectModelRef.current && video?.readyState >= 2) {
-          const detections = await objectModelRef.current.detect(video, 20, 0.15)
-          if (detections?.length) {
-            const suspicious = detections.filter((d) => ['cell phone', 'laptop', 'tv', 'remote'].includes(d.class))
-            if (suspicious.length > 0) {
-              registerViolation('suspicious_object', `Suspicious object detected: ${suspicious[0].class}`)
+          const detections = await objectModelRef.current.detect(video, OBJECT_DETECT_MAX_DETECTIONS, OBJECT_DETECT_THRESHOLD)
+          if (detections) {
+            const cls = getSuspiciousObjectClass(detections)
+            if (cls) {
+              const now = Date.now()
+              const prev = suspiciousObjectRef.current
+              if (!prev || prev.cls !== cls) {
+                suspiciousObjectRef.current = { cls, since: now }
+              } else if (now - prev.since > SUSPICIOUS_SUSTAINED_MS) {
+                registerViolation('suspicious_object', `Suspicious object detected: ${cls}`)
+                suspiciousObjectRef.current = { cls, since: now }
+              }
+            } else {
+              suspiciousObjectRef.current = null
             }
           }
         }
@@ -446,7 +540,16 @@ export function useAssessmentProctoring({
             const marginX = video.videoWidth * 0.02
             const marginY = video.videoHeight * 0.02
             if (x < -marginX || y < -marginY || x + width > video.videoWidth + marginX || y + height > video.videoHeight + marginY) {
-              registerViolation('half_face', 'Partial face detected.')
+              // A face clipped by the frame edge is common mid-movement (leaning
+              // in, adjusting the webcam). Require it to persist before flagging.
+              if (halfFaceSinceRef.current === null) {
+                halfFaceSinceRef.current = Date.now()
+              } else if (Date.now() - halfFaceSinceRef.current > HALF_FACE_SUSTAINED_MS) {
+                registerViolation('half_face', 'Partial face detected.')
+                halfFaceSinceRef.current = null
+              }
+            } else {
+              halfFaceSinceRef.current = null
             }
 
             const landmarks = face.landmarks

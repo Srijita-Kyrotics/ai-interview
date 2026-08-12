@@ -1,12 +1,18 @@
 """
 LLM Provider Abstraction Layer
-===============================
-Provides a unified interface for calling the interview LLM:
-- Multi-provider support (OpenRouter, Gemini, OpenAI, Claude) with failover
+==============================
+Provides a unified interface for calling the interview LLM.
+
+Obi is powered by a single reasoning model — Luna (``gpt-5.6-luna``) via the
+OpenAI-compatible API (``OPENAI_API_KEY`` / ``OPENAI_MODEL`` / ``OPENAI_BASE_URL``).
+No other LLM provider is used: resume analysis, interview planning, question
+generation, answer evaluation, coding decisions, coding-question generation and
+the final report all route through this one provider.
+
 - Retry logic with exponential backoff
 - Circuit breaker protection
 - Offline mock fallback for development and tests
-- Provider-agnostic JSON response parsing
+- JSON response parsing
 
 Nodes call `call_llm_json(system, prompt)` and don't know which provider is used.
 """
@@ -26,7 +32,7 @@ from app.config import settings
 logger = logging.getLogger("ai_interview.llm_providers")
 
 
-# ΓöÇΓöÇ Provider Error Types ΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇ
+# ── Provider Error Types ─────────────────────────────────────────────────────
 
 class LLMProviderError(Exception):
     """Base error for LLM provider failures."""
@@ -42,7 +48,7 @@ class LLMProviderUnavailableError(LLMProviderError):
         super().__init__("all", message, retryable=False)
 
 
-# ΓöÇΓöÇ Abstract Provider Interface ΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇ
+# ── Abstract Provider Interface ──────────────────────────────────────────────
 
 class LLMProvider(ABC):
     """Abstract base class for LLM providers."""
@@ -77,9 +83,7 @@ class LLMProvider(ABC):
         ...
 
 
-# ΓöÇΓöÇ OpenRouter Provider ΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇ
-
-_OR_BASE_URL = "https://openrouter.ai/api/v1"
+# ── OpenAI Provider (Luna) ───────────────────────────────────────────────────
 
 # Shared httpx client. Reusing a single client (instead of creating one per
 # call) keeps TLS sessions and connection pools alive, cutting per-call
@@ -94,237 +98,35 @@ def _get_http_client() -> httpx.AsyncClient:
         _http_client = httpx.AsyncClient(
             timeout=httpx.Timeout(60.0, connect=10.0),
             limits=httpx.Limits(max_connections=20, max_keepalive_connections=20),
-            headers={"HTTP-Referer": "https://localhost", "X-Title": "AI Interview Coach"},
         )
     return _http_client
 
 
-class OpenRouterProvider(LLMProvider):
-    """OpenRouter provider (OpenAI-compatible endpoint) using httpx."""
-
-    @property
-    def name(self) -> str:
-        return "openrouter"
-
-    async def _chat_completion(self, messages: list[dict], temperature: float, max_tokens: int) -> str:
-        api_key = settings.openrouter_api_key
-        if not api_key:
-            raise LLMProviderError(self.name, "OPENROUTER_API_KEY not configured", retryable=False)
-
-        payload = {
-            "model": settings.openrouter_model,
-            "messages": messages,
-            "temperature": temperature,
-            "max_tokens": max_tokens,
-        }
-        headers = {
-            "Authorization": f"Bearer {api_key}",
-            "Content-Type": "application/json",
-        }
-
-        client = _get_http_client()
-        try:
-            resp = await client.post(
-                f"{_OR_BASE_URL}/chat/completions",
-                headers=headers,
-                json=payload,
-            )
-            resp.raise_for_status()
-            data = resp.json()
-            return data["choices"][0]["message"]["content"].strip()
-        except httpx.HTTPStatusError as e:
-            detail = ""
-            try:
-                detail = e.response.json().get("error", {}).get("message", "")
-            except Exception:
-                pass
-            retryable = e.response.status_code in (429, 500, 502, 503, 504)
-            raise LLMProviderError(
-                self.name,
-                f"OpenRouter HTTP {e.response.status_code}: {detail or e.response.text[:200]}",
-                retryable=retryable,
-            ) from e
-
-    async def generate_json(self, system: str, prompt: str, **kwargs) -> dict:
-        api_key = settings.openrouter_api_key
-        if not api_key:
-            raise LLMProviderError(self.name, "OPENROUTER_API_KEY not configured", retryable=False)
-
-        model = kwargs.get("model", settings.openrouter_model)
-        temperature = kwargs.get("temperature", 0.7)
-        max_tokens = kwargs.get("max_tokens", 2048)
-
-        payload = {
-            "model": model,
-            "messages": [
-                {"role": "system", "content": system},
-                {"role": "user", "content": prompt},
-            ],
-            "temperature": temperature,
-            "max_tokens": max_tokens,
-            "response_format": {"type": "json_object"},
-        }
-        headers = {
-            "Authorization": f"Bearer {api_key}",
-            "Content-Type": "application/json",
-        }
-
-        client = _get_http_client()
-        try:
-            resp = await client.post(
-                f"{_OR_BASE_URL}/chat/completions",
-                headers=headers,
-                json=payload,
-            )
-            resp.raise_for_status()
-            data = resp.json()
-            text = data["choices"][0]["message"]["content"].strip()
-            return _parse_json_response(text, self.name)
-        except httpx.HTTPStatusError as e:
-            detail = ""
-            try:
-                detail = e.response.json().get("error", {}).get("message", "")
-            except Exception:
-                pass
-            retryable = e.response.status_code in (429, 500, 502, 503, 504)
-            raise LLMProviderError(
-                self.name,
-                f"OpenRouter HTTP {e.response.status_code}: {detail or e.response.text[:200]}",
-                retryable=retryable,
-            ) from e
-
-    async def generate_text(self, messages: list[dict], **kwargs) -> str:
-        """Open-ended chat completion (used by the chat WebSocket interviewer)."""
-        temperature = kwargs.get("temperature", 0.7)
-        max_tokens = kwargs.get("max_tokens", 1024)
-        return await self._chat_completion(messages, temperature, max_tokens)
-
-    async def health_check(self) -> bool:
-        if not settings.openrouter_api_key:
-            return False
-        try:
-            resp = await _get_http_client().get(
-                f"{_OR_BASE_URL}/models",
-                headers={"Authorization": f"Bearer {settings.openrouter_api_key}"},
-            )
-            return resp.status_code == 200
-        except Exception:
-            return False
-
-
-# ΓöÇΓöÇ Mock / Offline Provider ΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇ
-
-_PLACEHOLDER_MARKERS = (
-    "your_", "xxx", "changeme", "placeholder", "replace_me", "example",
-    "todo", "<", ">", "[key]", "api_key_here", "sk-...",
-)
-
-
-def _has_usable_api_key(value: str) -> bool:
-    """True when an API key value looks like a real credential, not a placeholder.
-
-    Placeholder values like ``your_gemini_api_key`` are non-empty but unusable ΓÇö
-    registering a provider for them only produces failed calls and slow retries.
-    """
-    if not value:
-        return False
-    normalized = value.strip().lower()
-    return not any(marker in normalized for marker in _PLACEHOLDER_MARKERS)
-
-
-# ── Gemini Provider ───────────────────────────────────────────────────────────
-
-class GeminiProvider(LLMProvider):
-    """Google Gemini provider using google-generativeai SDK."""
-
-    @property
-    def name(self) -> str:
-        return "gemini"
-
-    async def generate_json(self, system: str, prompt: str, **kwargs) -> dict:
-        import google.generativeai as genai
-
-        api_key = settings.gemini_api_key
-        if not api_key:
-            raise LLMProviderError(self.name, "GEMINI_API_KEY not configured", retryable=False)
-
-        genai.configure(api_key=api_key)
-        model = genai.GenerativeModel(
-            settings.gemini_model,
-            system_instruction=system,
-            generation_config=genai.GenerationConfig(
-                temperature=kwargs.get("temperature", 0.7),
-                max_output_tokens=kwargs.get("max_tokens", 2048),
-                response_mime_type="application/json",
-            ),
-        )
-
-        try:
-            response = await model.generate_content_async(prompt)
-            text = response.text.strip()
-            return _parse_json_response(text, self.name)
-        except LLMProviderError:
-            raise
-        except Exception as e:
-            raise LLMProviderError(self.name, f"Generation failed: {e}") from e
-
-    async def generate_text(self, messages: list[dict], **kwargs) -> str:
-        """Open-ended chat completion (used by the chat WebSocket interviewer)."""
-        import google.generativeai as genai
-
-        api_key = settings.gemini_api_key
-        if not api_key:
-            raise LLMProviderError(self.name, "GEMINI_API_KEY not configured", retryable=False)
-
-        genai.configure(api_key=api_key)
-        model = genai.GenerativeModel(
-            settings.gemini_model,
-            system_instruction=messages[0]["content"] if messages and messages[0]["role"] == "system" else None,
-            generation_config=genai.GenerationConfig(
-                temperature=kwargs.get("temperature", 0.7),
-                max_output_tokens=kwargs.get("max_tokens", 1024),
-            ),
-        )
-        history = [m for m in messages if m["role"] != "system"]
-        try:
-            chat = model.start_chat(history=history)
-            last_prompt = messages[-1]["content"] if messages else ""
-            response = await chat.send_message_async(last_prompt)
-            return response.text.strip()
-        except LLMProviderError:
-            raise
-        except Exception as e:
-            raise LLMProviderError(self.name, f"Generation failed: {e}") from e
-
-    async def health_check(self) -> bool:
-        if not settings.gemini_api_key:
-            return False
-        try:
-            import google.generativeai as genai
-            genai.configure(api_key=settings.gemini_api_key)
-            model = genai.GenerativeModel(settings.gemini_model)
-            await model.generate_content_async("Reply with: ok")
-            return True
-        except Exception:
-            return False
-
-
-# ── OpenAI Provider ───────────────────────────────────────────────────────────
-
 class OpenAIProvider(LLMProvider):
-    """OpenAI provider using httpx (no SDK dependency)."""
+    """OpenAI provider using httpx (no SDK dependency).
+
+    Runs Obi's reasoning brain. The model is set via ``OPENAI_MODEL``
+    (default: ``gpt-5.6-luna``) and may point at any OpenAI-compatible endpoint
+    via ``OPENAI_BASE_URL``.
+    """
 
     @property
     def name(self) -> str:
         return "openai"
 
-    async def _chat_completion(self, messages: list[dict], temperature: float, max_tokens: int, response_format: bool) -> str:
+    async def _chat_completion(
+        self,
+        messages: list[dict],
+        temperature: float,
+        max_tokens: int,
+        response_format: bool,
+        model: str,
+    ) -> str:
         api_key = settings.openai_api_key
         if not api_key:
             raise LLMProviderError(self.name, "OPENAI_API_KEY not configured", retryable=False)
 
-        model = "gpt-4o"
-        base_url = getattr(settings, "openai_base_url", "https://api.openai.com/v1").rstrip("/")
+        base_url = settings.openai_base_url.rstrip("/")
 
         payload = {
             "model": model,
@@ -362,6 +164,7 @@ class OpenAIProvider(LLMProvider):
             kwargs.get("temperature", 0.7),
             kwargs.get("max_tokens", 2048),
             response_format=True,
+            model=kwargs.get("model", settings.openai_model),
         )
         return _parse_json_response(text, self.name)
 
@@ -372,14 +175,16 @@ class OpenAIProvider(LLMProvider):
             kwargs.get("temperature", 0.7),
             kwargs.get("max_tokens", 1024),
             response_format=False,
+            model=kwargs.get("model", settings.openai_model),
         )
 
     async def health_check(self) -> bool:
         if not settings.openai_api_key:
             return False
         try:
+            base_url = settings.openai_base_url.rstrip("/")
             resp = await _get_http_client().get(
-                "https://api.openai.com/v1/models",
+                f"{base_url}/models",
                 headers={"Authorization": f"Bearer {settings.openai_api_key}"},
             )
             return resp.status_code == 200
@@ -387,97 +192,24 @@ class OpenAIProvider(LLMProvider):
             return False
 
 
-# ── Claude Provider ───────────────────────────────────────────────────────────
+# ── Mock / Offline Provider ──────────────────────────────────────────────────
 
-class ClaudeProvider(LLMProvider):
-    """Anthropic Claude provider using httpx (no SDK dependency)."""
+_PLACEHOLDER_MARKERS = (
+    "your_", "xxx", "changeme", "placeholder", "replace_me", "example",
+    "todo", "<", ">", "[key]", "api_key_here", "sk-...",
+)
 
-    @property
-    def name(self) -> str:
-        return "claude"
 
-    async def _chat_completion(self, messages: list[dict], temperature: float, max_tokens: int, append_json_note: bool) -> str:
-        api_key = getattr(settings, "claude_api_key", "")
-        if not api_key:
-            raise LLMProviderError(self.name, "CLAUDE_API_KEY not configured", retryable=False)
+def _has_usable_api_key(value: str) -> bool:
+    """True when an API key value looks like a real credential, not a placeholder.
 
-        model = "claude-sonnet-4-20250514"
-        base_url = getattr(settings, "claude_base_url", "https://api.anthropic.com").rstrip("/")
-
-        system = ""
-        history = []
-        for m in messages:
-            if m["role"] == "system":
-                system = m["content"]
-            else:
-                history.append(m)
-        if history and append_json_note:
-            content = f"{history[-1]['content']}\n\nRespond with valid JSON only."
-            history = history[:-1] + [{"role": history[-1]["role"], "content": content}]
-
-        payload = {
-            "model": model,
-            "max_tokens": max_tokens,
-            "temperature": temperature,
-            "system": system,
-            "messages": history,
-        }
-        headers = {
-            "x-api-key": api_key,
-            "anthropic-version": "2023-06-01",
-            "Content-Type": "application/json",
-        }
-
-        client = _get_http_client()
-        try:
-            resp = await client.post(f"{base_url}/v1/messages", headers=headers, json=payload)
-            resp.raise_for_status()
-            data = resp.json()
-            return data["content"][0]["text"].strip()
-        except httpx.HTTPStatusError as e:
-            retryable = e.response.status_code in (429, 500, 502, 503, 504)
-            raise LLMProviderError(
-                self.name,
-                f"Claude HTTP {e.response.status_code}: {e.response.text[:200]}",
-                retryable=retryable,
-            ) from e
-
-    async def generate_json(self, system: str, prompt: str, **kwargs) -> dict:
-        text = await self._chat_completion(
-            [
-                {"role": "system", "content": system},
-                {"role": "user", "content": prompt},
-            ],
-            kwargs.get("temperature", 0.7),
-            kwargs.get("max_tokens", 2048),
-            append_json_note=True,
-        )
-        return _parse_json_response(text, self.name)
-
-    async def generate_text(self, messages: list[dict], **kwargs) -> str:
-        """Open-ended chat completion (used by the chat WebSocket interviewer)."""
-        return await self._chat_completion(
-            messages,
-            kwargs.get("temperature", 0.7),
-            kwargs.get("max_tokens", 1024),
-            append_json_note=False,
-        )
-
-    async def health_check(self) -> bool:
-        api_key = getattr(settings, "claude_api_key", "")
-        if not api_key:
-            return False
-        try:
-            resp = await _get_http_client().get(
-                "https://api.anthropic.com/v1/models",
-                headers={
-                    "x-api-key": api_key,
-                    "anthropic-version": "2023-06-01",
-                },
-            )
-            return resp.status_code == 200
-        except Exception:
-            return False
+    Placeholder values like ``your_openai_api_key`` are non-empty but unusable —
+    registering a provider for them only produces failed calls and slow retries.
+    """
+    if not value:
+        return False
+    normalized = value.strip().lower()
+    return not any(marker in normalized for marker in _PLACEHOLDER_MARKERS)
 
 
 class MockProvider(LLMProvider):
@@ -485,9 +217,9 @@ class MockProvider(LLMProvider):
     Deterministic offline provider used when no real LLM API key is configured.
 
     Routes on a distinctive substring of the system prompt and returns the
-    minimal JSON schema each interview node expects. Registered ONLY when every
-    real provider key is missing or a placeholder, so it never shadows a working
-    API. Lets the full interview pipeline run offline for development and E2E
+    minimal JSON schema each interview node expects. Registered ONLY when the
+    OpenAI key is missing or a placeholder, so it never shadows a working API.
+    Lets the full interview pipeline run offline for development and E2E
     testing without any external LLM dependency or cost.
     """
 
@@ -506,14 +238,14 @@ class MockProvider(LLMProvider):
         return {}
 
     async def generate_text(self, messages: list[dict], **kwargs) -> str:
-        """Offline chat fallback ΓÇö returns a short, natural-sounding reply."""
+        """Offline chat fallback — returns a short, natural-sounding reply."""
         return (
-            "Thanks for your answer. That's an interesting point ΓÇö could you walk me "
+            "Thanks for your answer. That's an interesting point — could you walk me "
             "through your reasoning in a bit more detail?"
         )
 
 
-# ΓöÇΓöÇ Mock payload helpers ΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇ
+# ── Mock payload helpers ─────────────────────────────────────────────────────
 
 def _mock_resume_analysis(prompt: str) -> dict:
     return {
@@ -580,7 +312,7 @@ def _mock_interview_plan(prompt: str) -> dict:
 def _mock_question(prompt: str) -> dict:
     return {
         "question_text": (
-            "Tell me about a time you solved a hard problem ΓÇö walk me through your "
+            "Tell me about a time you solved a hard problem — walk me through your "
             "approach, the tradeoffs you considered, and what you would do differently."
         ),
         "intent": "technical",
@@ -647,18 +379,31 @@ def _mock_coding_problem(prompt: str) -> dict:
         "difficulty": "easy",
         "topic": "arrays",
         "description": (
-            "Given an array of n integers, return the element that appears more than n/2 times. "
+            "Given an array of n integers, print the element that appears more than n/2 times. "
             "You may assume the array is non-empty and a majority element always exists."
         ),
         "constraints": ["1 <= n <= 10^5", "-10^9 <= nums[i] <= 10^9"],
         "examples": [
-            {"input": "nums = [3, 2, 3]", "output": "3", "explanation": "3 appears twice, more than 3/2 times."}
+            {"input": "3\n3 2 3", "output": "3", "explanation": "3 appears twice, more than 3/2 times."}
         ],
+        "io_contract": (
+            "Line 1: an integer n. Line 2: n space-separated integers. "
+            "Output: the majority element on a single line."
+        ),
         "languages": ["python", "javascript"],
         "starter_code": {
-            "python": "def majority_element(nums):\n    pass",
-            "javascript": "function majorityElement(nums) {\n  \n}",
+            "python": "import sys\n\ndef solve():\n    data = sys.stdin.read().strip()\n    # implement here\n\nif __name__ == \"__main__\":\n    solve()",
+            "javascript": "const readline = require('readline');\nconst rl = readline.createInterface({ input: process.stdin });\nrl.on('line', (line) => {\n    // implement here\n});",
         },
+        "visible_test_cases": [
+            {"input": "3\n3 2 3", "expected": "3"},
+            {"input": "1\n7", "expected": "7"},
+        ],
+        "hidden_test_cases": [
+            {"input": "5\n1 1 1 2 1", "expected": "1"},
+            {"input": "7\n2 2 1 1 1 2 2", "expected": "2"},
+            {"input": "4\n-1 -1 -1 -1", "expected": "-1"},
+        ],
         "time_complexity": "O(n)",
         "space_complexity": "O(1)",
         "evaluation_criteria": ["Correctness on edge cases", "Efficient algorithm", "Clean code"],
@@ -668,7 +413,7 @@ def _mock_coding_problem(prompt: str) -> dict:
 def _mock_follow_up(prompt: str) -> dict:
     return {
         "follow_up_question": (
-            "That's a bit vague ΓÇö can you give me a concrete example from your experience "
+            "That's a bit vague — can you give me a concrete example from your experience "
             "and explain the specific tradeoffs you considered?"
         ),
         "why_this_question": "Probing for concrete detail behind a shallow answer.",
@@ -695,7 +440,7 @@ def _mock_report(prompt: str) -> dict:
         "claim_assessment": {
             "verified_claims": [],
             "failed_claims": [],
-            "partial_claims": ["Python expertise ΓÇö showed working knowledge but not full depth"],
+            "partial_claims": ["Python expertise — showed working knowledge but not full depth"],
         },
         "code_quality_assessment": {
             "submitted_code": False,
@@ -707,7 +452,7 @@ def _mock_report(prompt: str) -> dict:
 
 def _mock_transition(prompt: str) -> dict:
     return {
-        "transition_text": "Great ΓÇö that covers your background. Now let's dig into some technical depth."
+        "transition_text": "Great — that covers your background. Now let's dig into some technical depth."
     }
 
 
@@ -795,7 +540,7 @@ _MOCK_ROUTERS: list[tuple[str, callable]] = [
 ]
 
 
-# ΓöÇΓöÇ JSON Response Parser ΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇ
+# ── JSON Response Parser ─────────────────────────────────────────────────────
 
 def _parse_json_response(text: str, provider: str) -> dict:
     """Parse a JSON response from any provider, stripping markdown fences."""
@@ -809,21 +554,21 @@ def _parse_json_response(text: str, provider: str) -> dict:
         raise LLMProviderError(provider, f"Invalid JSON response: {e}\nRaw: {text[:500]}") from e
 
 
-# ΓöÇΓöÇ Provider Registry with Failover ΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇ
+# ── Provider Registry ────────────────────────────────────────────────────────
 
 class LLMProviderRegistry:
     """
-    Manages multiple LLM providers with automatic failover and retry.
+    Manages the LLM provider with automatic retry.
 
-    Providers are tried in priority order. If one fails with a retryable error,
-    the next provider is tried. Exponential backoff is applied between retries.
+    The registry keeps a single real provider (OpenAI/Luna) plus the offline
+    mock for development. Retries with exponential backoff are applied.
     """
 
     def __init__(self):
         self._providers: list[LLMProvider] = []
         self._circuit_breakers: dict[str, dict] = {}
         self._default_temperature = 0.7
-        # Large budget for structured JSON outputs ΓÇö several nodes (resume
+        # Large budget for structured JSON outputs — several nodes (resume
         # analysis, final report) emit multi-KB JSON and would otherwise get
         # truncated mid-string, producing invalid JSON that fails every retry.
         self._default_max_tokens = 8192
@@ -872,11 +617,12 @@ class LLMProviderRegistry:
         temperature: float | None = None,
         max_tokens: int | None = None,
         max_retries: int = 3,
+        model: str | None = None,
     ) -> dict:
         """
-        Generate a JSON response using the best available provider.
+        Generate a JSON response using the available provider.
 
-        Tries providers in priority order with retry and failover.
+        Tries the provider in order with retry and exponential backoff.
         Raises LLMProviderUnavailableError if all providers fail.
         """
         if not self._providers:
@@ -886,6 +632,8 @@ class LLMProviderRegistry:
             "temperature": temperature or self._default_temperature,
             "max_tokens": max_tokens or self._default_max_tokens,
         }
+        if model:
+            kwargs["model"] = model
 
         last_error = None
 
@@ -987,7 +735,7 @@ class LLMProviderRegistry:
         return [p.name for p in self._providers]
 
 
-# ΓöÇΓöÇ Singleton Registry ΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇ
+# ── Singleton Registry ───────────────────────────────────────────────────────
 
 _registry: LLMProviderRegistry | None = None
 
@@ -996,9 +744,10 @@ def get_llm_registry() -> LLMProviderRegistry:
     """
     Get or create the singleton LLM provider registry.
 
-    OpenRouter (with the configured OPENROUTER_MODEL) is the single LLM
-    provider. If its key is missing or a placeholder, we fall back to the
-    deterministic offline mock so the app still works for dev and E2E tests.
+    OpenAI (with the configured ``OPENAI_MODEL``, default ``gpt-5.6-luna``) is
+    the single LLM provider powering Obi. If its key is missing or a
+    placeholder, we fall back to the deterministic offline mock so the app
+    still works for dev and E2E tests.
     """
     global _registry
     if _registry is not None:
@@ -1006,29 +755,13 @@ def get_llm_registry() -> LLMProviderRegistry:
 
     _registry = LLMProviderRegistry()
 
-    # Multi-provider failover: OpenRouter is primary, then Gemini, OpenAI, Claude.
-    if _has_usable_api_key(settings.openrouter_api_key):
-        _registry.register(OpenRouterProvider(), priority=0)
-        logger.info("Registered LLM provider: OpenRouter (%s)", settings.openrouter_model)
-
-    if _has_usable_api_key(settings.gemini_api_key):
-        _registry.register(GeminiProvider(), priority=1)
-        logger.info("Registered LLM provider: Gemini (%s)", settings.gemini_model)
-
     if _has_usable_api_key(settings.openai_api_key):
-        _registry.register(OpenAIProvider(), priority=2)
-        logger.info("Registered LLM provider: OpenAI")
-
-    if _has_usable_api_key(getattr(settings, "claude_api_key", "")):
-        _registry.register(ClaudeProvider(), priority=3)
-        logger.info("Registered LLM provider: Claude")
-
-    # No usable API keys → fall back to the deterministic offline mock so the
-    # interview pipeline keeps working for development and E2E testing.
-    if not _registry.available_providers:
+        _registry.register(OpenAIProvider(), priority=0)
+        logger.info("Registered LLM provider: OpenAI (%s)", settings.openai_model)
+    else:
         _registry.register(MockProvider(), priority=99)
         logger.warning(
-            "No real LLM API keys configured — using deterministic offline mock provider"
+            "No OPENAI_API_KEY configured — using deterministic offline mock provider"
         )
 
     return _registry

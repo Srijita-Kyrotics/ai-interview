@@ -51,16 +51,31 @@ WebSocket Protocol (voice mode):
 
 from __future__ import annotations
 
+import asyncio
 import contextlib
 import json
 import logging
+import re
 import time
 import uuid
+from pathlib import Path
 
-from fastapi import APIRouter, Body, Depends, Header, HTTPException, Query, WebSocket, WebSocketDisconnect
+from fastapi import (
+    APIRouter,
+    Body,
+    Depends,
+    File,
+    Header,
+    HTTPException,
+    Query,
+    UploadFile,
+    WebSocket,
+    WebSocketDisconnect,
+)
 from pydantic import BaseModel
 from starlette.websockets import WebSocketState
 
+from app.ai_interviewer.coding_judge import judge_submission
 from app.ai_interviewer.graph import InterviewGraphRunner
 from app.ai_interviewer.nodes import LLMUnavailableError
 from app.ai_interviewer.state import make_initial_state
@@ -68,9 +83,9 @@ from app.ai_interviewer.state_store import InterviewStateStore, get_state_store
 from app.ai_interviewer.voice import VoicePipeline
 from app.code_executor import execute_local
 from app.config import settings
-from app.db import check_rate_limit, load_session, save_session
+from app.db import check_rate_limit, load_session, load_user, save_session
 from app.helpers import create_token, decode_token, default_scores
-from app.resume_parser import parse_resume_text
+from app.resume_parser import extract_text_from_pdf_content, parse_resume_text
 
 logger = logging.getLogger("ai_interview.router")
 
@@ -85,6 +100,15 @@ def _get_store() -> InterviewStateStore:
     if _store is None:
         _store = get_state_store()
     return _store
+
+
+def _public_coding_problem(problem: dict | None) -> dict | None:
+    """Problem payload safe to send to the candidate (hidden tests stripped)."""
+    if not problem:
+        return None
+    public = dict(problem)
+    public.pop("hidden_test_cases", None)
+    return public
 
 
 # ── Request/Response Models ──────────────────────────────────────────────────
@@ -113,6 +137,13 @@ class RunCodeRequest(BaseModel):
     language: str
     code: str
     stdin: str = ""
+
+
+class JudgeRequest(BaseModel):
+    language: str
+    code: str
+    test_cases: list[dict] = []
+    timeout: float | None = None
 
 
 # ── Dependency: Auth ──────────────────────────────────────────────────────────
@@ -163,8 +194,22 @@ async def create_ai_interview_session(
     personalize the interview; otherwise the session is seeded with a
     generic resume so the pipeline always has resume context to work from.
     """
+    return _create_direct_session(request.resume_text, user)
+
+
+def _account_name(email: str) -> str:
+    """Resolve the platform account's display name for a candidate email."""
+    try:
+        account = load_user(email)
+        return (account or {}).get("name", "") or ""
+    except Exception:  # noqa: BLE001
+        return ""
+
+
+def _create_direct_session(resume_text: str, user: dict) -> dict:
+    """Create a platform session for the direct Obi flow (text or uploaded resume)."""
     session_id = str(uuid.uuid4())
-    resume_text = request.resume_text.strip()
+    resume_text = (resume_text or "").strip()
     if resume_text:
         resume = parse_resume_text(resume_text, "pasted-resume.txt")
     else:
@@ -173,6 +218,7 @@ async def create_ai_interview_session(
     state = {
         "sessionId": session_id,
         "resume": resume,
+        "userName": _account_name(user_id),
         "selectedCompany": "",
         "selectedCompanies": [],
         "currentRound": "resume",
@@ -185,6 +231,40 @@ async def create_ai_interview_session(
     save_session(session_id, state, user_id=user_id)
     logger.info("AI interview session created directly", extra={"session_id": session_id, "email": user_id})
     return {"session_id": session_id, "resume": resume}
+
+
+@router.post("/upload-resume")
+async def upload_ai_interview_resume(
+    file: UploadFile = File(...),
+    user: dict = Depends(get_current_user),
+):
+    """
+    Upload a resume (PDF or TXT) for the direct AI interview flow.
+
+    Extracts the text, parses it, and creates a platform session so Obi
+    reads the candidate's real background before the interview starts.
+    """
+    filename = Path(file.filename or "resume.txt").name
+    ext = Path(filename).suffix.lower()
+    if ext not in (".pdf", ".txt"):
+        raise HTTPException(status_code=400, detail="Only PDF and TXT files are supported")
+
+    content = await file.read()
+    if len(content) > settings.max_upload_bytes:
+        raise HTTPException(
+            status_code=413,
+            detail=f"File too large. Maximum size is {settings.max_upload_bytes // (1024 * 1024)} MB.",
+        )
+
+    if ext == ".pdf":
+        try:
+            text = extract_text_from_pdf_content(content)
+        except ValueError as e:
+            raise HTTPException(status_code=400, detail=str(e)) from e
+    else:
+        text = content.decode("utf-8", errors="ignore")
+
+    return _create_direct_session(text, user)
 
 
 @router.post("/start", response_model=StartInterviewResponse)
@@ -239,13 +319,13 @@ async def start_ai_interview(
         if not registry.available_providers:
             raise LLMUnavailableError(
                 "No LLM providers are configured. "
-                "Add OPENROUTER_API_KEY, GEMINI_API_KEY, OPENAI_API_KEY, or CLAUDE_API_KEY."
+                "Add OPENAI_API_KEY to the environment."
             )
     except LLMUnavailableError as exc:
         logger.error("AI interview startup blocked: no LLM provider configured", extra={"session_id": request.session_id, "error": str(exc)})
         raise HTTPException(
             status_code=503,
-            detail="Obi cannot start because no LLM API key is configured. Add OPENROUTER_API_KEY, GEMINI_API_KEY, OPENAI_API_KEY, or CLAUDE_API_KEY.",
+            detail="Obi cannot start because no LLM API key is configured. Add OPENAI_API_KEY to the environment.",
         ) from exc
 
     # Create the interview state
@@ -253,6 +333,7 @@ async def start_ai_interview(
     initial_state = make_initial_state(
         session_id=interview_session_id,
         candidate_email=user.get("email", ""),
+        candidate_name=(session_data.get("userName") or "").strip(),
         role=request.role,
         company=request.company,
         resume_raw_text=resume_raw,
@@ -328,6 +409,40 @@ async def run_interview_code(
         "stderr": result.get("stderr", ""),
         "error": result.get("error", ""),
     }
+
+
+@router.post("/judge")
+async def judge_interview_code(
+    request: JudgeRequest,
+    user: dict = Depends(get_current_user),
+):
+    """
+    Run the candidate's code against a set of test cases and return per-case
+    pass/fail results. Used by the coding round's "Run Tests" button; the
+    server keeps the problem's private (hidden) test cases out of this call.
+    """
+    if not request.code.strip():
+        raise HTTPException(status_code=400, detail="Code cannot be empty")
+    if not request.test_cases:
+        raise HTTPException(status_code=400, detail="No test cases provided")
+
+    if not check_rate_limit(f"code:{user.get('email', '')}", settings.code_rate_limit, settings.code_rate_window):
+        raise HTTPException(status_code=429, detail="Too many code execution requests. Please wait.")
+
+    result = await judge_submission(
+        request.language, request.code, request.test_cases, request.timeout or 10.0
+    )
+    logger.info(
+        "AI interview code judged",
+        extra={
+            "email": user.get("email"),
+            "language": request.language,
+            "passed": result.get("passed"),
+            "total": result.get("total"),
+            "ok": result.get("ok"),
+        },
+    )
+    return result
 
 
 @router.post("/resume", response_model=StartInterviewResponse)
@@ -430,17 +545,7 @@ async def get_interview_state(
         "code_versions": len(state.get("code_history", [])),
         "replan_count": state.get("replan_count", 0),
         "current_comm_metrics": state.get("current_comm_metrics"),
-        "active_coding_problem": {
-            "id": p["id"],
-            "title": p["title"],
-            "difficulty": p["difficulty"],
-            "topic": p["topic"],
-            "description": p["description"],
-            "constraints": p.get("constraints", []),
-            "examples": p.get("examples", []),
-            "languages": p.get("languages", []),
-            "starter_code": p.get("starter_code", {}),
-        } if (p := state.get("active_coding_problem")) else None,
+        "active_coding_problem": _public_coding_problem(state.get("active_coding_problem")),
         "coding_submissions": [
             {
                 "problem_id": s["problem_id"],
@@ -616,7 +721,10 @@ async def ai_interview_websocket(
                 "session_id": interview_session_id,
                 "phase": state.get("phase"),
                 "questions_asked": state.get("questions_asked", 0),
+                "main_questions_asked": state.get("main_questions_asked", 0),
                 "max_questions": state.get("max_questions", 12),
+                "stage_index": state.get("current_stage_index", 0),
+                "total_stages": len(state.get("interview_plan", {}).get("stages", [])) or 1,
                 "current_stage": state.get("current_stage", {}).get("name", ""),
                 "timestamp": time.time(),
             })
@@ -635,7 +743,7 @@ async def ai_interview_websocket(
             if problem and problem.get("description"):
                 await websocket.send_json({
                     "type": "coding_problem",
-                    "problem": problem,
+                    "problem": _public_coding_problem(problem),
                     "timestamp": time.time(),
                 })
 
@@ -649,7 +757,7 @@ async def ai_interview_websocket(
             if problem and problem.get("description"):
                 await websocket.send_json({
                     "type": "coding_problem",
-                    "problem": problem,
+                    "problem": _public_coding_problem(problem),
                     "timestamp": time.time(),
                 })
 
@@ -691,6 +799,10 @@ async def ai_interview_websocket(
                     "question_id": current_q.get("id", ""),
                     "stage": state.get("current_stage", {}).get("name", ""),
                     "is_follow_up": False,
+                    "main_questions_asked": state.get("main_questions_asked", 0),
+                    "max_questions": state.get("max_questions", 12),
+                    "stage_index": state.get("current_stage_index", 0),
+                    "total_stages": len(state.get("interview_plan", {}).get("stages", [])) or 1,
                     "timestamp": time.time(),
                 })
                 await _send_coding_problem_if_active()
@@ -704,7 +816,10 @@ async def ai_interview_websocket(
                     "stage": state.get("current_stage", {}).get("name", ""),
                     "is_follow_up": result.get("is_follow_up", False),
                     "questions_asked": result.get("questions_asked", 0),
+                    "main_questions_asked": result.get("main_questions_asked", 0),
                     "max_questions": result.get("max_questions", 12),
+                    "stage_index": state.get("current_stage_index", 0),
+                    "total_stages": len(state.get("interview_plan", {}).get("stages", [])) or 1,
                     "timestamp": time.time(),
                 })
                 await _send_coding_problem_if_active()
@@ -838,14 +953,14 @@ async def ai_interview_websocket(
 
     except RuntimeError as e:
         logger.error(
-            "Gemini call failed",
+            "LLM call failed",
             extra={"error": str(e), "session": interview_session_id}
         )
         with contextlib.suppress(Exception):
             await websocket.send_json({
                 "type": "error",
                 "message": f"AI model error: {e}",
-                "error_code": "GEMINI_ERROR",
+                "error_code": "LLM_ERROR",
             })
 
     except WebSocketDisconnect:
@@ -887,14 +1002,40 @@ async def ai_interview_websocket(
 
 # ── Voice Interview WebSocket ──────────────────────────────────────────────────
 
-def _build_instant_greeting(state: dict) -> str:
-    """Build a greeting that needs no LLM call so Obi can speak instantly."""
+_PLACEHOLDER_NAMES = {
+    "candidate",
+    "the candidate",
+    "ai interview candidate",
+    "interview candidate",
+    "candidate name",
+    "applicant",
+    "user",
+    "there",
+}
+
+
+def _is_placeholder_name(name: str) -> bool:
+    """True for generic/default names that should never be spoken as a greeting."""
+    return not name or name.strip().lower() in _PLACEHOLDER_NAMES
+
+
+def _resolve_candidate_name(state: dict) -> str:
+    """Best-effort real name for the greeting: resume name → account name → email."""
     parsed = state.get("resume_parsed") or {}
-    name = parsed.get("name") or ""
+    name = (parsed.get("name") or "").strip()
+    if _is_placeholder_name(name):
+        name = ""
+    if not name:
+        name = (state.get("candidate_name") or "").strip()
     if not name:
         email = state.get("candidate_email") or ""
         name = email.split("@")[0] if email else ""
-    name = (name or "there").strip()
+    return name or "there"
+
+
+def _build_instant_greeting(state: dict) -> str:
+    """Build a greeting that needs no LLM call so Obi can speak instantly."""
+    name = _resolve_candidate_name(state)
     role = state.get("role") or "this role"
     company = state.get("company") or "the company"
     return (
@@ -903,6 +1044,87 @@ def _build_instant_greeting(state: dict) -> str:
         f"projects, and technical skills for the {role} position at {company}. "
         f"I'm preparing your questions now, so give me just a moment."
     )
+
+
+# ── Streamed TTS ──────────────────────────────────────────────────────────────
+# Synthesize long responses one sentence-cluster at a time and push each chunk
+# over the websocket as soon as it is ready, so playback starts long before the
+# whole response is generated. Chunk synthesis is overlapped (limited
+# concurrency) but audio is always sent in text order to keep speech coherent.
+
+_SENTENCE_SPLIT_RE = re.compile(r"(?<=[.!?])\s+")
+_MIN_CHUNK_CHARS = 60
+_MAX_CHUNK_CHARS = 180
+_MAX_TTS_CONCURRENCY = 2
+
+
+def _split_speech_chunks(text: str) -> list[str]:
+    from app.ai_interviewer.voice import clean_text_for_speech
+
+    cleaned = clean_text_for_speech(text)
+    if not cleaned:
+        return []
+
+    sentences = [s.strip() for s in _SENTENCE_SPLIT_RE.split(cleaned) if s.strip()]
+    chunks: list[str] = []
+    current = ""
+    for sentence in sentences:
+        if not current:
+            current = sentence
+        elif len(current) + len(sentence) + 1 <= _MAX_CHUNK_CHARS:
+            current = f"{current} {sentence}"
+        else:
+            chunks.append(current)
+            current = sentence
+    if current:
+        chunks.append(current)
+
+    # Hard-split chunks that still exceed the cap (long runs without punctuation).
+    final: list[str] = []
+    for chunk in chunks:
+        while len(chunk) > _MAX_CHUNK_CHARS:
+            split_at = chunk.rfind(" ", 0, _MAX_CHUNK_CHARS)
+            if split_at < _MIN_CHUNK_CHARS:
+                split_at = _MAX_CHUNK_CHARS
+            final.append(chunk[:split_at].strip())
+            chunk = chunk[split_at:].strip()
+        if chunk:
+            final.append(chunk)
+    return final
+
+
+async def _stream_tts(pipeline: VoicePipeline, websocket: WebSocket, text: str) -> None:
+    """Split ``text`` into sentence clusters and send each cluster's audio in order."""
+    chunks = _split_speech_chunks(text)
+    if not chunks:
+        return
+
+    semaphore = asyncio.Semaphore(_MAX_TTS_CONCURRENCY)
+
+    async def _synthesize(chunk: str) -> bytes:
+        async with semaphore:
+            try:
+                return await pipeline.tts.synthesize(chunk)
+            except Exception as exc:  # noqa: BLE001
+                logger.warning("Streamed TTS chunk failed", extra={"error": str(exc)})
+                return b""
+
+    tasks = [asyncio.create_task(_synthesize(chunk)) for chunk in chunks]
+    try:
+        for task in tasks:
+            try:
+                audio = await task
+            except Exception as exc:  # noqa: BLE001
+                logger.warning("Streamed TTS task failed", extra={"error": str(exc)})
+                audio = b""
+            if audio:
+                await websocket.send_bytes(audio)
+    finally:
+        for task in tasks:
+            if not task.done():
+                task.cancel()
+        if any(not task.done() for task in tasks):
+            await asyncio.gather(*tasks, return_exceptions=True)
 
 
 @router.websocket("/ws/voice")
@@ -967,13 +1189,11 @@ async def voice_interview_websocket(
                 "session_id": interview_session_id,
                 "phase": "greeting",
             })
+            greeting_task: asyncio.Task | None = None
             try:
-                greeting_audio = await pipeline.tts.synthesize(greeting)
+                greeting_task = asyncio.create_task(_stream_tts(pipeline, websocket, greeting))
             except Exception as exc:
                 logger.warning("Greeting TTS failed (voice)", extra={"error": str(exc)})
-                greeting_audio = b""
-            if greeting_audio:
-                await websocket.send_bytes(greeting_audio)
 
             first_q = ""
             try:
@@ -983,6 +1203,10 @@ async def voice_interview_websocket(
                 first_q = await runner.generate_first_question()
             except LLMUnavailableError as e:
                 logger.error("LLM API not configured (voice)", extra={"error": str(e)})
+                if greeting_task:
+                    greeting_task.cancel()
+                    with contextlib.suppress(Exception):
+                        await asyncio.gather(greeting_task, return_exceptions=True)
                 with contextlib.suppress(Exception):
                     await websocket.send_json({
                         "type": "error",
@@ -993,6 +1217,10 @@ async def voice_interview_websocket(
                 return
             except RuntimeError as e:
                 logger.error("LLM call failed (voice)", extra={"error": str(e)})
+                if greeting_task:
+                    greeting_task.cancel()
+                    with contextlib.suppress(Exception):
+                        await asyncio.gather(greeting_task, return_exceptions=True)
                 with contextlib.suppress(Exception):
                     await websocket.send_json({
                         "type": "error",
@@ -1002,6 +1230,10 @@ async def voice_interview_websocket(
                 return
             except Exception as e:
                 logger.exception("Unexpected init failure (voice)")
+                if greeting_task:
+                    greeting_task.cancel()
+                    with contextlib.suppress(Exception):
+                        await asyncio.gather(greeting_task, return_exceptions=True)
                 with contextlib.suppress(Exception):
                     await websocket.send_json({
                         "type": "error",
@@ -1018,20 +1250,20 @@ async def voice_interview_websocket(
                     break
             state["ai_response_text"] = greeting
 
+            # Flush the greeting audio before the first question is spoken.
+            if greeting_task:
+                with contextlib.suppress(Exception):
+                    await asyncio.gather(greeting_task, return_exceptions=True)
+
             if first_q:
-                try:
-                    first_q_audio = await pipeline.tts.synthesize(first_q)
-                except Exception as exc:
-                    logger.warning("Question TTS failed (voice)", extra={"error": str(exc)})
-                    first_q_audio = b""
                 current_q = state.get("current_question", {})
                 await websocket.send_json({
                     "type": "question",
                     "text": first_q,
                     "question_id": current_q.get("id", ""),
                 })
-                if first_q_audio:
-                    await websocket.send_bytes(first_q_audio)
+                with contextlib.suppress(Exception):
+                    await _stream_tts(pipeline, websocket, first_q)
             else:
                 await websocket.send_json({
                     "type": "error",
@@ -1043,9 +1275,6 @@ async def voice_interview_websocket(
             state = runner.get_state()
             current_q = state.get("current_question", {})
             if current_q:
-                resume_audio = await pipeline.tts.synthesize(
-                    f"Welcome back. Let's continue. {current_q.get('question', '')}"
-                )
                 await websocket.send_json({
                     "type": "session_restored",
                     "session_id": interview_session_id,
@@ -1056,8 +1285,12 @@ async def voice_interview_websocket(
                     "text": current_q.get("question", ""),
                     "question_id": current_q.get("id", ""),
                 })
-                if resume_audio:
-                    await websocket.send_bytes(resume_audio)
+                with contextlib.suppress(Exception):
+                    await _stream_tts(
+                        pipeline,
+                        websocket,
+                        f"Welcome back. Let's continue. {current_q.get('question', '')}",
+                    )
 
         # Main voice loop
         audio_buffer = bytearray()
@@ -1115,9 +1348,7 @@ async def voice_interview_websocket(
                         "is_follow_up": result.get("is_follow_up", False),
                     })
 
-                    response_audio = await pipeline.tts.synthesize(response_text)
-                    if response_audio:
-                        await websocket.send_bytes(response_audio)
+                    await _stream_tts(pipeline, websocket, response_text)
 
                     if result.get("should_end"):
                         await _save_interview_result(session_id, interview_session_id, runner)
@@ -1178,10 +1409,8 @@ async def voice_interview_websocket(
                         "is_follow_up": result.get("is_follow_up", False),
                     })
 
-                    # TTS
-                    response_audio = await pipeline.tts.synthesize(response_text)
-                    if response_audio:
-                        await websocket.send_bytes(response_audio)
+                    # TTS (streamed so audio starts before the full text is generated)
+                    await _stream_tts(pipeline, websocket, response_text)
 
                     if result.get("should_end"):
                         await _save_interview_result(session_id, interview_session_id, runner)
@@ -1213,12 +1442,12 @@ async def voice_interview_websocket(
             pass
 
     except RuntimeError as e:
-        logger.error("Gemini call failed (voice)", extra={"error": str(e)})
+        logger.error("LLM call failed (voice)", extra={"error": str(e)})
         with contextlib.suppress(Exception):
             await websocket.send_json({
                 "type": "error",
                 "message": f"AI model error: {e}",
-                "error_code": "GEMINI_ERROR",
+                "error_code": "LLM_ERROR",
             })
 
     except WebSocketDisconnect:

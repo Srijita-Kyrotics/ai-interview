@@ -9,7 +9,6 @@ from typing import Any
 from fastapi import APIRouter, Query, WebSocket, WebSocketDisconnect
 from starlette.websockets import WebSocketState
 
-from app.config import settings
 from app.db import load_session, save_session
 from app.helpers import decode_token, sanitize_for_ai
 
@@ -168,7 +167,7 @@ async def interview_websocket(
         question_count += 1
     except Exception as e:
         logger.error("LLM first question failed", extra={"error": str(e)})
-        error_msg = f"AI interviewer failed: {e}. Please check your OPENROUTER_API_KEY configuration."
+        error_msg = f"AI interviewer failed: {e}. Please check your OPENAI_API_KEY configuration."
         await websocket.send_json({
             "type": "error",
             "message": error_msg,

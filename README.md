@@ -286,8 +286,8 @@ Copy `.env.example` to `.env` and configure:
 | Variable | Description | Default |
 |----------|-------------|---------|
 | `DATABASE_URL` | PostgreSQL connection string | `postgresql://postgres:postgres@localhost:5432/ai_interview` |
-| `OPENROUTER_API_KEY` | OpenRouter API key (`sk-or-v1-...`) for all AI questions/feedback | — |
-| `OPENROUTER_MODEL` | OpenRouter model slug | `openai/gpt-4o-mini` |
+| `OPENAI_API_KEY` | OpenAI API key (`sk-proj-...`) — the sole LLM provider powering Obi | — |
+| `OPENAI_MODEL` | Luna model slug (Obi's reasoning brain) | `gpt-5.6-luna` |
 | `JWT_SECRET` | JWT signing secret (auto-generated if blank) | — |
 
 ### AI Interviewer — LLM
@@ -625,7 +625,7 @@ The integrity score starts at **100**. Sessions with excessive violations are fl
 | **Frontend Framework** | React 18, Vite 6, React Router DOM 6 |
 | **Styling** | Tailwind CSS 3.4, Custom CSS (dark theme) |
 | **Code Editor** | CodeMirror 6 (Python, JS, Java, C++ support) |
-| **AI/LLM** | OpenRouter (single provider; any model slug via `OPENROUTER_MODEL`) |
+| **AI/LLM** | OpenAI (single provider; Luna via `OPENAI_MODEL`, default `gpt-5.6-luna`) |
 | **Voice — STT** | Deepgram Nova-3, Groq Whisper, OpenAI Whisper |
 | **Voice — TTS** | ElevenLabs Turbo v2.5, OpenAI TTS |
 | **Orchestration** | LangGraph 0.2 (10-node state graph) |
@@ -691,7 +691,7 @@ The included `nginx.conf` handles:
 
 ## Development Notes
 
-- **API Keys (Optional)** — The platform supports `OPENROUTER_API_KEY` for dynamic AI questions/feedback and `JUDGE0_API_KEY` for real code execution. Without these, the system falls back to a deterministic offline mock LLM and heuristic code validation.
+- **API Keys (Optional)** — The platform supports `OPENAI_API_KEY` (Luna, default `gpt-5.6-luna`) for dynamic AI questions/feedback and `JUDGE0_API_KEY` for real code execution. Without these, the system falls back to a deterministic offline mock LLM and heuristic code validation.
 - **JWT Secret** — Set `JWT_SECRET` in `.env` for production. If blank, a random secret is auto-generated and persisted to `backend/.jwt_secret`.
 - **Database** — Users, sessions, OTPs, CAPTCHAs, and proctoring logs are stored in PostgreSQL (or SQLite in dev). Restarting does not clear data.
 - **Aptitude Bank** — Run `python backend/scripts/build_aptitude_bank.py` to regenerate the aptitude question bank.

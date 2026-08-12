@@ -170,7 +170,10 @@ class CodingProblem(TypedDict):
     constraints: list[str]
     examples: list[dict]         # [{"input": "...", "output": "...", "explanation": "..."}]
     languages: list[str]         # e.g. ["python", "javascript"]
-    starter_code: dict           # {"python": "def solve(...):", "javascript": "function solve(...) {"}
+    starter_code: dict           # {"python": "...", "javascript": "..."} (stdin -> stdout programs)
+    io_contract: NotRequired[str]  # Exact stdin/stdout format the program must follow
+    visible_test_cases: NotRequired[list[dict]]  # [{"input": str, "expected": str}] shown to candidate
+    hidden_test_cases: NotRequired[list[dict]]   # Edge cases kept server-side; run on submit
     time_complexity: NotRequired[str]
     space_complexity: NotRequired[str]
     evaluation_criteria: NotRequired[list[str]]
@@ -184,6 +187,9 @@ class CodingSubmission(TypedDict):
     language: NotRequired[str]
     submitted_at: float
     quality: int                 # 0-10
+    test_passed: NotRequired[int]   # Hidden-test results from the objective judge
+    test_total: NotRequired[int]
+    test_score: NotRequired[int]    # 0-100
     summary: NotRequired[str]
     feedback: NotRequired[str]
 
@@ -255,6 +261,7 @@ class InterviewState(TypedDict):
     # ── Identity ──────────────────────────────────────────────────────────
     session_id: str
     candidate_email: str
+    candidate_name: NotRequired[str]  # Platform account name (greeting fallback)
     role: str                          # Target role for the interview
     company: str
 
@@ -324,8 +331,10 @@ class InterviewState(TypedDict):
 
     # ── Control Flow ─────────────────────────────────────────────────────
     phase: str                         # "analyzing" | "planning" | "interviewing" | "completed" | "error"
-    questions_asked: int
+    questions_asked: int               # total turns (main questions + follow-ups)
+    main_questions_asked: int          # top-level questions only (max_questions bounds this)
     max_questions: int
+    max_turns: int                     # hard cap on total turns (safety net)
     should_end: bool
     error: NotRequired[str]
 
@@ -349,6 +358,8 @@ def make_initial_state(
     resume_parsed: dict,
     max_questions: int = 12,
     voice_enabled: bool = False,
+    candidate_name: str = "",
+    max_turns: int | None = None,
 ) -> InterviewState:
     """Create a fresh InterviewState with sensible defaults."""
     import time
@@ -357,6 +368,7 @@ def make_initial_state(
     return InterviewState(
         session_id=session_id,
         candidate_email=candidate_email,
+        candidate_name=candidate_name,
         role=role,
         company=company,
         resume_raw_text=resume_raw_text,
@@ -400,7 +412,9 @@ def make_initial_state(
         last_activity_at=now,
         phase="analyzing",
         questions_asked=0,
+        main_questions_asked=0,
         max_questions=max_questions,
+        max_turns=max_turns or max_questions * 2,
         should_end=False,
         voice_enabled=voice_enabled,
     )

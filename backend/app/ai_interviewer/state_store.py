@@ -70,7 +70,7 @@ def close_redis():
 
 
 class _MemoryPipeline:
-    def __init__(self, client: "_MemoryRedisClient"):
+    def __init__(self, client: _MemoryRedisClient):
         self._client = client
         self._ops: list[tuple] = []
 

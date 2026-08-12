@@ -71,6 +71,7 @@ from typing import Literal
 from langgraph.checkpoint.memory import MemorySaver
 from langgraph.graph import END, START, StateGraph
 
+from app.ai_interviewer.coding_judge import judge_submission
 from app.ai_interviewer.nodes import (
     answer_analyzer_node,
     claim_extractor_node,
@@ -107,8 +108,9 @@ def route_after_answer_analysis(state: InterviewState) -> Literal[
     should_end = state.get("should_end", False)
     questions_asked = state.get("questions_asked", 0)
     max_questions = state.get("max_questions", 12)
+    max_turns = state.get("max_turns", max_questions * 2)
 
-    if should_end or questions_asked >= max_questions:
+    if should_end or questions_asked >= max_turns:
         logger.info("Routing to closing — interview complete")
         return "closing"
 
@@ -126,7 +128,7 @@ def route_after_stage_advance(state: InterviewState) -> Literal[
     """After advancing a stage, either continue with next question or close."""
     if state.get("should_end", False):
         return "closing"
-    if state.get("questions_asked", 0) >= state.get("max_questions", 12):
+    if state.get("questions_asked", 0) >= state.get("max_turns", state.get("max_questions", 12) * 2):
         return "closing"
     return "question_generator"
 
@@ -135,7 +137,7 @@ def route_after_follow_up(state: InterviewState) -> Literal[
     "question_generator", "closing"
 ]:
     """After generating a follow-up, route appropriately."""
-    if state.get("questions_asked", 0) >= state.get("max_questions", 12):
+    if state.get("questions_asked", 0) >= state.get("max_turns", state.get("max_questions", 12) * 2):
         return "closing"
     return "question_generator"
 
@@ -441,6 +443,29 @@ class InterviewGraphRunner:
             self.state.get("conversation_transcript", [])
         ) + [transcript_entry]
 
+        # ── Feature 9: Judge submission against hidden test cases ────────
+        # Runs before analysis so the objective pass/fail results can be
+        # folded into the LLM evaluation prompt.
+        active_problem = self.state.get("active_coding_problem")
+        if active_problem and active_problem.get("description") and code_snapshot:
+            hidden_cases = active_problem.get("hidden_test_cases", [])
+            language = self.state.get("current_code_snapshot_language", "")
+            if hidden_cases and language:
+                try:
+                    test_results = await judge_submission(language, code_snapshot, hidden_cases)
+                except Exception as exc:
+                    logger.warning(
+                        "Hidden test judging failed",
+                        extra={"session": self.session_id, "error": str(exc)},
+                    )
+                    test_results = None
+                if test_results and test_results.get("ok"):
+                    self.state["code_test_results"] = test_results
+                    self._emit_timeline(
+                        "code_tested",
+                        f"Hidden tests: {test_results['passed']}/{test_results['total']} passed",
+                    )
+
         # ── Run answer analyzer + claim verifier in parallel ─────────────
         # These LLM calls only read the answer/question and write disjoint
         # state keys, so running them concurrently cuts per-turn latency from
@@ -540,9 +565,11 @@ class InterviewGraphRunner:
         # Check if interview should end
         should_end = self.state.get("should_end", False)
         questions_asked = self.state.get("questions_asked", 0)
+        main_questions_asked = self.state.get("main_questions_asked", 0)
         max_questions = self.state.get("max_questions", 12)
+        max_turns = self.state.get("max_turns", max_questions * 2)
 
-        if should_end or questions_asked >= max_questions:
+        if should_end or questions_asked >= max_turns:
             return await self._finalize()
 
         # Decide: follow-up or next question
@@ -563,6 +590,7 @@ class InterviewGraphRunner:
                 "is_follow_up": True,
                 "evaluation": eval_result.get("current_evaluation", {}),
                 "questions_asked": self.state.get("questions_asked", 0),
+                "main_questions_asked": self.state.get("main_questions_asked", 0),
                 "max_questions": max_questions,
             }
 
@@ -586,13 +614,14 @@ class InterviewGraphRunner:
                     "is_transition": True,
                     "evaluation": eval_result.get("current_evaluation", {}),
                     "questions_asked": self.state.get("questions_asked", 0),
+                    "main_questions_asked": self.state.get("main_questions_asked", 0),
                     "max_questions": max_questions,
                 }
 
         # ── Feature 6: Dynamic replanning every 3 questions ───────────────
         replan_count = self.state.get("replan_count", 0)
-        questions_since_replan = questions_asked - (replan_count * 3)
-        if questions_since_replan >= 3 and questions_asked < max_questions - 2:
+        questions_since_replan = main_questions_asked - (replan_count * 3)
+        if questions_since_replan >= 3:
             replan_result = await interview_replanner_node(self.state)
             if replan_result:
                 self.state.update(replan_result)
@@ -603,7 +632,7 @@ class InterviewGraphRunner:
                 )
 
         # Check should_end after stage advance
-        if self.state.get("should_end", False) or self.state.get("questions_asked", 0) >= max_questions:
+        if self.state.get("should_end", False) or self.state.get("questions_asked", 0) >= max_turns:
             return await self._finalize()
 
         # Generate next question
@@ -619,6 +648,7 @@ class InterviewGraphRunner:
             "is_follow_up": False,
             "evaluation": eval_result.get("current_evaluation", {}),
             "questions_asked": self.state.get("questions_asked", 0),
+            "main_questions_asked": self.state.get("main_questions_asked", 0),
             "max_questions": max_questions,
         }
 
@@ -649,6 +679,7 @@ class InterviewGraphRunner:
             "should_end": True,
             "final_report": self.state.get("final_report", {}),
             "questions_asked": self.state.get("questions_asked", 0),
+            "main_questions_asked": self.state.get("main_questions_asked", 0),
             "max_questions": self.state.get("max_questions", 12),
         }
 

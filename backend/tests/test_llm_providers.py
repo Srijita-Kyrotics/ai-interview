@@ -17,8 +17,7 @@ def asyncio_run(coro):
 
 def test_has_usable_api_key_rejects_placeholders():
     assert not _has_usable_api_key("")
-    assert not _has_usable_api_key("your_gemini_api_key")
-    assert not _has_usable_api_key("your_openrouter_api_key")
+    assert not _has_usable_api_key("your_openai_api_key")
     assert not _has_usable_api_key("your_rapidapi_judge0_key")
     assert not _has_usable_api_key("sk-...")
     assert not _has_usable_api_key("REPLACE_ME")
@@ -62,18 +61,18 @@ def test_mock_answer_analysis_routes_weak_vs_strong():
 
 def test_registry_uses_mock_when_key_is_placeholder(monkeypatch):
     from app.config import settings
-    monkeypatch.setattr(settings, "openrouter_api_key", "your_openrouter_api_key")
+    monkeypatch.setattr(settings, "openai_api_key", "your_openai_api_key")
     monkeypatch.setattr(llm_providers, "_registry", None)
     registry = get_llm_registry()
     assert registry.available_providers == ["mock"]
 
 
-def test_registry_uses_openrouter_when_real_key_present(monkeypatch):
+def test_registry_uses_openai_when_real_key_present(monkeypatch):
     from app.config import settings
-    monkeypatch.setattr(settings, "openrouter_api_key", "sk-or-v1-RealLookingKey")
+    monkeypatch.setattr(settings, "openai_api_key", "sk-proj-RealLookingKey")
     monkeypatch.setattr(llm_providers, "_registry", None)
     registry = get_llm_registry()
-    assert registry.available_providers == ["openrouter"]
+    assert registry.available_providers == ["openai"]
 
 
 # ── Full offline interview ────────────────────────────────────────────────────
@@ -81,7 +80,7 @@ def test_registry_uses_openrouter_when_real_key_present(monkeypatch):
 def test_full_interview_offline_with_mock(monkeypatch):
     """Drive the whole LangGraph pipeline with the mock provider — no API keys."""
     from app.config import settings
-    monkeypatch.setattr(settings, "openrouter_api_key", "your_openrouter_api_key")
+    monkeypatch.setattr(settings, "openai_api_key", "your_openai_api_key")
     monkeypatch.setattr(llm_providers, "_registry", None)
 
     from app.ai_interviewer.graph import InterviewGraphRunner

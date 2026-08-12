@@ -5,7 +5,7 @@ from __future__ import annotations
 import secrets
 from pathlib import Path
 
-from pydantic import Field
+from pydantic import Field, field_validator
 from pydantic_settings import BaseSettings
 
 BASE_DIR = Path(__file__).resolve().parents[2]
@@ -15,6 +15,18 @@ class Settings(BaseSettings):
     # ── App ────────────────────────────────────────────────────────────────
     environment: str = Field("development", alias="ENVIRONMENT")
     debug: bool = Field(False, alias="DEBUG")
+
+    @field_validator("debug", mode="before")
+    @classmethod
+    def parse_debug(cls, value: object) -> object:
+        """Accept common deployment labels while keeping DEBUG boolean internally."""
+        if isinstance(value, str):
+            normalized = value.strip().lower()
+            if normalized in {"release", "production", "prod"}:
+                return False
+            if normalized in {"development", "dev"}:
+                return True
+        return value
 
     # ── Database ───────────────────────────────────────────────────────────
     database_url: str = Field(
@@ -37,14 +49,13 @@ class Settings(BaseSettings):
     smtp_from: str = Field("", alias="SMTP_FROM")
 
     # ── External APIs ─────────────────────────────────────────────────────
-    openrouter_api_key: str = Field("", alias="OPENROUTER_API_KEY")
-    openrouter_model: str = Field("openai/gpt-4o-mini", alias="OPENROUTER_MODEL")
-    gemini_api_key: str = Field("", alias="GEMINI_API_KEY")
-    gemini_model: str = Field("gemini-2.5-flash-lite", alias="GEMINI_MODEL")
     openai_api_key: str = Field("", alias="OPENAI_API_KEY")
+    # Luna is the single reasoning/interview model powering Obi.
+    openai_model: str = Field("gpt-5.6-luna", alias="OPENAI_MODEL")
+    # Faster model used only for latency-critical interactive nodes
+    # (question/answer/follow-up generation). Blank = same as OPENAI_MODEL.
+    openai_fast_model: str = Field("", alias="OPENAI_FAST_MODEL")
     openai_base_url: str = Field("https://api.openai.com/v1", alias="OPENAI_BASE_URL")
-    claude_api_key: str = Field("", alias="CLAUDE_API_KEY")
-    claude_base_url: str = Field("https://api.anthropic.com", alias="CLAUDE_BASE_URL")
     judge0_api_key: str = Field("", alias="JUDGE0_API_KEY")
     judge0_host: str = Field("judge0-ce.p.rapidapi.com", alias="JUDGE0_HOST")
     judge0_timeout: float = Field(10.0, alias="JUDGE0_TIMEOUT")
@@ -58,6 +69,7 @@ class Settings(BaseSettings):
     elevenlabs_api_key: str = Field("", alias="ELEVENLABS_API_KEY")
     elevenlabs_voice_id: str = Field("21m00Tcm4TlvDq8ikWAM", alias="ELEVENLABS_VOICE_ID")
     groq_api_key: str = Field("", alias="GROQ_API_KEY")
+    openai_tts_voice: str = Field("alloy", alias="OPENAI_TTS_VOICE")
 
     # ── AI Interviewer: LangGraph ─────────────────────────────────────────
     ai_interviewer_max_questions: int = Field(12, alias="AI_INTERVIEWER_MAX_QUESTIONS")

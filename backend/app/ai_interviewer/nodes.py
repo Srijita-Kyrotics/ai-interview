@@ -71,6 +71,7 @@ from app.ai_interviewer.state import (
     ResumeAnalysis,
     ResumeClaim,
 )
+from app.config import settings
 
 logger = logging.getLogger("ai_interview.nodes")
 
@@ -83,13 +84,16 @@ class LLMUnavailableError(Exception):
     pass
 
 
-async def _call_llm_json(system: str, prompt: str) -> dict:
+async def _call_llm_json(system: str, prompt: str, model: str | None = None) -> dict:
     """
     Call the LLM with a JSON response, return parsed dict.
 
     Routes through the provider registry which handles:
     - Retry with exponential backoff
     - Circuit breaker protection
+
+    ``model`` overrides the provider's default model (used to route
+    latency-critical interactive nodes through ``OPENAI_FAST_MODEL``).
 
     Raises LLMUnavailableError if no providers are available.
     Raises RuntimeError if all providers fail.
@@ -106,15 +110,21 @@ async def _call_llm_json(system: str, prompt: str) -> dict:
         raise LLMUnavailableError(
             "No LLM providers are configured. "
             "Obi requires an LLM API key to function. "
-            "Set OPENROUTER_API_KEY in the environment."
+            "Set OPENAI_API_KEY in the environment."
         )
 
     try:
-        return await registry.generate_json(system, prompt)
+        return await registry.generate_json(system, prompt, model=model)
     except LLMProviderUnavailableError as e:
         raise LLMUnavailableError(str(e)) from e
     except LLMProviderError as e:
         raise RuntimeError(f"LLM call failed: {e}") from e
+
+
+def _fast_model() -> str | None:
+    """Return the configured fast model, or None to keep the default model."""
+    fast = getattr(settings, "openai_fast_model", "")
+    return fast or None
 
 
 # ══════════════════════════════════════════════════════════════════════════════
@@ -147,12 +157,12 @@ async def resume_analyzer_node(state: InterviewState) -> dict:
     prompt = RESUME_ANALYZER_PROMPT.format(
         role=state["role"],
         company=state["company"],
-        resume_text=enriched_text[:8000],  # Gemini context limit
+        resume_text=enriched_text[:8000],  # LLM context limit
     )
 
     result = await _call_llm_json(RESUME_ANALYZER_SYSTEM, prompt)
 
-    # Normalize — Gemini must return all required fields, no silent fallbacks
+    # Normalize — the model must return all required fields, no silent fallbacks
     analysis: ResumeAnalysis = {
         "candidate_name": result.get("candidate_name", parsed.get("name", "Candidate")),
         "years_experience": int(result.get("years_experience", 0)),
@@ -272,7 +282,7 @@ async def interview_planner_node(state: InterviewState) -> dict:
 
     result = await _call_llm_json(INTERVIEW_PLANNER_SYSTEM, prompt)
 
-    # Normalize stages — Gemini must return stages, no silent fallback
+    # Normalize stages — the model must return stages, no silent fallback
     raw_stages = result.get("stages", [])
     stages: list[InterviewStage] = []
     for s in raw_stages:
@@ -395,7 +405,7 @@ async def question_generator_node(state: InterviewState) -> dict:
         role=state["role"],
         current_stage=current_stage.get("name", "General"),
         stage_topics=", ".join(current_stage.get("topics", [])),
-        questions_asked=state["questions_asked"],
+        questions_asked=state["main_questions_asked"],
         max_questions=state["max_questions"],
         resume_summary=resume_summary,
         conversation_history=conversation_history,
@@ -424,7 +434,7 @@ async def question_generator_node(state: InterviewState) -> dict:
             "or the target role. Focus on architecture, scalability, tradeoffs."
         )
 
-    result = await _call_llm_json(QUESTION_GENERATOR_SYSTEM, prompt)
+    result = await _call_llm_json(QUESTION_GENERATOR_SYSTEM, prompt, model=_fast_model())
 
     question_id = str(uuid.uuid4())
     question_record = QuestionRecord(
@@ -489,6 +499,7 @@ async def question_generator_node(state: InterviewState) -> dict:
         "question_started_at": time.time(),
         "ai_response_text": question_record["question"],
         "questions_asked": state["questions_asked"] + 1,
+        "main_questions_asked": state["main_questions_asked"] + 1,
         "last_activity_at": time.time(),
         "active_coding_problem": problem_updates.get("active_coding_problem"),
     }
@@ -546,10 +557,14 @@ async def answer_analyzer_node(state: InterviewState) -> dict:
     )
     communication_evidence = "\n".join(comm.evidence) if comm.evidence else "No objective signals available."
 
-    # Coding context (Feature 9)
-    active_problem = state.get("active_coding_problem", {})
+    # Coding context (Feature 9). The evaluator must grade correctness purely
+    # from the judge's objective execution results, so hidden test cases are
+    # STRIPPED here — the LLM only sees the public problem statement.
+    active_problem = state.get("active_coding_problem") or {}
+    coding_problem_view = dict(active_problem)
+    coding_problem_view.pop("hidden_test_cases", None)
     coding_context = (
-        json.dumps(active_problem, indent=2)[:2000]
+        json.dumps(coding_problem_view, indent=2)[:2000]
         if active_problem and code_snapshot
         else "No live-coding problem active."
     )
@@ -571,7 +586,28 @@ async def answer_analyzer_node(state: InterviewState) -> dict:
             f"\n\nLIVE CODING PROBLEM (evaluate the submitted code against this):\n{coding_context}"
         )
 
-    result = await _call_llm_json(ANSWER_ANALYZER_SYSTEM, prompt)
+    # Objective hidden-test results from the judge, when the submission was run
+    test_results = state.get("code_test_results") or {}
+    if active_problem and code_snapshot and test_results.get("results") is not None:
+        passed_tests = test_results.get("passed", 0)
+        total_tests = test_results.get("total", 0)
+        failed_lines = []
+        for r in test_results.get("results", []):
+            if r.get("status") != "passed" and r.get("status"):
+                failed_lines.append(
+                    f"- input={r.get('input', '')!r} expected={r.get('expected', '')!r} "
+                    f"actual={r.get('output', '')!r} status={r.get('status')}"
+                )
+        test_context = (
+            f"OBJECTIVE TEST RESULTS (from automated execution of the candidate's code "
+            f"against private edge cases): {passed_tests}/{total_tests} passed "
+            f"(score {test_results.get('score', 0)}/100).\n"
+            + ("Failing cases:\n" + "\n".join(failed_lines) if failed_lines
+               else "All private test cases passed.")
+        )
+        prompt += f"\n\n{test_context}"
+
+    result = await _call_llm_json(ANSWER_ANALYZER_SYSTEM, prompt, model=_fast_model())
 
     # ── Blend LLM communication score with objective metrics ─────────────
     llm_comm = int(result.get("communication_quality", 5))
@@ -605,13 +641,23 @@ async def answer_analyzer_node(state: InterviewState) -> dict:
     }
 
     # ── Feature 9: Coding quality grade ──────────────────────────────────
+    # The grade is grounded in the judge's objective test score when available
+    # (60% objective, 40% LLM impression) so a broken solution can never be
+    # scored highly because the LLM was optimistic.
     coding_quality: int | None = None
     if active_problem and code_snapshot:
-        coding_quality = int(round(
+        llm_quality = (
             0.5 * evaluation["technical_accuracy"]
             + 0.3 * evaluation["depth"]
             + 0.2 * evaluation["completeness"]
-        ))
+        )
+        test_results = state.get("code_test_results") or {}
+        test_score = test_results.get("score") if test_results.get("results") is not None else None
+        if test_score is not None:
+            coding_quality = int(round(0.6 * (test_score / 10) + 0.4 * llm_quality))
+        else:
+            coding_quality = int(round(llm_quality))
+        coding_quality = max(0, min(10, coding_quality))
         evaluation["coding_quality"] = coding_quality
 
     # Update memory with evaluation insights
@@ -692,6 +738,7 @@ async def answer_analyzer_node(state: InterviewState) -> dict:
     # ── Feature 9: Record coding submission when a problem is active ─────
     coding_submissions = list(state.get("coding_submissions", []))
     if active_problem and code_snapshot:
+        test_results = state.get("code_test_results") or {}
         coding_submissions.append(CodingSubmission(
             problem_id=active_problem.get("id", ""),
             question_id=current_question.get("id", ""),
@@ -699,6 +746,9 @@ async def answer_analyzer_node(state: InterviewState) -> dict:
             language=state.get("current_code_snapshot_language", ""),
             submitted_at=time.time(),
             quality=coding_quality or 0,
+            test_passed=test_results.get("passed", 0) if test_results.get("results") is not None else 0,
+            test_total=test_results.get("total", 0) if test_results.get("results") is not None else 0,
+            test_score=test_results.get("score", 0) if test_results.get("results") is not None else 0,
             summary=result.get("answer_summary", ""),
             feedback=", ".join(result.get("red_flags", [])[:2]),
         ))
@@ -773,7 +823,7 @@ async def follow_up_generator_node(state: InterviewState) -> dict:
     difficulty_hint = DIFFICULTY_GUIDANCE.get(current_diff, DIFFICULTY_GUIDANCE["intermediate"])
     prompt += f"\n\nDIFFICULTY GUIDANCE (current level: {current_diff}):\n{difficulty_hint}"
 
-    result = await _call_llm_json(FOLLOW_UP_GENERATOR_SYSTEM, prompt)
+    result = await _call_llm_json(FOLLOW_UP_GENERATOR_SYSTEM, prompt, model=_fast_model())
 
     follow_up_text = result.get("follow_up_question", "")
 
@@ -1167,6 +1217,33 @@ def _as_list(value) -> list:
     return list(value) if isinstance(value, list | tuple | set) else []
 
 
+def _normalize_test_cases(
+    raw, examples: list | None = None, first_matches_example: bool = False
+) -> list[dict]:
+    """Coerce LLM test cases into the strict ``{input, expected}`` string shape.
+
+    Drops malformed entries (missing input/expected or non-string coercible),
+    and when ``first_matches_example`` is set, replaces the first visible case
+    with example 0 so the candidate's documented example is always runnable.
+    """
+    cases: list[dict] = []
+    for case in _as_list(raw):
+        if not isinstance(case, dict):
+            continue
+        inp = case.get("input")
+        exp = case.get("expected")
+        if inp is None or exp is None:
+            continue
+        cases.append({"input": str(inp), "expected": str(exp)})
+
+    if first_matches_example and examples:
+        ex0 = examples[0]
+        if ex0.get("input") is not None and ex0.get("output") is not None:
+            first = {"input": str(ex0["input"]), "expected": str(ex0["output"])}
+            cases = [first] + [c for c in cases if c != first]
+    return cases[:6]
+
+
 async def coding_problem_generator_node(state: InterviewState) -> dict:
     """
     Generates a structured live-coding problem for the coding stage,
@@ -1195,6 +1272,7 @@ async def coding_problem_generator_node(state: InterviewState) -> dict:
 
     result = await _call_llm_json(CODING_PROBLEM_GENERATOR_SYSTEM, prompt)
 
+    examples = _as_list(result.get("examples"))
     problem = CodingProblem(
         id=str(uuid.uuid4())[:8],
         title=result.get("title") or "Coding Challenge",
@@ -1202,9 +1280,12 @@ async def coding_problem_generator_node(state: InterviewState) -> dict:
         topic=result.get("topic") or "algorithms",
         description=result.get("description") or "",
         constraints=_as_list(result.get("constraints")),
-        examples=_as_list(result.get("examples")),
+        examples=examples,
         languages=_as_list(result.get("languages")) or ["python", "javascript"],
         starter_code=result.get("starter_code") or {},
+        io_contract=result.get("io_contract") or "",
+        visible_test_cases=_normalize_test_cases(result.get("visible_test_cases"), examples, first_matches_example=True),
+        hidden_test_cases=_normalize_test_cases(result.get("hidden_test_cases")),
         time_complexity=result.get("time_complexity") or "",
         space_complexity=result.get("space_complexity") or "",
         evaluation_criteria=_as_list(result.get("evaluation_criteria")),
@@ -1269,6 +1350,7 @@ async def stage_advance_node(state: InterviewState) -> dict:
     result = await _call_llm_json(
         "You are a professional interviewer transitioning between topics.",
         prompt,
+        model=_fast_model(),
     )
 
     transition_text = result.get("transition_text", "")
@@ -1310,6 +1392,7 @@ async def opening_node(state: InterviewState) -> dict:
     result = await _call_llm_json(
         "You are a professional technical interviewer opening the interview.",
         prompt,
+        model=_fast_model(),
     )
 
     opening_text = result.get("opening_text", "")
@@ -1486,7 +1569,7 @@ async def interview_replanner_node(state: InterviewState) -> dict:
     candidate_facts = state.get("candidate_facts", [])
     difficulty_level = state.get("difficulty_level", {})
 
-    questions_asked = state.get("questions_asked", 0)
+    questions_asked = state.get("main_questions_asked", 0)
     max_questions = state.get("max_questions", 12)
     remaining = max_questions - questions_asked
 

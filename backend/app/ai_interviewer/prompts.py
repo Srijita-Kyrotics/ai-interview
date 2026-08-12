@@ -329,6 +329,19 @@ The problem must be:
 - Solvable in a 25-40 minute live-coding session
 - Precise: unambiguous inputs/outputs, no hidden gotchas
 - Backed by starter code the candidate can fill in
+- AUTO-GRADED with test cases, so the program MUST use a pure stdin/stdout
+  contract: it reads all input from standard input (no prompts) and prints
+  exactly the expected output to standard output. No function signatures —
+  the evaluator runs the program as a whole and compares stdout byte-for-byte
+  (after whitespace normalization).
+
+Input/output format rules:
+- Define the EXACT input format and EXACT output format in `io_contract`.
+- Every `example` MUST be reproducible from the input alone; make the
+  `input` field the literal stdin content and `output` the literal stdout.
+- `visible_test_cases` are shown to the candidate; `hidden_test_cases` are
+  private edge cases (empty input, single element, max bounds, ties, etc.)
+  and must never appear in `examples`.
 
 Difficulty guidance:
 - "easy": ~15-25 LOC, one core idea
@@ -359,22 +372,41 @@ Return ONLY valid JSON:
   ],
   "examples": [
     {{
-      "input": "concrete example input",
-      "output": "expected output",
+      "input": "LITERAL stdin content, e.g. \"3\\n2 7 11 15\\n9\"",
+      "output": "LITERAL stdout content, e.g. \"0 1\"",
       "explanation": "brief walkthrough (optional)"
     }}
   ],
+  "io_contract": "Exact stdin format and exact stdout format. E.g. 'Line 1: an integer n. Line 2: n space-separated integers. Output: the answer on one line, or -1 if not found.'",
   "languages": ["python", "javascript"],
   "starter_code": {{
-    "python": "def solve(data):\\n    # implement here\\n    pass",
-    "javascript": "function solve(data) {{\\n    // implement here\\n}}"
+    "python": "import sys\\n\\ndef solve():\\n    data = sys.stdin.read().strip()\\n    # implement here\\n\\nif __name__ == \\"__main__\\":\\n    solve()",
+    "javascript": "const readline = require('readline');\\nconst rl = readline.createInterface({{ input: process.stdin }});\\nrl.on('line', (line) => {{\\n    // implement here\\n}});"
   }},
+  "visible_test_cases": [
+    {{
+      "input": "literal stdin (must exactly match the first example)",
+      "expected": "literal stdout for this input"
+    }}
+  ],
+  "hidden_test_cases": [
+    {{
+      "input": "edge case not shown to the candidate",
+      "expected": "correct output"
+    }}
+  ],
   "time_complexity": "expected time complexity",
   "space_complexity": "expected space complexity",
   "evaluation_criteria": [
     "e.g. correctness on edge cases, efficient algorithm, clean code"
   ]
 }}
+
+Quality bar:
+- visible_test_cases: 2-3 cases. The FIRST one must be identical to example 0.
+- hidden_test_cases: 3-5 cases covering the boundaries in `constraints`
+  (n=1, maximum n, all-equal/ties, negative numbers, no-solution cases).
+- All `input`/`expected` values are exact strings fed to stdin / compared to stdout.
 """
 
 # ─────────────────────────────────────────────────────────────────────────────

@@ -39,8 +39,11 @@ Add to .env:
 
 from __future__ import annotations
 
+import asyncio
+import contextlib
 import io
 import logging
+import re
 import time
 from collections.abc import AsyncIterator, Callable
 
@@ -49,6 +52,48 @@ import httpx
 from app.config import settings
 
 logger = logging.getLogger("ai_interview.voice")
+
+# Shared HTTP clients so every TTS/STT call reuses the TCP+TLS connection
+# instead of paying a handshake (~100-400ms) on each request.
+_HTTP_CLIENTS: dict[float, httpx.AsyncClient] = {}
+
+
+def _shared_client(timeout: float) -> httpx.AsyncClient:
+    if timeout not in _HTTP_CLIENTS:
+        _HTTP_CLIENTS[timeout] = httpx.AsyncClient(timeout=timeout)
+    return _HTTP_CLIENTS[timeout]
+
+
+def _close_http_clients() -> None:
+    for client in _HTTP_CLIENTS.values():
+        with contextlib.suppress(Exception):
+            asyncio.get_event_loop().run_until_complete(client.aclose())
+    _HTTP_CLIENTS.clear()
+
+# Strip characters that should never be spoken aloud: markdown, URLs,
+# emoji, bullet symbols and control noise. Keeps TTS output clean and
+# lets the voice sound like a person, not a read-aloud bot.
+_MARKDOWN_RE = re.compile(r"(\*\*|__|\*|_|`|#+|\>|~~|--+)")
+_URL_RE = re.compile(r"https?://\S+|www\.\S+")
+_MULTISPACE_RE = re.compile(r"[ \t]{2,}")
+_EMOJI_RE = re.compile(
+    "[\U0001F000-\U0001FAFF\U00002702-\U000027B0\U0001F1E6-\U0001F1FF\U00002600-\U000026FF\U0000FE0F]"
+)
+
+
+def clean_text_for_speech(text: str) -> str:
+    """Normalize LLM output so it reads naturally when spoken aloud."""
+    if not text:
+        return ""
+    cleaned = _URL_RE.sub(" ", text)
+    cleaned = _MARKDOWN_RE.sub("", cleaned)
+    cleaned = _EMOJI_RE.sub(" ", cleaned)
+    cleaned = cleaned.replace("\\n", " ")
+    cleaned = cleaned.replace("\r", " ")
+    cleaned = _MULTISPACE_RE.sub(" ", cleaned)
+    cleaned = cleaned.replace("\n\n", ". ")
+    cleaned = " ".join(cleaned.split())
+    return cleaned.strip()
 
 
 # ── STT: Deepgram ──────────────────────────────────────────────────────────────
@@ -93,27 +138,27 @@ class DeepgramSTT:
             logger.warning("Deepgram API key not configured, using fallback")
             return ""
 
-        async with httpx.AsyncClient(timeout=10.0) as client:
-            try:
-                response = await client.post(
-                    "https://api.deepgram.com/v1/listen?model=nova-3&smart_format=true&punctuate=true",
-                    headers={
-                        "Authorization": f"Token {self.api_key}",
-                        "Content-Type": "audio/webm",
-                    },
-                    content=audio_bytes,
-                )
-                response.raise_for_status()
-                data = response.json()
-                channels = data.get("results", {}).get("channels", [])
-                if channels:
-                    alternatives = channels[0].get("alternatives", [])
-                    if alternatives:
-                        return alternatives[0].get("transcript", "").strip()
-                return ""
-            except Exception as e:
-                logger.error("Deepgram transcription failed", extra={"error": str(e)})
-                return ""
+        client = _shared_client(10.0)
+        try:
+            response = await client.post(
+                "https://api.deepgram.com/v1/listen?model=nova-3&smart_format=true&punctuate=true",
+                headers={
+                    "Authorization": f"Token {self.api_key}",
+                    "Content-Type": "audio/webm",
+                },
+                content=audio_bytes,
+            )
+            response.raise_for_status()
+            data = response.json()
+            channels = data.get("results", {}).get("channels", [])
+            if channels:
+                alternatives = channels[0].get("alternatives", [])
+                if alternatives:
+                    return alternatives[0].get("transcript", "").strip()
+            return ""
+        except Exception as e:
+            logger.error("Deepgram transcription failed", extra={"error": str(e)})
+            return ""
 
 
 # ── STT: Whisper (Fallback via Groq or local) ─────────────────────────────────
@@ -148,24 +193,24 @@ class WhisperSTT:
             else "https://api.openai.com/v1/audio/transcriptions"
         )
 
-        async with httpx.AsyncClient(timeout=30.0) as client:
-            try:
-                files = {
-                    "file": (filename, io.BytesIO(audio_bytes), "audio/webm"),
-                    "model": (None, "whisper-large-v3-turbo"),
-                    "language": (None, "en"),
-                    "response_format": (None, "json"),
-                }
-                response = await client.post(
-                    base_url,
-                    headers={"Authorization": f"Bearer {api_key}"},
-                    files=files,
-                )
-                response.raise_for_status()
-                return response.json().get("text", "").strip()
-            except Exception as e:
-                logger.error("Whisper transcription failed", extra={"error": str(e)})
-                return ""
+        client = _shared_client(30.0)
+        try:
+            files = {
+                "file": (filename, io.BytesIO(audio_bytes), "audio/webm"),
+                "model": (None, "whisper-large-v3-turbo"),
+                "language": (None, "en"),
+                "response_format": (None, "json"),
+            }
+            response = await client.post(
+                base_url,
+                headers={"Authorization": f"Bearer {api_key}"},
+                files=files,
+            )
+            response.raise_for_status()
+            return response.json().get("text", "").strip()
+        except Exception as e:
+            logger.error("Whisper transcription failed", extra={"error": str(e)})
+            return ""
 
 
 # ── TTS: ElevenLabs ───────────────────────────────────────────────────────────
@@ -216,29 +261,29 @@ class ElevenLabsTTS:
             "output_format": "mp3_44100_128",
         }
 
-        async with httpx.AsyncClient(timeout=15.0) as client:
-            try:
-                t0 = time.time()
-                response = await client.post(
-                    url,
-                    json=payload,
-                    headers={
-                        "xi-api-key": self.api_key,
-                        "Content-Type": "application/json",
-                        "Accept": "audio/mpeg",
-                    },
-                )
-                response.raise_for_status()
-                audio_bytes = response.content
-                latency_ms = int((time.time() - t0) * 1000)
-                logger.info(
-                    "ElevenLabs TTS synthesized",
-                    extra={"chars": len(text), "bytes": len(audio_bytes), "latency_ms": latency_ms}
-                )
-                return audio_bytes
-            except Exception as e:
-                logger.error("ElevenLabs TTS failed", extra={"error": str(e)})
-                return b""
+        client = _shared_client(15.0)
+        try:
+            t0 = time.time()
+            response = await client.post(
+                url,
+                json=payload,
+                headers={
+                    "xi-api-key": self.api_key,
+                    "Content-Type": "application/json",
+                    "Accept": "audio/mpeg",
+                },
+            )
+            response.raise_for_status()
+            audio_bytes = response.content
+            latency_ms = int((time.time() - t0) * 1000)
+            logger.info(
+                "ElevenLabs TTS synthesized",
+                extra={"chars": len(text), "bytes": len(audio_bytes), "latency_ms": latency_ms}
+            )
+            return audio_bytes
+        except Exception as e:
+            logger.error("ElevenLabs TTS failed", extra={"error": str(e)})
+            return b""
 
     async def synthesize_streaming(self, text: str) -> AsyncIterator[bytes]:
         """
@@ -274,8 +319,9 @@ class OpenAITTS:
     Uses "alloy" voice (neutral) with tts-1 model.
     """
 
-    def __init__(self, api_key: str):
+    def __init__(self, api_key: str, voice: str = "alloy"):
         self.api_key = api_key
+        self.voice = getattr(settings, "openai_tts_voice", "") or voice
 
     @classmethod
     def from_settings(cls) -> OpenAITTS:
@@ -285,26 +331,26 @@ class OpenAITTS:
         if not self.api_key:
             return b""
 
-        async with httpx.AsyncClient(timeout=15.0) as client:
-            try:
-                response = await client.post(
-                    "https://api.openai.com/v1/audio/speech",
-                    json={
-                        "model": "tts-1",
-                        "input": text,
-                        "voice": "alloy",
-                        "response_format": "mp3",
-                    },
-                    headers={
-                        "Authorization": f"Bearer {self.api_key}",
-                        "Content-Type": "application/json",
-                    },
-                )
-                response.raise_for_status()
-                return response.content
-            except Exception as e:
-                logger.error("OpenAI TTS failed", extra={"error": str(e)})
-                return b""
+        client = _shared_client(15.0)
+        try:
+            response = await client.post(
+                "https://api.openai.com/v1/audio/speech",
+                json={
+                    "model": "tts-1",
+                    "input": clean_text_for_speech(text),
+                    "voice": self.voice,
+                    "response_format": "mp3",
+                },
+                headers={
+                    "Authorization": f"Bearer {self.api_key}",
+                    "Content-Type": "application/json",
+                },
+            )
+            response.raise_for_status()
+            return response.content
+        except Exception as e:
+            logger.error("OpenAI TTS failed", extra={"error": str(e)})
+            return b""
 
 
 # ── Voice Pipeline Orchestrator ────────────────────────────────────────────────
@@ -335,8 +381,12 @@ class VoicePipeline:
 
     @classmethod
     def from_settings(cls) -> VoicePipeline:
-        """Create pipeline with best available providers."""
-        # Try Deepgram first, fall back to Whisper
+        """Create pipeline with best available providers.
+
+        STT priority: Deepgram → Groq/OpenAI Whisper.
+        TTS priority: ElevenLabs → OpenAI.
+        """
+        # STT: Deepgram first, then Groq/OpenAI Whisper.
         deepgram_key = getattr(settings, "deepgram_api_key", "")
         if deepgram_key:
             stt = DeepgramSTT(api_key=deepgram_key)
@@ -345,7 +395,7 @@ class VoicePipeline:
             stt = WhisperSTT.from_settings()
             logger.info("Voice pipeline: using Whisper STT (fallback)")
 
-        # Try ElevenLabs first, fall back to OpenAI
+        # TTS: ElevenLabs first, then OpenAI.
         el_key = getattr(settings, "elevenlabs_api_key", "")
         if el_key:
             tts = ElevenLabsTTS.from_settings()

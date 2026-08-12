@@ -1,4 +1,6 @@
-const API = import.meta.env.VITE_API_URL || 'http://127.0.0.1:8000'
+// Use the same-origin API proxy by default. This lets Vite proxy requests in
+// development (regardless of its port) and avoids browser CORS failures.
+const API = import.meta.env.VITE_API_URL || '/api'
 
 const AUTH_EVENT = 'auth:expired'
 

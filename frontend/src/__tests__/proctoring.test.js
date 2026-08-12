@@ -168,3 +168,28 @@ describe('violationLabels in useAssessmentProctoring', () => {
     }
   }, 15000)
 })
+
+describe('proctoring false-positive guards', () => {
+  it('only treats high-confidence non-laptop objects as suspicious', async () => {
+    const { getSuspiciousObjectClass } = await import('../proctoring/useAssessmentProctoring.js')
+    expect(getSuspiciousObjectClass([{ class: 'laptop', score: 0.99 }])).toBeNull()
+    expect(getSuspiciousObjectClass([{ class: 'cell phone', score: 0.49 }])).toBeNull()
+    expect(getSuspiciousObjectClass([
+      { class: 'tv', score: 0.75 },
+      { class: 'cell phone', score: 0.91 },
+    ])).toBe('cell phone')
+  })
+
+  it('requires a devtools gap above the captured baseline and threshold', async () => {
+    const { isDevtoolsGapOpen } = await import('../proctoring/useAssessmentProctoring.js')
+    expect(isDevtoolsGapOpen(300, 160)).toBe(false)
+    expect(isDevtoolsGapOpen(321, 160)).toBe(true)
+    expect(isDevtoolsGapOpen(321, null)).toBe(false)
+  })
+
+  it('averages only the selected speech band', async () => {
+    const { getVoiceBandAverage } = await import('../proctoring/useAssessmentProctoring.js')
+    expect(getVoiceBandAverage(new Uint8Array([250, 10, 20, 250]), 1, 3)).toBe(15)
+    expect(getVoiceBandAverage(new Uint8Array([10]), 2, 2)).toBe(0)
+  })
+})
