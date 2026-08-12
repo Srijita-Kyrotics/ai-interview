@@ -7,7 +7,7 @@ import {
   Settings2, RefreshCcw,
 } from 'lucide-react';
 import { useAssessmentProctoring } from '../proctoring/useAssessmentProctoring';
-import { ProctoringModal, ProctoringPanel } from '../proctoring/ProctoringUI';
+import { ProctoringModal } from '../proctoring/ProctoringUI';
 import { CodeEditor } from './CodeEditor';
 import ObiAvatar from './ObiAvatar';
 import { clearStoredUser } from '../api';
@@ -465,9 +465,12 @@ export default function AIInterviewer({ sessionId, token, role, company, resume,
   const lipSyncIntervalRef = useRef(null);
   const audioMonitorRef = useRef(null);
 
-  const openingIntro = "Hi, I'm Obi, your AI interviewer. I've reviewed your resume, and today we'll discuss your experience, projects, and technical skills. Let's get started.";
-
   const voiceMode = true;
+  const interviewHighlights = [
+    { label: 'Resume', value: resume ? 'Reviewed' : 'Ready' },
+    { label: 'Flow', value: 'Adaptive' },
+    { label: 'Format', value: 'Voice + Code' },
+  ];
 
   const [interviewSessionId, setInterviewSessionId] = useState(null);
   const [progress, setProgress] = useState({ current: 1, total: 1 });
@@ -1161,6 +1164,8 @@ export default function AIInterviewer({ sessionId, token, role, company, resume,
     return inferRoleFromResume(uploadedResume || resume) || role || DEFAULT_ROLE;
   }, [uploadedResume, resume, role]);
 
+  const openingIntro = `Hi, I'm Obi, your AI interviewer. I've reviewed your resume and I'm tailoring the conversation to your background in ${effectiveRole || DEFAULT_ROLE}. We’ll start with your experience, dig into your projects, and then test your technical depth.`;
+
   // ── Start Interview ──────────────────────────────────────────────────
   const startInterview = useCallback(async (resumeExisting = true) => {
     setPhase('initializing');
@@ -1474,8 +1479,21 @@ export default function AIInterviewer({ sessionId, token, role, company, resume,
   }, []);
 
   // ── Keyboard Handler ─────────────────────────────────────────────────
+  const submitTypedAnswer = useCallback(() => {
+    const input = textInputRef.current;
+    const value = input?.value.trim();
+    if (!value || isThinking || isSpeaking) return;
+
+    sendAnswer(value);
+    if (input) input.value = '';
+  }, [isSpeaking, isThinking, sendAnswer]);
+
   const handleKeyDown = (e) => {
-    // No-op for voice-only
+    if (e.key === 'Enter') {
+      e.preventDefault();
+      e.stopPropagation();
+      submitTypedAnswer();
+    }
   };
 
   // ── Cleanup ──────────────────────────────────────────────────────────
@@ -1512,10 +1530,19 @@ export default function AIInterviewer({ sessionId, token, role, company, resume,
           </div>
           <h2 className="aii-start-card__title">Technical Interview</h2>
           <p className="aii-start-card__sub">
-            You will be interviewed by <strong>Obi</strong>, who has read your
-            resume and will ask targeted technical questions — then dig deeper
-            based on your answers.
+            Obi will interview you like a senior technical reviewer — using your
+            resume to ask focused questions, then probing deeper based on your
+            answers and your code.
           </p>
+
+          <div className="aii-start-card__badges" aria-label="Interview overview">
+            {interviewHighlights.map((item) => (
+              <span key={item.label} className="aii-pill">
+                <span className="aii-pill__label">{item.label}</span>
+                {item.value}
+              </span>
+            ))}
+          </div>
 
           <div className="aii-start-card__details">
             <div className="aii-detail-item">
@@ -1544,8 +1571,8 @@ export default function AIInterviewer({ sessionId, token, role, company, resume,
           <div className="aii-start-card__tips">
             <div className="aii-start-card__tips-title">Before you begin</div>
             <ul>
-              <li>Answer in detail — Obi will ask follow-ups based on what you say</li>
-              <li>Speak clearly, and allow your microphone when prompted</li>
+              <li>Give concrete examples — Obi will follow up on the details that matter most.</li>
+              <li>Speak clearly, keep your camera optional, and allow mic access when prompted.</li>
             </ul>
           </div>
 
@@ -1705,7 +1732,6 @@ export default function AIInterviewer({ sessionId, token, role, company, resume,
           {currentStage && (
             <div className="aii-stage-badge">{currentStage}</div>
           )}
-          {proctoring && <ProctoringPanel proctoring={proctoring} />}
           <button
             className="aii-end-btn"
             onClick={endInterview}
@@ -1965,24 +1991,13 @@ export default function AIInterviewer({ sessionId, token, role, company, resume,
                 type="text"
                 className="aii-text-input"
                 placeholder="Or type your response to Obi…"
-                onKeyDown={(e) => {
-                  if (e.key === 'Enter' && e.target.value.trim() && !isThinking) {
-                    sendAnswer(e.target.value.trim());
-                    e.target.value = '';
-                  }
-                }}
+                onKeyDown={handleKeyDown}
                 disabled={isThinking || isSpeaking}
                 aria-label="Type your response"
               />
               <button
                 className="aii-send-btn"
-                onClick={() => {
-                  const input = textInputRef.current;
-                  if (input && input.value.trim() && !isThinking) {
-                    sendAnswer(input.value.trim());
-                    input.value = '';
-                  }
-                }}
+                onClick={submitTypedAnswer}
                 disabled={isThinking || isSpeaking}
                 title="Send message"
                 aria-label="Send message"

@@ -5684,10 +5684,39 @@ label {
 
 .aii-start-card__sub {
   text-align: center;
-  color: rgba(255, 255, 255, 0.7);
-  line-height: 1.6;
-  margin-bottom: 1.5rem;
+  color: rgba(255, 255, 255, 0.75);
+  line-height: 1.7;
+  margin-bottom: 1.25rem;
   font-size: 0.95rem;
+}
+
+.aii-start-card__badges {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 0.6rem;
+  margin-bottom: 1.25rem;
+}
+
+.aii-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.45rem;
+  padding: 0.45rem 0.8rem;
+  border-radius: 999px;
+  background: rgba(99, 102, 241, 0.12);
+  border: 1px solid rgba(129, 140, 248, 0.35);
+  color: #dfe7ff;
+  font-size: 0.73rem;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+}
+
+.aii-pill__label {
+  text-transform: uppercase;
+  font-size: 0.63rem;
+  letter-spacing: 0.1em;
+  opacity: 0.75;
 }
 
 .aii-start-card__details {
@@ -5793,21 +5822,22 @@ label {
   align-items: center;
   justify-content: center;
   gap: 0.5rem;
-  padding: 0.875rem 1.5rem;
+  padding: 0.9rem 1.5rem;
   border: none;
-  border-radius: 10px;
-  background: #4f46e5;
+  border-radius: 12px;
+  background: linear-gradient(135deg, #4f46e5, #7c3aed);
   color: white;
   font-size: 1rem;
   font-weight: 700;
   cursor: pointer;
-  transition: all 0.2s ease;
-  box-shadow: 0 1px 0 rgba(255, 255, 255, 0.12) inset, 0 4px 12px rgba(0, 0, 0, 0.25);
+  transition: transform 0.2s ease, box-shadow 0.2s ease, filter 0.2s ease;
+  box-shadow: 0 10px 24px rgba(79, 70, 229, 0.35);
 }
 
 .aii-start-btn:hover {
-  background: #4338ca;
-  box-shadow: 0 1px 0 rgba(255, 255, 255, 0.12) inset, 0 6px 16px rgba(0, 0, 0, 0.3);
+  transform: translateY(-1px);
+  box-shadow: 0 14px 28px rgba(79, 70, 229, 0.4);
+  filter: brightness(1.04);
 }
 
 .aii-start-btn:active { transform: translateY(0); }
@@ -7548,8 +7578,10 @@ label {
 
 .obi-avatar__scene {
   position: relative;
-  width: min(44vh, 340px);
+  width: clamp(220px, 30vw, 390px);
+  max-width: 100%;
   aspect-ratio: 220 / 250;
+  margin: 0 auto;
 }
 
 .obi-avatar__svg {
@@ -7858,8 +7890,8 @@ label {
   align-items: center;
   justify-content: center;
   gap: 0.9rem;
-  padding: 0.4rem 1rem;
-  overflow: hidden;
+  padding: 0.4rem 1rem 0.8rem;
+  overflow: visible;
   background:
     radial-gradient(ellipse 62% 56% at 50% 40%, rgba(99, 102, 241, 0.14), transparent 70%),
     radial-gradient(ellipse 42% 36% at 50% 26%, rgba(56, 189, 248, 0.1), transparent 72%);
