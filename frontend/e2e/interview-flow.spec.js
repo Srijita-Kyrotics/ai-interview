@@ -106,19 +106,16 @@ test('full interview flow: resume -> aptitude -> coding -> technical -> report',
   await page.waitForURL('**/technical', { timeout: 30000 })
 
   // ── Technical round: the AI interviewer must MOUNT without crashing ──
-  await expect(page.locator('.oiv-shell--onboarding')).toBeVisible({ timeout: 30000 })
+  await expect(page.locator('.aii-start-card')).toBeVisible({ timeout: 30000 })
   await expect(page.getByText('Something went wrong')).toHaveCount(0)
 
-  // Walk the onboarding wizard: Meet Obi → Setup check → Ready
-  await page.getByRole('button', { name: 'Continue' }).click()
-  await page.getByRole('button', { name: 'Continue' }).click()
-  await expect(page.getByRole('button', { name: 'Begin Interview' })).toBeVisible()
-  await expect(page.getByText('Something went wrong')).toHaveCount(0)
+  // The start screen is a single card (no onboarding wizard steps anymore).
+  await expect(page.getByRole('heading', { name: 'Technical Interview' })).toBeVisible()
 
   // ── Begin Interview: /ai-interview/start must NOT 401 (auth regression) ──
   await page.getByRole('button', { name: 'Begin Interview' }).click()
   await expect(
-    page.locator('.oiv-connect-overlay, .oiv-error, .oiv-room-error')
+    page.locator('.aii-room, .aii-error-card')
   ).toBeVisible({ timeout: 15000 })
   await expect(page.getByText('Something went wrong')).toHaveCount(0)
 

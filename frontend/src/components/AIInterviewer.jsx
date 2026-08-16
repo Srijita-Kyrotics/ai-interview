@@ -1,22 +1,32 @@
-import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
-  Mic, Target, ListChecks, Clock, AlertTriangle,
-  ArrowRight, Send, ChevronRight, Zap, TrendingUp,
-  MessageSquare, Code2, CheckCircle2, XCircle, Volume2, Loader2, Play,
-  Settings2, RefreshCcw,
+  AlertTriangle,
+  Clock,
+  Code2,
+  ListChecks,
+  Loader2,
+  MessageSquare,
+  Mic,
+  Send,
+  Volume2,
+  XCircle,
 } from 'lucide-react';
 import { useAssessmentProctoring } from '../proctoring/useAssessmentProctoring';
 import { ProctoringModal } from '../proctoring/ProctoringUI';
-import { CodeEditor } from './CodeEditor';
 import ObiAvatar from './ObiAvatar';
 import { clearStoredUser } from '../api';
 import { ROLE_MAPPINGS } from '../constants';
-
-// ─────────────────────────────────────────────────────────────────────────────
-// AI INTERVIEWER COMPONENT
-// Production-grade voice + text interview interface
-// ─────────────────────────────────────────────────────────────────────────────
+import {
+  FinalReportView,
+  LiveStatusPill,
+  MessageBubble,
+  ProgressBar,
+  ThinkingIndicator,
+  WaveformVisualizer,
+} from './aiInterviewer/parts';
+import StartCard from './aiInterviewer/StartCard';
+import CodingPanel from './aiInterviewer/CodingPanel';
 
 const API_BASE = import.meta.env.VITE_API_URL || '/api';
 const getWsBase = () =>
@@ -29,6 +39,16 @@ const DEFAULT_ROLE = 'Software Engineer';
 const MAX_QUESTIONS = 12;
 const MINUTES_PER_QUESTION = 3.5;
 const ESTIMATED_MINUTES = Math.round((MAX_QUESTIONS * MINUTES_PER_QUESTION) / 5) * 5;
+
+// Browser TTS is the fallback when the backend streams no audio chunks.
+const BROWSER_TTS_FALLBACK = true;
+
+const LANGUAGE_OPTIONS = [
+  { key: 'python', label: 'Python' },
+  { key: 'javascript', label: 'JavaScript' },
+  { key: 'java', label: 'Java' },
+  { key: 'cpp', label: 'C++' },
+];
 
 // Infer the target role from resume skills so a different resume automatically
 // targets a different role. Mirrors the scoring used on the company page.
@@ -50,396 +70,6 @@ function inferRoleFromResume(resume) {
   return bestRole;
 }
 
-// ── Sub-components ────────────────────────────────────────────────────────────
-
-const WaveformVisualizer = ({ isActive, color = '#6366f1' }) => {
-  const canvasRef = useRef(null);
-  const animRef = useRef(null);
-  const frameRef = useRef(0);
-
-  useEffect(() => {
-    const canvas = canvasRef.current;
-    if (!canvas) return;
-    const ctx = canvas.getContext('2d');
-    const width = canvas.width;
-    const height = canvas.height;
-    const bars = 40;
-    const barWidth = width / bars - 2;
-
-    const animate = () => {
-      ctx.clearRect(0, 0, width, height);
-      for (let i = 0; i < bars; i++) {
-        const t = frameRef.current / 20 + i * 0.3;
-        const amp = isActive
-          ? (Math.sin(t) * 0.5 + 0.5) * 0.8 + 0.1
-          : 0.05;
-        const barH = amp * height;
-        const x = i * (barWidth + 2);
-        const y = (height - barH) / 2;
-        ctx.fillStyle = color;
-        ctx.globalAlpha = isActive ? 0.7 + amp * 0.3 : 0.3;
-        ctx.beginPath();
-        ctx.roundRect(x, y, barWidth, barH, 3);
-        ctx.fill();
-      }
-      frameRef.current++;
-      animRef.current = requestAnimationFrame(animate);
-    };
-    animate();
-    return () => cancelAnimationFrame(animRef.current);
-  }, [isActive, color]);
-
-  return (
-    <canvas
-      ref={canvasRef}
-      width={200}
-      height={48}
-      style={{ display: 'block' }}
-    />
-  );
-};
-
-
-const renderInline = (text) => {
-  const nodes = [];
-  const regex = /(\*\*[^*]+\*\*|`[^`]+`)/g;
-  let lastIndex = 0;
-  let match;
-  let key = 0;
-  while ((match = regex.exec(text)) !== null) {
-    if (match.index > lastIndex) {
-      nodes.push(<React.Fragment key={key++}>{text.slice(lastIndex, match.index)}</React.Fragment>);
-    }
-    const token = match[0];
-    if (token.startsWith('**')) {
-      nodes.push(<strong key={key++}>{token.slice(2, -2)}</strong>);
-    } else {
-      nodes.push(<code key={key++} className="aii-inline-code">{token.slice(1, -1)}</code>);
-    }
-    lastIndex = regex.lastIndex;
-  }
-  if (lastIndex < text.length) {
-    nodes.push(<React.Fragment key={key++}>{text.slice(lastIndex)}</React.Fragment>);
-  }
-  return nodes;
-};
-
-const RichText = ({ text }) => {
-  const parts = [];
-  const regex = /```(\w*)\n?([\s\S]*?)```/g;
-  let lastIndex = 0;
-  let match;
-  let key = 0;
-  while ((match = regex.exec(text)) !== null) {
-    if (match.index > lastIndex) {
-      parts.push(<span key={key++}>{renderInline(text.slice(lastIndex, match.index))}</span>);
-    }
-    const lang = match[1];
-    const code = match[2].replace(/\n$/, '');
-    parts.push(
-      <div key={key++} className="aii-code-block">
-        {lang && <div className="aii-code-block__lang">{lang}</div>}
-        <pre><code>{code}</code></pre>
-      </div>
-    );
-    lastIndex = regex.lastIndex;
-  }
-  if (lastIndex < text.length) {
-    parts.push(<span key={key++}>{renderInline(text.slice(lastIndex))}</span>);
-  }
-  return <>{parts}</>;
-};
-
-const useCountUp = (target, duration = 1200) => {
-  const [value, setValue] = useState(0);
-  useEffect(() => {
-    if (target === undefined || target === null) return;
-    let raf;
-    const start = performance.now();
-    const from = 0;
-    const tick = (now) => {
-      const p = Math.min((now - start) / duration, 1);
-      const eased = 1 - Math.pow(1 - p, 3);
-      setValue(Math.round(from + (target - from) * eased));
-      if (p < 1) raf = requestAnimationFrame(tick);
-    };
-    raf = requestAnimationFrame(tick);
-    return () => cancelAnimationFrame(raf);
-  }, [target, duration]);
-  return value;
-};
-
-const ScoreGauge = ({ label, score, color }) => {
-  const pct = Math.round(score || 0);
-  const animated = useCountUp(pct);
-  const circumference = 2 * Math.PI * 28;
-  const dash = (animated / 100) * circumference;
-
-  return (
-    <div className="aii-score-gauge">
-      <svg width="76" height="76" viewBox="0 0 72 72">
-        <circle cx="36" cy="36" r="28" fill="none" stroke="rgba(255,255,255,0.08)" strokeWidth="6" />
-        <circle
-          cx="36" cy="36" r="28" fill="none"
-          stroke={color} strokeWidth="6"
-          strokeDasharray={`${dash} ${circumference}`}
-          strokeLinecap="round"
-          transform="rotate(-90 36 36)"
-          style={{ transition: 'stroke-dasharray 0.05s linear' }}
-        />
-        <text x="36" y="40" textAnchor="middle" fill="white" fontSize="13" fontWeight="800">{animated}</text>
-      </svg>
-      <span className="aii-score-label">{label}</span>
-    </div>
-  );
-};
-
-
-const MessageBubble = ({ message }) => {
-  const isInterviewer = message.role === 'interviewer';
-  return (
-    <div className={`aii-bubble ${isInterviewer ? 'aii-bubble--ai' : 'aii-bubble--user'}`}>
-      {isInterviewer && (
-        <div className="aii-bubble__avatar" aria-hidden="true">
-          <span>O</span>
-          <i className="aii-bubble__avatar-dot" />
-        </div>
-      )}
-      <div className="aii-bubble__content">
-        {(message.isFollowUp || message.isTransition) && (
-          <div className="aii-bubble__badges">
-            {message.isFollowUp && (
-              <span className="aii-badge aii-badge--followup">
-                <MessageSquare size="11" /> Follow-up
-              </span>
-            )}
-            {message.isTransition && (
-              <span className="aii-badge aii-badge--transition">
-                <ChevronRight size="11" /> Next Topic
-              </span>
-            )}
-          </div>
-        )}
-        <RichText text={message.text} />
-        <span className="aii-bubble__time">
-          {new Date(message.ts * 1000).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
-        </span>
-      </div>
-      {!isInterviewer && (
-        <div className="aii-bubble__avatar aii-bubble__avatar--user" aria-hidden="true">
-          <span>You</span>
-        </div>
-      )}
-    </div>
-  );
-};
-
-
-const ThinkingIndicator = () => (
-  <div className="aii-thinking">
-    <div className="aii-bubble__avatar"><span>O</span><i className="aii-bubble__avatar-dot" /></div>
-    <div className="aii-thinking__dots">
-      <span />
-      <span />
-      <span />
-    </div>
-  </div>
-);
-
-
-const LiveStatusPill = ({ isRecording, isSpeaking, isThinking, isProcessing, isConnecting }) => {
-  let label = 'Connected';
-  let tone = 'idle';
-  if (isRecording) { label = 'Listening'; tone = 'live'; }
-  else if (isProcessing) { label = 'Transcribing'; tone = 'processing'; }
-  else if (isSpeaking) { label = 'Speaking'; tone = 'live'; }
-  else if (isThinking) { label = 'Thinking'; tone = 'thinking'; }
-  else if (isConnecting) { label = 'Connecting'; tone = 'thinking'; }
-
-  return (
-    <div className={`aii-status-pill aii-status-pill--${tone}`} title={label}>
-      <span className="aii-status-pill__dot" />
-      {label}
-    </div>
-  );
-};
-
-
-const FinalReportView = ({ finalReport, onComplete }) => {
-  const scores = finalReport.scores || {};
-  const rec = finalReport.recommendation || scores.recommendation;
-  const recMap = {
-    'Strong Hire': { color: '#10b981', bg: 'rgba(16,185,129,0.15)' },
-    'Hire': { color: '#22c55e', bg: 'rgba(34,197,94,0.15)' },
-    'Lean Hire': { color: '#eab308', bg: 'rgba(234,179,8,0.15)' },
-    'Lean Reject': { color: '#f97316', bg: 'rgba(249,115,22,0.15)' },
-    'Reject': { color: '#ef4444', bg: 'rgba(239,68,68,0.15)' },
-  };
-  const recStyle = recMap[rec] || { color: '#6b7280', bg: 'rgba(107,114,128,0.15)' };
-  const overall = Math.round(scores.overall_score || 0);
-  const animatedOverall = useCountUp(overall);
-
-  const scoreItems = [
-    { label: 'Technical', score: scores.technical_score || 0, color: '#6366f1' },
-    { label: 'Communication', score: scores.communication_score || 0, color: '#8b5cf6' },
-    { label: 'Confidence', score: scores.confidence_score || 0, color: '#06b6d4' },
-    { label: 'Problem Solving', score: scores.problem_solving_score || 0, color: '#10b981' },
-    { label: 'Behavioral', score: scores.behavioral_score || 0, color: '#f59e0b' },
-  ];
-
-  const sections = [
-    { title: 'Strengths', icon: <TrendingUp size="15" />, items: finalReport.strengths, tone: 'aii-report__section--good' },
-    { title: 'Areas for Improvement', icon: <Zap size="15" />, items: finalReport.areas_for_improvement, tone: 'aii-report__section--warn' },
-  ];
-
-  return (
-    <div className="aii-container">
-      <div className="aii-report">
-        <div className="aii-report__header">
-          <div className="aii-report__done"><CheckCircle2 size="22" /> Interview Complete</div>
-          <p className="aii-report__candidate">{finalReport.candidate_name}</p>
-          <div className="aii-report__overall">
-            <span className="aii-report__overall-score">{animatedOverall}</span>
-            <span className="aii-report__overall-label">Overall Score</span>
-          </div>
-        </div>
-
-        <div className="aii-report__recommendation" style={{ background: recStyle.bg, borderColor: recStyle.color }}>
-          <CheckCircle2 size="34" style={{ color: recStyle.color }} />
-          <div>
-            <div className="aii-report__rec-label">Recommendation</div>
-            <div className="aii-report__rec-value" style={{ color: recStyle.color }}>{rec}</div>
-          </div>
-        </div>
-
-        <div className="aii-report__scores">
-          {scoreItems.map(s => (
-            <ScoreGauge key={s.label} label={s.label} score={s.score} color={s.color} />
-          ))}
-        </div>
-
-        {sections.map(s => (
-          <div className={`aii-report__section ${s.tone}`} key={s.title}>
-            <h3>{s.icon} {s.title}</h3>
-            <ul>
-              {(s.items || []).map((item, i) => <li key={i}>{item}</li>)}
-            </ul>
-          </div>
-        ))}
-
-        {finalReport.communication_summary && finalReport.communication_summary.analyzed_answers > 0 && (
-          <div className="aii-report__section">
-            <h3><MessageSquare size="15" /> Communication Analysis</h3>
-            {(() => {
-              const cs = finalReport.communication_summary;
-              const dims = cs.dimension_averages || {};
-              return (
-                <div className="aii-report__comm">
-                  <div className="aii-report__comm-dims">
-                    {Object.entries(dims).map(([key, val]) => (
-                      <div className="aii-report__comm-dim" key={key}>
-                        <span className="aii-report__comm-dim-label">{key.replace(/_/g, ' ')}</span>
-                        <div className="aii-report__comm-dim-bar">
-                          <div
-                            className="aii-report__comm-dim-fill"
-                            style={{ width: `${Math.round(val * 10)}%` }}
-                          />
-                        </div>
-                        <span className="aii-report__comm-dim-val">{val}/10</span>
-                      </div>
-                    ))}
-                  </div>
-                  {(cs.top_strengths || []).length > 0 && (
-                    <ul className="aii-report__comm-list">
-                      {(cs.top_strengths || []).map((s, i) => <li key={`s${i}`}>+ {s}</li>)}
-                    </ul>
-                  )}
-                  {(cs.top_concerns || []).length > 0 && (
-                    <ul className="aii-report__comm-list aii-report__comm-list--concern">
-                      {(cs.top_concerns || []).map((s, i) => <li key={`c${i}`}>&minus; {s}</li>)}
-                    </ul>
-                  )}
-                </div>
-              );
-            })()}
-          </div>
-        )}
-
-        {finalReport.coding_summary && finalReport.coding_summary.problem && (
-          <div className="aii-report__section">
-            <h3><Code2 size="15" /> Live Coding Round</h3>
-            {(() => {
-              const cs = finalReport.coding_summary;
-              const subs = cs.submissions || [];
-              const last = subs[subs.length - 1];
-              return (
-                <div className="aii-report__coding">
-                  <p>
-                    <strong>{cs.problem.title}</strong>
-                    <span className="aii-report__coding-diff"> {cs.problem.difficulty}</span>
-                    {cs.problem.topic ? ` — ${cs.problem.topic}` : ''}
-                  </p>
-                  {last && (
-                    <p>
-                      Final submission quality: <strong>{last.quality}/10</strong>
-                      {last.language ? ` (${last.language})` : ''}
-                      {last.feedback ? ` — ${last.feedback}` : ''}
-                    </p>
-                  )}
-                  {subs.length > 0 && <p>{subs.length} submission{subs.length > 1 ? 's' : ''} tracked</p>}
-                </div>
-              );
-            })()}
-          </div>
-        )}
-
-        {finalReport.detailed_summary && (
-          <div className="aii-report__section">
-            <h3><MessageSquare size="15" /> Interview Summary</h3>
-            <p>{finalReport.detailed_summary}</p>
-          </div>
-        )}
-
-        {finalReport.recommendation_rationale && (
-          <div className="aii-report__section aii-report__rationale">
-            <h3><Target size="15" /> Recommendation Rationale</h3>
-            <p>{finalReport.recommendation_rationale}</p>
-          </div>
-        )}
-
-        <div className="aii-report__meta">
-          <span><Clock size="13" /> {Math.round((finalReport.interview_duration_seconds || 0) / 60)} minutes</span>
-          <span><ListChecks size="13" /> {finalReport.question_records?.length || 0} questions asked</span>
-        </div>
-
-        <button className="aii-start-btn" onClick={() => onComplete && onComplete(finalReport)}>
-          View Full Dashboard
-          <ArrowRight size="18" />
-        </button>
-      </div>
-    </div>
-  );
-};
-
-
-const ProgressBar = ({ current, total, stages }) => {
-  const pct = total > 0 ? Math.min((current / total) * 100, 100) : 0;
-  return (
-    <div className="aii-progress">
-      <div className="aii-progress__bar">
-        <div className="aii-progress__fill" style={{ width: `${pct}%` }} />
-      </div>
-      <div className="aii-progress__info">
-        <span>Stage {current} of {total}</span>
-        {stages?.currentStage && <span className="aii-progress__stage">{stages.currentStage}</span>}
-      </div>
-    </div>
-  );
-};
-
-
-// ── Main Component ──────────────────────────────────────────────────────────
-
 export default function AIInterviewer({ sessionId, token, role, company, resume, onComplete, proctoring, setProctoring }) {
   const navigate = useNavigate();
 
@@ -452,20 +82,13 @@ export default function AIInterviewer({ sessionId, token, role, company, resume,
   const [isProcessing, setIsProcessing] = useState(false);
   const [isRecording, setIsRecording] = useState(false);
   const [isSpeaking, setIsSpeaking] = useState(false);
-  const [micPermission, setMicPermission] = useState('unknown');
   const [statusMessage, setStatusMessage] = useState('Preparing your interview...');
-  const [browserTtsFallback, setBrowserTtsFallback] = useState(true);
-  const [showSettings, setShowSettings] = useState(false);
-  const [lastSpeechText, setLastSpeechText] = useState('');
-  const [audioAwaitingResponse, setAudioAwaitingResponse] = useState(false);
-  const [answerRecorded, setAnswerRecorded] = useState(false);
   const [subtitleText, setSubtitleText] = useState('');
   const [lipLevel, setLipLevel] = useState(0);
   const [audioLevel, setAudioLevel] = useState(0);
   const lipSyncIntervalRef = useRef(null);
   const audioMonitorRef = useRef(null);
 
-  const voiceMode = true;
   const interviewHighlights = [
     { label: 'Resume', value: resume ? 'Reviewed' : 'Ready' },
     { label: 'Flow', value: 'Adaptive' },
@@ -477,11 +100,9 @@ export default function AIInterviewer({ sessionId, token, role, company, resume,
   const [currentStage, setCurrentStage] = useState('');
   const [finalReport, setFinalReport] = useState(null);
   const [error, setError] = useState(null);
-  const [latency, setLatency] = useState(null);
   const [resumableSession, setResumableSession] = useState(null);
   const [reconnectAttempts, setReconnectAttempts] = useState(0);
   const [elapsedSec, setElapsedSec] = useState(0);
-  const [lastCandidateAnswer, setLastCandidateAnswer] = useState('');
   const [resumeSummaryOpen, setResumeSummaryOpen] = useState(false);
   const [resumeText, setResumeText] = useState('');
   const [resumeFile, setResumeFile] = useState(null);
@@ -491,12 +112,6 @@ export default function AIInterviewer({ sessionId, token, role, company, resume,
   const [resumeUploadError, setResumeUploadError] = useState('');
   const resumeFileInputRef = useRef(null);
 
-  const startedRef = useRef(false);
-  const fallbackAudioTimerRef = useRef(null);
-  const answerRecordedTimerRef = useRef(null);
-  const lastAudioTextRef = useRef('');
-  const lastAudioPlayedRef = useRef(false);
-
   // ── Code Editor State ──────────────────────────────────────────────
   const [code, setCode] = useState('');
   const [language, setLanguage] = useState('python');
@@ -505,9 +120,9 @@ export default function AIInterviewer({ sessionId, token, role, company, resume,
   const [runOutput, setRunOutput] = useState('');
   const [runStatus, setRunStatus] = useState('');
   const [isRunning, setIsRunning] = useState(false);
-  const [testResults, setTestResults] = useState(null); // visible test-case results
+  const [testResults, setTestResults] = useState(null);
   const [isTesting, setIsTesting] = useState(false);
-  const [codingProblem, setCodingProblem] = useState(null); // Feature 9: live coding round
+  const [codingProblem, setCodingProblem] = useState(null);
   const languageRef = useRef('python');
   useEffect(() => { languageRef.current = language; }, [language]);
   const codeRef = useRef('');
@@ -527,18 +142,10 @@ export default function AIInterviewer({ sessionId, token, role, company, resume,
     return () => clearInterval(t);
   }, [phase]);
 
-  const LANGUAGE_OPTIONS = [
-    { key: 'python', label: 'Python' },
-    { key: 'javascript', label: 'JavaScript' },
-    { key: 'java', label: 'Java' },
-    { key: 'cpp', label: 'C++' },
-  ];
-
   // ── Proctoring State ────────────────────────────────────────────────
   const videoRef = useRef(null);
   const userStreamRef = useRef(null);
   const [userStream, setUserStream] = useState(null);
-  const [screenStream, setScreenStream] = useState(null);
 
   // Camera-based video proctoring is enabled for the Obi round. The camera is
   // optional (requested gracefully): if it is denied, tab-switch / fullscreen /
@@ -596,12 +203,9 @@ export default function AIInterviewer({ sessionId, token, role, company, resume,
     setProctoring,
     webcamVideoRef: videoRef,
     webcamStream: userStream,
-    screenStream,
+    screenStream: null,
     voiceInterview: true
   });
-  const proctorError = proctor.status.assessmentStatus === 'Terminated Due To Malpractice'
-    ? proctor.status.terminatedReason || 'Assessment terminated due to malpractice.'
-    : '';
 
   // Feed the webcam stream into the hidden proctoring video element.
   useEffect(() => {
@@ -630,7 +234,6 @@ export default function AIInterviewer({ sessionId, token, role, company, resume,
   const reconnectAttemptsRef = useRef(reconnectAttempts);
   const audioAwaitingRef = useRef(false);
   const fallbackTtsTimeoutRef = useRef(null);
-  const lastAiMessageRef = useRef('');
   const wsRef = useRef(null);
   const reconnectTimerRef = useRef(null);
   const mediaRecorderRef = useRef(null);
@@ -652,16 +255,13 @@ export default function AIInterviewer({ sessionId, token, role, company, resume,
 
   const requestMicPermission = useCallback(async () => {
     if (!navigator.mediaDevices?.getUserMedia) {
-      setMicPermission('unsupported');
       return false;
     }
 
     try {
       await navigator.mediaDevices.getUserMedia({ audio: true });
-      setMicPermission('granted');
       return true;
     } catch (err) {
-      setMicPermission('denied');
       setError('Microphone access is required to continue. Please enable microphone permissions and refresh the page.');
       setPhase('error');
       return false;
@@ -736,7 +336,7 @@ export default function AIInterviewer({ sessionId, token, role, company, resume,
             role: inferRoleFromResume(resume) || role || DEFAULT_ROLE,
             company: company || 'the company',
             max_questions: MAX_QUESTIONS,
-            voice_enabled: voiceMode,
+            voice_enabled: true,
           }),
         });
         if (res.ok) {
@@ -750,9 +350,9 @@ export default function AIInterviewer({ sessionId, token, role, company, resume,
       }
     };
     checkResumable();
-  }, [sessionId, token, role, company, voiceMode, resume]);
+  }, [sessionId, token, role, company, resume]);
 
-  // ── P3: Token Refresh ───────────────────────────────────────────────
+  // ── Token Refresh ───────────────────────────────────────────────────
   const refreshToken = useCallback(async () => {
     if (!interviewSessionId || !token) return;
     try {
@@ -786,7 +386,6 @@ export default function AIInterviewer({ sessionId, token, role, company, resume,
   const finishAiResponse = useCallback(() => {
     setIsThinking(false);
     setIsProcessing(false);
-    setAudioAwaitingResponse(false);
     audioAwaitingRef.current = false;
   }, []);
 
@@ -837,6 +436,10 @@ export default function AIInterviewer({ sessionId, token, role, company, resume,
     }
   }, [finishAiResponse, startLipSync, clearLipSync, stopAudioLevelMonitor, pickNaturalVoice]);
 
+  const addMessage = (msg) => {
+    setMessages(prev => [...prev, { id: Date.now() + Math.random(), ...msg }]);
+  };
+
   const queueAiMessage = useCallback((message, options = {}) => {
     stopAudioLevelMonitor();
     setIsThinking(false);
@@ -844,9 +447,7 @@ export default function AIInterviewer({ sessionId, token, role, company, resume,
     setIsProcessing(false);
     setStatusMessage(options.status || 'Obi is speaking...');
     setSubtitleText(message || '');
-    setAudioAwaitingResponse(true);
     audioAwaitingRef.current = true;
-    lastAiMessageRef.current = message || '';
 
     if (options.phase) {
       setPhase(options.phase);
@@ -861,12 +462,14 @@ export default function AIInterviewer({ sessionId, token, role, company, resume,
 
     clearAudioFallbackTimer();
     fallbackTtsTimeoutRef.current = setTimeout(() => {
-      if (!audioAwaitingRef.current && browserTtsFallback) return;
+      if (!audioAwaitingRef.current && BROWSER_TTS_FALLBACK) return;
       if ('speechSynthesis' in window && message) {
         speakText(message);
       }
     }, 4000);
-  }, [browserTtsFallback, clearAudioFallbackTimer, speakText, stopAudioLevelMonitor]);
+  }, [clearAudioFallbackTimer, speakText, stopAudioLevelMonitor]);
+
+  const openingIntro = `Hi, I'm Obi, your AI interviewer. I've reviewed your resume and I'm tailoring the conversation to your background in ${effectiveRole || DEFAULT_ROLE}. We’ll start with your experience, dig into your projects, and then test your technical depth.`;
 
   // ── WebSocket Message Handler ────────────────────────────────────────
   const handleWsMessage = useCallback((msg) => {
@@ -902,7 +505,7 @@ export default function AIInterviewer({ sessionId, token, role, company, resume,
         });
         break;
 
-      case 'session_restored': { // P2: Session restored from checkpoint
+      case 'session_restored': {
         setPhase('interviewing');
         setIsThinking(false);
         setProgress({
@@ -934,8 +537,6 @@ export default function AIInterviewer({ sessionId, token, role, company, resume,
           status: 'Obi is asking the next question…',
           phase: 'interviewing',
           isFollowUp: msg.is_follow_up,
-          questionId: msg.question_id,
-          stage: msg.stage,
         });
         break;
 
@@ -948,7 +549,7 @@ export default function AIInterviewer({ sessionId, token, role, company, resume,
         });
         break;
 
-      case 'coding_problem': { // Feature 9: live coding round
+      case 'coding_problem': {
         if (msg.problem) {
           setCodingProblem(msg.problem);
           setActiveTab('code');
@@ -1003,7 +604,7 @@ export default function AIInterviewer({ sessionId, token, role, company, resume,
       default:
         console.log('[AIInterviewer] Unknown message type:', type, msg);
     }
-  }, [speakText]);
+  }, [queueAiMessage, speakText, openingIntro]);
 
   // ── Serialized Audio Playback Queue ─────────────────────────────────
   // The backend streams TTS as multiple MP3 chunks. Every binary message is
@@ -1057,7 +658,7 @@ export default function AIInterviewer({ sessionId, token, role, company, resume,
     }
   }, [clearAudioFallbackTimer, playNextAudioChunk]);
 
-  // ── P3: Auto-reconnect on disconnect ────────────────────────────────
+  // ── Auto-reconnect on disconnect ────────────────────────────────────
   const reconnectWs = useCallback(() => {
     if (!interviewSessionId || !token || !sessionId) return;
     if (reconnectAttempts >= 5) {
@@ -1164,8 +765,6 @@ export default function AIInterviewer({ sessionId, token, role, company, resume,
     return inferRoleFromResume(uploadedResume || resume) || role || DEFAULT_ROLE;
   }, [uploadedResume, resume, role]);
 
-  const openingIntro = `Hi, I'm Obi, your AI interviewer. I've reviewed your resume and I'm tailoring the conversation to your background in ${effectiveRole || DEFAULT_ROLE}. We’ll start with your experience, dig into your projects, and then test your technical depth.`;
-
   // ── Start Interview ──────────────────────────────────────────────────
   const startInterview = useCallback(async (resumeExisting = true) => {
     setPhase('initializing');
@@ -1209,7 +808,7 @@ export default function AIInterviewer({ sessionId, token, role, company, resume,
             role: effectiveRole,
             company: company || 'the company',
             max_questions: MAX_QUESTIONS,
-            voice_enabled: voiceMode,
+            voice_enabled: true,
           });
       const res = await fetch(url, {
         method: 'POST',
@@ -1237,7 +836,7 @@ export default function AIInterviewer({ sessionId, token, role, company, resume,
       wsRef.current = ws;
       ws.binaryType = 'arraybuffer';
 
-        ws.onopen = () => {
+      ws.onopen = () => {
         console.log('[AIInterviewer] WebSocket connected');
         setPhase('opening');
         setStatusMessage('Connecting to Obi...');
@@ -1274,7 +873,7 @@ export default function AIInterviewer({ sessionId, token, role, company, resume,
       setError(err.message);
       setPhase('error');
     }
-  }, [sessionId, token, effectiveRole, company, voiceMode, resumeText, resumableSession, uploadedSessionId]);
+  }, [sessionId, token, effectiveRole, company, resumeText, resumableSession, uploadedSessionId]);
 
   // ── Explicit start (Begin button) ────────────────────────────────────
   // The interview only starts on user action — no surprise mic/camera
@@ -1289,11 +888,6 @@ export default function AIInterviewer({ sessionId, token, role, company, resume,
     await requestCameraPermission(); // optional — never blocks the interview
     startInterview(resumeExisting);
   }, [requestMicPermission, requestCameraPermission, startInterview]);
-
-  // ── Add Message Helper ───────────────────────────────────────────────
-  const addMessage = (msg) => {
-    setMessages(prev => [...prev, { id: Date.now() + Math.random(), ...msg }]);
-  };
 
   // ── Send Text Answer ─────────────────────────────────────────────────
   const sendAnswer = useCallback((text) => {
@@ -1496,6 +1090,13 @@ export default function AIInterviewer({ sessionId, token, role, company, resume,
     }
   };
 
+  // Auto-scroll the transcript to the newest message.
+  useEffect(() => {
+    if (messagesEndRef.current) {
+      messagesEndRef.current.scrollIntoView({ behavior: 'smooth', block: 'end' });
+    }
+  }, [messages, isThinking]);
+
   // ── Cleanup ──────────────────────────────────────────────────────────
   useEffect(() => {
     return () => {
@@ -1520,141 +1121,24 @@ export default function AIInterviewer({ sessionId, token, role, company, resume,
   if (phase === 'idle') {
     return (
       <div className="aii-container">
-        <div className="aii-start-card">
-          <div className="aii-start-card__brand">
-            <div className="aii-start-avatar">
-              <span>O</span>
-              <i />
-            </div>
-            <span className="aii-start-card__tag">Obi · AI Interviewer</span>
-          </div>
-          <h2 className="aii-start-card__title">Technical Interview</h2>
-          <p className="aii-start-card__sub">
-            Obi will interview you like a senior technical reviewer — using your
-            resume to ask focused questions, then probing deeper based on your
-            answers and your code.
-          </p>
-
-          <div className="aii-start-card__badges" aria-label="Interview overview">
-            {interviewHighlights.map((item) => (
-              <span key={item.label} className="aii-pill">
-                <span className="aii-pill__label">{item.label}</span>
-                {item.value}
-              </span>
-            ))}
-          </div>
-
-          <div className="aii-start-card__details">
-            <div className="aii-detail-item">
-              <span className="aii-detail-item__icon"><Target size="18" /></span>
-              <div>
-                <strong>Role</strong>
-                <p>{effectiveRole}</p>
-              </div>
-            </div>
-            <div className="aii-detail-item">
-              <span className="aii-detail-item__icon"><ListChecks size="18" /></span>
-              <div>
-                <strong>Questions</strong>
-                <p>Adaptive</p>
-              </div>
-            </div>
-            <div className="aii-detail-item">
-              <span className="aii-detail-item__icon"><Clock size="18" /></span>
-              <div>
-                <strong>Duration</strong>
-                <p>~{ESTIMATED_MINUTES} minutes</p>
-              </div>
-            </div>
-          </div>
-
-          <div className="aii-start-card__tips">
-            <div className="aii-start-card__tips-title">Before you begin</div>
-            <ul>
-              <li>Give concrete examples — Obi will follow up on the details that matter most.</li>
-              <li>Speak clearly, keep your camera optional, and allow mic access when prompted.</li>
-            </ul>
-          </div>
-
-          {resume && (
-            <div className="aii-resume-preview">
-              <div className="aii-resume-preview__header">
-                <span>Resume snapshot</span>
-                <button type="button" className="aii-link-button" onClick={() => setResumeSummaryOpen((open) => !open)}>
-                  {resumeSummaryOpen ? 'Hide' : 'Show'} summary
-                </button>
-              </div>
-              {resumeSummaryOpen && (
-                <div className="aii-resume-preview__content">
-                  {resume.parsed?.experience?.slice(0, 3).map((item, index) => (
-                    <div key={index} className="aii-resume-preview__item">
-                      <strong>{item.position || item.title}</strong>
-                      <span>{item.company || item.organization}</span>
-                    </div>
-                  ))}
-                  <p className="aii-resume-preview__note">Obi will use your resume to personalize questions.</p>
-                </div>
-              )}
-            </div>
-          )}
-
-          <div className="aii-start-card__resume">
-            <label>Upload your resume (PDF or TXT) so Obi can read it before starting</label>
-            <div className={`aii-file-upload${resumeFile ? ' aii-file-upload--done' : ''}`}>
-              <input
-                ref={resumeFileInputRef}
-                type="file"
-                id="aii-resume-file"
-                accept=".pdf,.txt"
-                onChange={handleResumeFile}
-                disabled={uploadingResume}
-              />
-              <div className="aii-file-upload__hint">
-                {uploadingResume ? (
-                  <><Loader2 className="aii-spin" size="18" /> Parsing resume…</>
-                ) : resumeFile ? (
-                  <><CheckCircle2 size="18" /> {resumeFile.name} — Obi will use it for your interview.</>
-                ) : (
-                  <>Drop your PDF here or <u>browse</u></>
-                )}
-              </div>
-              {resumeFile && !uploadingResume && (
-                <button type="button" className="aii-file-upload__remove" onClick={clearUploadedResume} aria-label="Remove resume file">
-                  <XCircle size="16" />
-                </button>
-              )}
-            </div>
-            {resumeUploadError && <p className="aii-form-error">{resumeUploadError}</p>}
-          </div>
-
-          <div className="aii-start-card__resume">
-            <label htmlFor="aii-resume-text">Or paste your resume text (optional)</label>
-            <textarea
-              id="aii-resume-text"
-              value={resumeText}
-              onChange={(e) => setResumeText(e.target.value)}
-              placeholder="Paste your resume text here so Obi can personalize questions to your background…"
-              rows={5}
-            />
-          </div>
-
-          {resumableSession && (
-            <button
-              className="aii-start-btn aii-start-btn--ghost"
-              onClick={() => beginInterview(true)}
-            >
-              <span>Resume Interview</span>
-              <ArrowRight size="18" />
-            </button>
-          )}
-
-          <button className="aii-start-btn" onClick={() => beginInterview(false)}>
-            <Mic size="18" />
-            <span>{resumableSession ? 'Start New Interview' : 'Begin Interview'}</span>
-            <ArrowRight size="18" />
-          </button>
-          <p className="aii-start-card__footnote">Make sure your microphone is allowed in the browser.</p>
-        </div>
+        <StartCard
+          effectiveRole={effectiveRole}
+          estimatedMinutes={ESTIMATED_MINUTES}
+          highlights={interviewHighlights}
+          resume={resume}
+          resumeFile={resumeFile}
+          resumeText={resumeText}
+          resumeSummaryOpen={resumeSummaryOpen}
+          uploadingResume={uploadingResume}
+          resumeUploadError={resumeUploadError}
+          resumableSession={resumableSession}
+          resumeFileInputRef={resumeFileInputRef}
+          onToggleResumeSummary={() => setResumeSummaryOpen((open) => !open)}
+          onResumeTextChange={(e) => setResumeText(e.target.value)}
+          onResumeFileChange={handleResumeFile}
+          onClearResumeFile={clearUploadedResume}
+          onBegin={beginInterview}
+        />
       </div>
     );
   }
@@ -1803,145 +1287,29 @@ export default function AIInterviewer({ sessionId, token, role, company, resume,
         </div>
 
         {activeTab === 'code' && (
-          <div className="aii-code-area">
-            {codingProblem && (
-              <div className="aii-problem">
-                <div className="aii-problem__header">
-                  <span className={`aii-problem__diff aii-problem__diff--${codingProblem.difficulty || 'medium'}`}>
-                    {codingProblem.difficulty || 'medium'}
-                  </span>
-                  <h3>{codingProblem.title || 'Coding Challenge'}</h3>
-                  {codingProblem.topic && <span className="aii-problem__topic">{codingProblem.topic}</span>}
-                </div>
-                <p className="aii-problem__desc">{codingProblem.description}</p>
-                {(codingProblem.examples || []).length > 0 && (
-                  <div className="aii-problem__examples">
-                    {(codingProblem.examples || []).map((ex, i) => (
-                      <div className="aii-problem__example" key={i}>
-                        {ex.input && <pre>Input:    {ex.input}</pre>}
-                        {ex.output && <pre>Output:   {ex.output}</pre>}
-                        {ex.explanation && <pre>Explain:  {ex.explanation}</pre>}
-                      </div>
-                    ))}
-                  </div>
-                )}
-                {(codingProblem.constraints || []).length > 0 && (
-                  <div className="aii-problem__constraints">
-                    {(codingProblem.constraints || []).map((c, i) => (
-                      <span key={i}>{c}</span>
-                    ))}
-                  </div>
-                )}
-              </div>
-            )}
-            <div className="aii-code-toolbar">
-              <div className="aii-lang-selector">
-                {LANGUAGE_OPTIONS.map(opt => (
-                  <button
-                    key={opt.key}
-                    className={`aii-lang-btn ${language === opt.key ? 'aii-lang-btn--active' : ''}`}
-                    onClick={() => setLanguage(opt.key)}
-                  >
-                    {opt.label}
-                  </button>
-                ))}
-              </div>
-              <span className="aii-code-hint">
-                Code written here is shared with Obi for evaluation
-              </span>
-              <button
-                className="aii-run-btn"
-                onClick={runCode}
-                disabled={isRunning || !code.trim()}
-                title="Run code and see output"
-              >
-                {isRunning ? <><Loader2 size="14" className="aii-spin" /> Running…</> : <><Play size="14" /> Run Code</>}
-              </button>
-              {(codingProblem?.visible_test_cases || []).length > 0 && (
-                <button
-                  className="aii-test-btn"
-                  onClick={runTests}
-                  disabled={isRunning || isTesting || !code.trim()}
-                  title="Run your code against the visible test cases"
-                >
-                  {isTesting ? <><Loader2 size="14" className="aii-spin" /> Testing…</> : <><CheckCircle2 size="14" /> Run Tests</>}
-                </button>
-              )}
-              <button
-                className="aii-submit-code-btn"
-                onClick={() => {
-                  const submission = `Here is my code solution in ${language}:\n\`\`\`${language}\n${code}\n\`\`\`\nExecution Output:\n${runOutput || '(Code executed)'}`;
-                  sendAnswer(submission);
-                  setActiveTab('chat');
-                }}
-                disabled={isThinking || !code.trim()}
-                title="Send this solution to Obi for evaluation"
-              >
-                <Send size="14" /> Submit to Obi
-              </button>
-            </div>
-            <div className="aii-code-editor-wrap">
-              <CodeEditor
-                value={code}
-                onChange={setCode}
-                language={language}
-                questionTitle="Live Code"
-              />
-            </div>
-            <div className="aii-run-panel">
-              <div className="aii-run-panel__row">
-                <input
-                  className="aii-stdin-input"
-                  placeholder="Optional stdin — e.g. 1 2 3"
-                  value={stdin}
-                  onChange={(e) => setStdin(e.target.value)}
-                  disabled={isRunning}
-                />
-                {runStatus && (
-                  <span
-                    className={`aii-run-status aii-run-status--${runStatus.toLowerCase().includes('successfully') ? 'good' : 'bad'}`}
-                  >
-                    {runStatus.toLowerCase().includes('successfully')
-                      ? <><CheckCircle2 size="13" /> {runStatus}</>
-                      : <><AlertTriangle size="13" /> {runStatus}</>}
-                  </span>
-                )}
-              </div>
-              {runOutput && (
-                <pre className="aii-run-output">{runOutput}</pre>
-              )}
-            </div>
-            {testResults && (
-              <div className="aii-test-results">
-                {testResults.error ? (
-                  <div className="aii-test-results__error">
-                    <AlertTriangle size="14" /> {testResults.error}
-                  </div>
-                ) : (
-                  <>
-                    <div className={`aii-test-summary ${testResults.passed === testResults.total ? 'aii-test-summary--good' : 'aii-test-summary--bad'}`}>
-                      <CheckCircle2 size="14" />
-                      {testResults.passed}/{testResults.total} tests passed
-                      {testResults.compile_error ? ' — compilation failed' : ` — ${testResults.score}%`}
-                    </div>
-                    <div className="aii-test-cases">
-                      {(testResults.results || []).map((r, i) => (
-                        <div key={i} className={`aii-test-case aii-test-case--${r.status === 'passed' ? 'pass' : 'fail'}`}>
-                          <span className="aii-test-case__tag">{r.status === 'passed' ? 'PASS' : (r.status || 'FAIL').toUpperCase()}</span>
-                          <div className="aii-test-case__body">
-                            <code>in:  {r.input || '(empty)'}</code>
-                            <code>exp: {r.expected || '(empty)'}</code>
-                            <code>got: {r.output || '(no output)'}</code>
-                            {r.time_ms != null && <code className="aii-test-case__time">{r.time_ms}ms</code>}
-                          </div>
-                        </div>
-                      ))}
-                    </div>
-                  </>
-                )}
-              </div>
-            )}
-          </div>
+          <CodingPanel
+            problem={codingProblem}
+            language={language}
+            onLanguageChange={setLanguage}
+            code={code}
+            onCodeChange={setCode}
+            stdin={stdin}
+            onStdinChange={setStdin}
+            runStatus={runStatus}
+            runOutput={runOutput}
+            isRunning={isRunning}
+            isTesting={isTesting}
+            isThinking={isThinking}
+            testResults={testResults}
+            onRun={runCode}
+            onTest={runTests}
+            onSend={() => {
+              const submission = `Here is my code solution in ${language}:\n\`\`\`${language}\n${code}\n\`\`\`\nExecution Output:\n${runOutput || '(Code executed)'}`;
+              sendAnswer(submission);
+              setActiveTab('chat');
+            }}
+            languageOptions={LANGUAGE_OPTIONS}
+          />
         )}
       </div>
 

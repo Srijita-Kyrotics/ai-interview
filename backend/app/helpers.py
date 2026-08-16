@@ -1,4 +1,4 @@
-"""Shared helpers used by both main.py and interview_ws.py."""
+"""Shared helper utilities for the backend."""
 
 from __future__ import annotations
 

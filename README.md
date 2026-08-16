@@ -132,7 +132,6 @@ AI-Interview-Coach-main/
 │   │   ├── db.py                      # PostgreSQL database layer
 │   │   ├── helpers.py                 # JWT, password hashing, utilities
 │   │   ├── resume_parser.py           # PDF/text resume parsing
-│   │   ├── interview_ws.py            # Legacy WebSocket interviewer
 │   │   ├── ai_interviewer/            # NEW: LangGraph AI interviewer package
 │   │   │   ├── __init__.py
 │   │   │   ├── state.py               # TypedDict interview state schema
@@ -157,13 +156,11 @@ AI-Interview-Coach-main/
 │       ├── api.js                      # HTTP client wrapper
 │       ├── constants.js
 │       ├── styles.css                  # Global styles (Tailwind + custom)
-│       ├── MathRenderer.jsx            # KaTeX math rendering
 │       ├── ErrorBoundary.jsx
 │       ├── hooks/
 │       │   └── useInterviewWebSocket.js
 │       ├── utils/
 │       │   ├── ToastContext.jsx
-│       │   ├── speak.js                # Web Speech API helpers
 │       │   ├── score.js
 │       │   ├── questionFormat.js
 │       │   ├── formatTime.js
@@ -175,9 +172,12 @@ AI-Interview-Coach-main/
 │       │   └── proctoringState.js
 │       └── components/
 │           ├── AIInterviewer.jsx       # NEW: LangGraph AI interviewer UI
+│           ├── aiInterviewer/
+│           │   ├── parts.jsx           # Reusable UI parts (bubbles, report, gauges)
+│           │   ├── StartCard.jsx       # Idle/start screen with resume upload
+│           │   └── CodingPanel.jsx     # Live coding problem + editor + judge UI
+│           ├── ObiAvatar.jsx           # Obi mascot avatar
 │           ├── CodeEditor.jsx          # CodeMirror 6 code editor
-│           ├── LiveInterview.jsx       # Legacy chat interviewer
-│           ├── ChatInterview.jsx
 │           ├── AuthPage.jsx
 │           ├── Home.jsx
 │           ├── ResumePage.jsx
@@ -189,7 +189,6 @@ AI-Interview-Coach-main/
 │           ├── Shell.jsx
 │           ├── Skeleton.jsx
 │           ├── TerminatedPage.jsx
-│           ├── VoiceAnswerControls.jsx
 │           ├── SessionDetailModal.jsx
 │           ├── SessionReplay.jsx
 │           ├── CompareModal.jsx
@@ -527,7 +526,8 @@ The Live Coding feature allows candidates to write code in real-time during the 
 
 ### Frontend Components
 
-- **`AIInterviewer.jsx`** — Main interview component with tab UI, CodeEditor integration, and code state management
+- **`AIInterviewer.jsx`** — Main AI interviewer component (voice WS, resume, proctoring, report)
+- **`aiInterviewer/parts.jsx`, `StartCard.jsx`, `CodingPanel.jsx`** — Extracted interview UI: reusable parts (bubbles, live status, score gauges, final report), start screen with resume upload, and live coding problem + editor + judge
 - **`CodeEditor.jsx`** — CodeMirror 6-based editor with dark theme, syntax highlighting, bracket matching, autocomplete, and fold gutters
 
 ### Backend Files
@@ -696,6 +696,6 @@ The included `nginx.conf` handles:
 - **Database** — Users, sessions, OTPs, CAPTCHAs, and proctoring logs are stored in PostgreSQL (or SQLite in dev). Restarting does not clear data.
 - **Aptitude Bank** — Run `python backend/scripts/build_aptitude_bank.py` to regenerate the aptitude question bank.
 - **CORS** — Default allows `localhost:5173`. Restrict before public deployment.
-- **Two Interview Systems** — The legacy `LiveInterview.jsx` (simple chat interviewer) coexists with the new `AIInterviewer.jsx` (LangGraph pipeline). The `/technical` and `/hr` routes currently use the new AI Interviewer.
+- **AI Interview UI** — `AIInterviewer.jsx` (voice WebSocket + LangGraph pipeline) drives the `/technical` and `/hr` rounds; its UI is split into `aiInterviewer/parts.jsx`, `StartCard.jsx`, and `CodingPanel.jsx`. The old `oiv-*`/legacy chat interviewer UI has been removed.
 - **WebSocket Protocol** — Voice interview uses binary frames for audio and JSON text frames for control messages. The `audio_end` message optionally includes `code` and `language` fields for live coding.
 - **Rate Limiting** — DB-backed rate limiting on code execution, AI requests, OTP sends, and admin operations. Works across multiple Uvicorn workers.

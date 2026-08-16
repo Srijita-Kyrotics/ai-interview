@@ -21,7 +21,6 @@ from app.db import (
     migrate_accounts_json,
 )
 from app.helpers import create_token, decode_token, default_scores
-from app.interview_ws import router as interview_router
 from app.session_routes import router as session_router
 from app.session_routes import score_open_round
 
@@ -87,7 +86,6 @@ async def lifespan(app):
 
 
 app = FastAPI(title="AI Mock Recruitment Platform", lifespan=lifespan)
-app.include_router(interview_router)
 app.include_router(ai_interviewer_router)
 app.include_router(auth_router)
 app.include_router(session_router)
