@@ -452,13 +452,6 @@ export default function AIInterviewer({ sessionId, token, role, company, resume,
     if (options.phase) {
       setPhase(options.phase);
     }
-    addMessage({
-      role: 'interviewer',
-      text: message,
-      ts: Date.now() / 1000,
-      isFollowUp: options.isFollowUp,
-      isTransition: options.isTransition,
-    });
 
     clearAudioFallbackTimer();
     fallbackTtsTimeoutRef.current = setTimeout(() => {
@@ -468,6 +461,12 @@ export default function AIInterviewer({ sessionId, token, role, company, resume,
       }
     }, 4000);
   }, [clearAudioFallbackTimer, speakText, stopAudioLevelMonitor]);
+
+  // Role is derived from the uploaded (or pre-loaded) resume via ROLE_MAPPINGS,
+  // so uploading a different resume changes the target role automatically.
+  const effectiveRole = useMemo(() => {
+    return inferRoleFromResume(uploadedResume || resume) || role || DEFAULT_ROLE;
+  }, [uploadedResume, resume, role]);
 
   const openingIntro = `Hi, I'm Obi, your AI interviewer. I've reviewed your resume and I'm tailoring the conversation to your background in ${effectiveRole || DEFAULT_ROLE}. We’ll start with your experience, dig into your projects, and then test your technical depth.`;
 
@@ -758,12 +757,6 @@ export default function AIInterviewer({ sessionId, token, role, company, resume,
     setResumeUploadError('');
     if (resumeFileInputRef.current) resumeFileInputRef.current.value = '';
   }, []);
-
-  // Role is derived from the uploaded (or pre-loaded) resume via ROLE_MAPPINGS,
-  // so uploading a different resume changes the target role automatically.
-  const effectiveRole = useMemo(() => {
-    return inferRoleFromResume(uploadedResume || resume) || role || DEFAULT_ROLE;
-  }, [uploadedResume, resume, role]);
 
   // ── Start Interview ──────────────────────────────────────────────────
   const startInterview = useCallback(async (resumeExisting = true) => {
@@ -1350,8 +1343,28 @@ export default function AIInterviewer({ sessionId, token, role, company, resume,
               </div>
             </div>
 
-            {/* Hidden Video Feed for Proctoring */}
-            <video ref={videoRef} autoPlay muted playsInline aria-hidden="true" style={{ display: 'none' }} />
+            {/* Camera preview — also used by proctoring face/object detection */}
+            <video
+              ref={videoRef}
+              autoPlay
+              muted
+              playsInline
+              aria-hidden="true"
+              style={{
+                position: 'fixed',
+                top: 16,
+                right: 16,
+                width: 160,
+                height: 120,
+                borderRadius: 12,
+                border: '2px solid rgba(129,140,248,0.4)',
+                objectFit: 'cover',
+                zIndex: 50,
+                transform: 'scaleX(-1)',
+                opacity: 0.85,
+                boxShadow: '0 4px 12px rgba(0,0,0,0.3)',
+              }}
+            />
 
             <div className="aii-text-row">
               <input

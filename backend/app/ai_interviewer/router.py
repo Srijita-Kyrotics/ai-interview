@@ -107,6 +107,52 @@ def _public_coding_problem(problem: dict | None) -> dict | None:
     if not problem:
         return None
     public = dict(problem)
+
+
+# ── Role Inference from Resume ─────────────────────────────────────────────
+
+# Skill → role keyword mapping (mirrors ROLE_MAPPINGS on the frontend).
+_ROLE_KEYWORDS: dict[str, list[str]] = {
+    "Data Analyst": ["sql", "tableau", "power bi", "excel", "data analysis", "statistics", "pandas", "data visualization"],
+    "Frontend Developer": ["react", "javascript", "typescript", "html", "css", "vue", "angular", "next.js", "tailwind"],
+    "Backend Developer": ["python", "java", "node.js", "django", "fastapi", "spring", "postgresql", "mysql", "redis", "rest api"],
+    "Full Stack Developer": ["react", "node.js", "python", "javascript", "typescript", "html", "css", "django", "express"],
+    "DevOps Engineer": ["aws", "docker", "kubernetes", "terraform", "ci/cd", "jenkins", "linux", "ansible", "gcp"],
+    "ML Engineer": ["machine learning", "deep learning", "tensorflow", "pytorch", "nlp", "computer vision", "scikit-learn", "ml"],
+    "Mobile Developer": ["swift", "kotlin", "react native", "flutter", "ios", "android", "dart"],
+    "Cloud Engineer": ["aws", "azure", "gcp", "cloud", "terraform", "serverless", "lambda"],
+    "QA Engineer": ["testing", "selenium", "jest", "cypress", "qa", "automation testing", "test case"],
+    "Product Manager": ["product management", "roadmap", "stakeholder", "user stories", "agile", "scrum", "jira"],
+    "Security Engineer": ["security", "cybersecurity", "penetration testing", "owasp", "vulnerability", "firewall"],
+}
+
+
+def _infer_role_from_resume(resume_parsed: dict | None) -> str | None:
+    """Infer the target role from resume skills and experience entries."""
+    if not resume_parsed:
+        return None
+
+    # 1. Try skills-based matching (most reliable).
+    raw_skills = resume_parsed.get("skills", [])
+    if raw_skills:
+        user_skills = [str(s).lower() for s in raw_skills]
+        best_role, best_score = None, 0
+        for role_name, keywords in _ROLE_KEYWORDS.items():
+            matched = sum(1 for kw in keywords if any(kw in s for s in user_skills))
+            if matched > best_score:
+                best_score = matched
+                best_role = role_name
+        if best_role:
+            return best_role
+
+    # 2. Fall back to most recent experience entry's role title.
+    entries = resume_parsed.get("experience_entries", [])
+    if entries:
+        first_role = entries[0].get("role") or entries[0].get("title")
+        if first_role:
+            return str(first_role).strip()
+
+    return None
     public.pop("hidden_test_cases", None)
     return public
 
@@ -665,7 +711,7 @@ async def ai_interview_websocket(
         initial_state = make_initial_state(
             session_id=new_interview_id,
             candidate_email=payload.get("email", ""),
-            role=session_data.get("role", "Software Engineer"),
+            role=session_data.get("role") or _infer_role_from_resume(resume_parsed) or "Software Engineer",
             company=session_data.get("selectedCompany", "the company"),
             resume_raw_text=resume_raw,
             resume_parsed=resume_parsed,
@@ -1342,14 +1388,6 @@ async def voice_interview_websocket(
                     result = await runner.process_answer(transcript, code_snapshot=code_snapshot)
                     response_text = result.get("text", "")
 
-                    await websocket.send_json({
-                        "type": "ai_response_text",
-                        "text": response_text,
-                        "is_follow_up": result.get("is_follow_up", False),
-                    })
-
-                    await _stream_tts(pipeline, websocket, response_text)
-
                     if result.get("should_end"):
                         await _save_interview_result(session_id, interview_session_id, runner)
                         await websocket.send_json({
@@ -1357,6 +1395,23 @@ async def voice_interview_websocket(
                             "report": result.get("final_report", {}),
                         })
                         break
+
+                    # Send next question with full stage/progress metadata
+                    state = runner.get_state()
+                    current_q = state.get("current_question", {})
+                    await websocket.send_json({
+                        "type": "question",
+                        "text": response_text,
+                        "question_id": current_q.get("id", ""),
+                        "stage": state.get("current_stage", {}).get("name", ""),
+                        "is_follow_up": result.get("is_follow_up", False),
+                        "main_questions_asked": state.get("main_questions_asked", 0),
+                        "max_questions": state.get("max_questions", 12),
+                        "stage_index": state.get("current_stage_index", 0),
+                        "total_stages": len(state.get("interview_plan", {}).get("stages", [])) or 1,
+                    })
+
+                    await _stream_tts(pipeline, websocket, response_text)
                     continue
 
                 if msg_type == "audio_end":
@@ -1403,15 +1458,6 @@ async def voice_interview_websocket(
                     result = await runner.process_answer(transcript, code_snapshot=code_snapshot)
                     response_text = result.get("text", "")
 
-                    await websocket.send_json({
-                        "type": "ai_response_text",
-                        "text": response_text,
-                        "is_follow_up": result.get("is_follow_up", False),
-                    })
-
-                    # TTS (streamed so audio starts before the full text is generated)
-                    await _stream_tts(pipeline, websocket, response_text)
-
                     if result.get("should_end"):
                         await _save_interview_result(session_id, interview_session_id, runner)
                         await websocket.send_json({
@@ -1419,6 +1465,24 @@ async def voice_interview_websocket(
                             "report": result.get("final_report", {}),
                         })
                         break
+
+                    # Send next question with full stage/progress metadata
+                    state = runner.get_state()
+                    current_q = state.get("current_question", {})
+                    await websocket.send_json({
+                        "type": "question",
+                        "text": response_text,
+                        "question_id": current_q.get("id", ""),
+                        "stage": state.get("current_stage", {}).get("name", ""),
+                        "is_follow_up": result.get("is_follow_up", False),
+                        "main_questions_asked": state.get("main_questions_asked", 0),
+                        "max_questions": state.get("max_questions", 12),
+                        "stage_index": state.get("current_stage_index", 0),
+                        "total_stages": len(state.get("interview_plan", {}).get("stages", [])) or 1,
+                    })
+
+                    # TTS (streamed so audio starts before the full text is generated)
+                    await _stream_tts(pipeline, websocket, response_text)
 
                 elif msg_type == "end_voice":
                     result = await runner._finalize()

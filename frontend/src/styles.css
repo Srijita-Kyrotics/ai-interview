@@ -7481,7 +7481,27 @@ label {
     radial-gradient(ellipse 42% 36% at 50% 26%, rgba(56, 189, 248, 0.1), transparent 72%);
 }
 
+/* Obi scales with the available stage height instead of overflowing it.
+   The scene is a flex child of the avatar (flex column) and grows/shrinks
+   to fill the space left by the waveform + label, so the whole character
+   always fits inside the stage. */
+.aii-room__stage .obi-avatar {
+  flex: 1 1 auto;
+  min-height: 0;
+  max-height: 100%;
+  width: 100%;
+  justify-content: center;
+}
+
+.aii-room__stage .obi-avatar__scene {
+  flex: 1 1 0;
+  min-height: 0;
+  width: auto;
+  max-width: 100%;
+}
+
 .aii-room__stage .aii-subtitle-card {
+  flex-shrink: 0;
   min-height: 0;
   max-width: 640px;
   width: 100%;
@@ -7497,6 +7517,7 @@ label {
 }
 
 .aii-room__stage .aii-subtitle-card__text {
+  flex-shrink: 0;
   min-height: 0;
   font-size: 1.05rem;
 }
@@ -7506,7 +7527,7 @@ label {
   flex-shrink: 0;
   display: flex;
   flex-direction: column;
-  height: min(38vh, 320px);
+  height: min(34vh, 280px);
   background: rgba(10, 9, 28, 0.45);
   border-top: 1px solid rgba(255, 255, 255, 0.07);
 }
@@ -7525,6 +7546,37 @@ label {
   padding: 0.9rem 1.25rem;
   background: rgba(0, 0, 0, 0.18);
   flex-shrink: 0;
+}
+
+/* When vertical space is tight the stage avatar would be squeezed by the
+   decorative waveform + label, so hide them and let Obi grow into the
+   freed space. Live state feedback still exists in the header pill and the
+   voice controls. */
+@media (max-height: 960px) {
+  .aii-room__stage .obi-avatar__waveform,
+  .aii-room__stage .obi-avatar__label {
+    display: none;
+  }
+
+  .aii-room__stage .obi-avatar__scene {
+    flex: 1 1 0;
+  }
+}
+
+@media (max-height: 720px) {
+  .aii-room__panel {
+    height: min(28vh, 220px);
+  }
+
+  .aii-room__controls {
+    padding: 0.6rem 1rem;
+  }
+}
+
+@media (max-width: 640px) {
+  .aii-room__panel {
+    height: min(28vh, 210px);
+  }
 }
 
 

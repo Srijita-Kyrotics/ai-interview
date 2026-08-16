@@ -35,7 +35,7 @@ function AiInterviewRoute({ state, setState, user, proctoring, setProctoring }) 
         sessionId={state.sessionId}
         token={user.token}
         resume={state.resume}
-        role="Software Engineer"
+        role={undefined}
         company={state.company || 'the company'}
         proctoring={proctoring}
         setProctoring={setProctoring}
