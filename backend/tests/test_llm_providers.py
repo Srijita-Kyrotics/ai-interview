@@ -98,7 +98,7 @@ def test_full_interview_offline_with_mock(monkeypatch):
     runner = InterviewGraphRunner(session_id="mock-test-session", initial_state=state)
 
     opening = asyncio_run(runner.initialize())
-    assert opening and "Obi" in opening
+    assert opening and "Jack" in opening
     assert "Alex" not in opening
     assert "no previous response" not in opening.lower()
 

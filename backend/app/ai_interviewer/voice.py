@@ -220,11 +220,11 @@ class ElevenLabsTTS:
     ElevenLabs Turbo v2.5 text-to-speech.
 
     Uses the "eleven_turbo_v2_5" model for lowest latency.
-    Voice: "Obi" persona mapped to Rachel/Adam (neutral, professional).
+    Voice: "Jack" persona mapped to Adam (deep, professional male voice).
     """
 
     BASE_URL = "https://api.elevenlabs.io/v1"
-    DEFAULT_VOICE_ID = "21m00Tcm4TlvDq8ikWAM"  # Rachel - neutral, professional
+    DEFAULT_VOICE_ID = "pNInz6obpgDQGcFmaJgB"  # Adam - professional male voice
 
     def __init__(self, api_key: str, voice_id: str = ""):
         self.api_key = api_key
@@ -316,10 +316,10 @@ class ElevenLabsTTS:
 class OpenAITTS:
     """
     OpenAI TTS API as fallback.
-    Uses "alloy" voice (neutral) with tts-1 model.
+    Uses "echo" (male voice) with tts-1 model.
     """
 
-    def __init__(self, api_key: str, voice: str = "alloy"):
+    def __init__(self, api_key: str, voice: str = "echo"):
         self.api_key = api_key
         self.voice = getattr(settings, "openai_tts_voice", "") or voice
 

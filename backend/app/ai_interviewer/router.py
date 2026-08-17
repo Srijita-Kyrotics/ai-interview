@@ -1066,7 +1066,7 @@ def _is_placeholder_name(name: str) -> bool:
 
 
 def _resolve_candidate_name(state: dict) -> str:
-    """Best-effort real name for the greeting: resume name → account name → email."""
+    """Best-effort real first name for the greeting: resume name → account name → email."""
     parsed = state.get("resume_parsed") or {}
     name = (parsed.get("name") or "").strip()
     if _is_placeholder_name(name):
@@ -1076,16 +1076,18 @@ def _resolve_candidate_name(state: dict) -> str:
     if not name:
         email = state.get("candidate_email") or ""
         name = email.split("@")[0] if email else ""
-    return name or "there"
+    full = name or "there"
+    # Extract first name only (e.g. "Srijita" from "Srijita Ghorai")
+    return full.strip().split()[0]
 
 
 def _build_instant_greeting(state: dict) -> str:
-    """Build a greeting that needs no LLM call so Obi can speak instantly."""
-    name = _resolve_candidate_name(state)
+    """Build a greeting that needs no LLM call so Jack can speak instantly."""
+    first_name = _resolve_candidate_name(state)
     role = state.get("role") or "this role"
     company = state.get("company") or "the company"
     return (
-        f"Hi {name}, I'm Obi, your AI interviewer. "
+        f"Hi {first_name}, I'm Jack, your interviewer. "
         f"I've reviewed your resume, and today we'll discuss your experience, "
         f"projects, and technical skills for the {role} position at {company}. "
         f"I'm preparing your questions now, so give me just a moment."

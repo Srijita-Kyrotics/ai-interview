@@ -3,16 +3,16 @@ import React, { useId } from 'react';
 const WAVE_BARS = 26;
 
 const STATE_LABELS = {
-  connecting: 'Connecting to Obi…',
-  idle: 'Obi is ready',
+  connecting: 'Connecting to Jack…',
+  idle: 'Jack is ready',
   listening: 'Listening…',
   thinking: 'Thinking…',
-  speaking: 'Obi is speaking',
+  speaking: 'Jack is speaking',
   error: 'Reconnecting…',
 };
 
 /**
- * ObiAvatar — the animated AI interviewer character.
+ * JackAvatar — the animated interviewer character.
  *
  * A pure-SVG humanoid robot with expressive glowing eyes, a moving mouth,
  * antenna, and small arms. It is fully driven by the interview pipeline:
@@ -28,7 +28,7 @@ export default function ObiAvatar({ state = 'idle', lipLevel = 0, audioLevel = 0
   const dancing = state === 'speaking' && audioLevel <= 0.03;
   const label = (state === 'connecting' || state === 'error' || state === 'idle') && statusText
     ? statusText
-    : STATE_LABELS[state] || 'Obi is ready';
+    : STATE_LABELS[state] || 'Jack is ready';
 
   return (
     <div className={`obi-avatar${compact ? ' obi-avatar--compact' : ''}`} data-state={state}>
@@ -38,7 +38,7 @@ export default function ObiAvatar({ state = 'idle', lipLevel = 0, audioLevel = 0
           className="obi-avatar__svg"
           viewBox="0 0 220 250"
           role="img"
-          aria-label="Obi, your AI technical interviewer"
+          aria-label="Jack, your technical interviewer"
         >
           <defs>
             <linearGradient id={`${uid}body`} x1="0" y1="0" x2="0" y2="1">

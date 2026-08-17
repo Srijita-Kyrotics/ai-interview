@@ -1,9 +1,11 @@
 import React from 'react';
 import { ArrowRight, CheckCircle2, Clock, ListChecks, Loader2, Mic, Target, XCircle } from 'lucide-react';
+import { ROLE_MAPPINGS } from '../../constants';
 
 // Idle / start screen shown before the voice interview begins.
 const StartCard = ({
   effectiveRole,
+  onRoleChange,
   estimatedMinutes,
   highlights,
   resume,
@@ -20,18 +22,20 @@ const StartCard = ({
   onClearResumeFile,
   onBegin,
 }) => {
+  const roles = Object.keys(ROLE_MAPPINGS);
+
   return (
     <div className="aii-start-card">
       <div className="aii-start-card__brand">
         <div className="aii-start-avatar">
-          <span>O</span>
+          <span>J</span>
           <i />
         </div>
-        <span className="aii-start-card__tag">Obi · AI Interviewer</span>
+        <span className="aii-start-card__tag">Jack · Technical Interviewer</span>
       </div>
       <h2 className="aii-start-card__title">Technical Interview</h2>
       <p className="aii-start-card__sub">
-        Obi will interview you like a senior technical reviewer — using your
+        Jack will interview you like a senior technical reviewer — using your
         resume to ask focused questions, then probing deeper based on your
         answers and your code.
       </p>
@@ -46,11 +50,19 @@ const StartCard = ({
       </div>
 
       <div className="aii-start-card__details">
-        <div className="aii-detail-item">
+        <div className="aii-detail-item aii-detail-item--role">
           <span className="aii-detail-item__icon"><Target size="18" /></span>
-          <div>
-            <strong>Role</strong>
-            <p>{effectiveRole}</p>
+          <div style={{ width: '100%', textAlign: 'left' }}>
+            <strong>Target Role</strong>
+            <select
+              className="aii-role-select"
+              value={effectiveRole}
+              onChange={(e) => onRoleChange && onRoleChange(e.target.value)}
+            >
+              {roles.map((r) => (
+                <option key={r} value={r}>{r}</option>
+              ))}
+            </select>
           </div>
         </div>
         <div className="aii-detail-item">
@@ -72,7 +84,7 @@ const StartCard = ({
       <div className="aii-start-card__tips">
         <div className="aii-start-card__tips-title">Before you begin</div>
         <ul>
-          <li>Give concrete examples — Obi will follow up on the details that matter most.</li>
+          <li>Give concrete examples — Jack will follow up on the details that matter most.</li>
           <li>Speak clearly, keep your camera optional, and allow mic access when prompted.</li>
         </ul>
       </div>
@@ -93,14 +105,14 @@ const StartCard = ({
                   <span>{item.company || item.organization}</span>
                 </div>
               ))}
-              <p className="aii-resume-preview__note">Obi will use your resume to personalize questions.</p>
+              <p className="aii-resume-preview__note">Jack will use your resume to personalize questions.</p>
             </div>
           )}
         </div>
       )}
 
       <div className="aii-start-card__resume">
-        <label>Upload your resume (PDF or TXT) so Obi can read it before starting</label>
+        <label>Upload your resume (PDF or TXT) so Jack can read it before starting</label>
         <div className={`aii-file-upload${resumeFile ? ' aii-file-upload--done' : ''}`}>
           <input
             ref={resumeFileInputRef}
@@ -114,7 +126,7 @@ const StartCard = ({
             {uploadingResume ? (
               <><Loader2 className="aii-spin" size="18" /> Parsing resume…</>
             ) : resumeFile ? (
-              <><CheckCircle2 size="18" /> {resumeFile.name} — Obi will use it for your interview.</>
+              <><CheckCircle2 size="18" /> {resumeFile.name} — Jack will use it for your interview.</>
             ) : (
               <>Drop your PDF here or <u>browse</u></>
             )}
@@ -134,7 +146,7 @@ const StartCard = ({
           id="aii-resume-text"
           value={resumeText}
           onChange={onResumeTextChange}
-          placeholder="Paste your resume text here so Obi can personalize questions to your background…"
+          placeholder="Paste your resume text here so Jack can personalize questions to your background…"
           rows={5}
         />
       </div>

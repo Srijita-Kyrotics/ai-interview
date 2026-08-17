@@ -59,7 +59,7 @@ function ReportPage({ state, proctoring }) {
         y += 10
         doc.setFontSize(10)
         for (const entry of data.transcript) {
-          const role = entry.role === 'interviewer' ? 'Obi' : 'You'
+          const role = entry.role === 'interviewer' ? 'Jack' : 'You'
           const lines = doc.splitTextToSize(`${role}: ${entry.text}`, 170)
           for (const line of lines) {
             if (y > 270) { doc.addPage(); y = 20 }
@@ -97,7 +97,7 @@ function ReportPage({ state, proctoring }) {
       text += `\n${round.toUpperCase()} Interview\n${'-'.repeat(30)}\n`
       if (data.transcript?.length) {
         for (const entry of data.transcript) {
-          const role = entry.role === 'interviewer' ? 'Obi' : 'You'
+          const role = entry.role === 'interviewer' ? 'Jack' : 'You'
           text += `\n[${role}]\n${entry.text}\n`
         }
       }
@@ -229,7 +229,7 @@ function ReportPage({ state, proctoring }) {
                     <div className="transcript-chat">
                       {data.transcript.map((entry, i) => (
                         <div key={i} className={`transcript-entry ${entry.role}`}>
-                          <strong>{entry.role === 'interviewer' ? '🤖 Obi' : '👤 You'}</strong>
+                          <strong>{entry.role === 'interviewer' ? '🤖 Jack' : '👤 You'}</strong>
                           <p>{entry.text}</p>
                         </div>
                       ))}

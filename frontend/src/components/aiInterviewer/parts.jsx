@@ -7,8 +7,10 @@ import {
   Code2,
   ListChecks,
   MessageSquare,
+  ShieldCheck,
   Target,
   TrendingUp,
+  User,
   Zap,
 } from 'lucide-react';
 
@@ -221,6 +223,62 @@ export const LiveStatusPill = ({ isRecording, isSpeaking, isThinking, isProcessi
     <div className={`aii-status-pill aii-status-pill--${tone}`} title={label}>
       <span className="aii-status-pill__dot" />
       {label}
+    </div>
+  );
+};
+
+// ── Candidate Webcam Card ───────────────────────────────────────────────────
+export const CandidateWebcamCard = ({ videoRef, userStream, proctoringActive = true }) => {
+  const localRef = useRef(null);
+
+  const handleRef = (node) => {
+    localRef.current = node;
+    if (videoRef) {
+      if (typeof videoRef === 'function') videoRef(node);
+      else videoRef.current = node;
+    }
+  };
+
+  useEffect(() => {
+    const video = localRef.current;
+    if (video && userStream) {
+      if (video.srcObject !== userStream) {
+        video.srcObject = userStream;
+      }
+      video.play?.().catch(() => {});
+    }
+  }, [userStream]);
+
+  return (
+    <div className="aii-webcam-card">
+      <div className="aii-webcam-card__header">
+        <div className="aii-webcam-card__status">
+          <span className={`aii-webcam-dot ${userStream ? 'aii-webcam-dot--live' : 'aii-webcam-dot--standby'}`} />
+          <span>{userStream ? 'LIVE' : 'STANDBY'}</span>
+        </div>
+        {proctoringActive && (
+          <div className="aii-webcam-card__proctor-badge" title="AI Proctoring Active">
+            <ShieldCheck size="11" /> Proctoring
+          </div>
+        )}
+      </div>
+
+      <div className="aii-webcam-card__view">
+        <video
+          ref={handleRef}
+          autoPlay
+          muted
+          playsInline
+          aria-label="Candidate webcam preview"
+          className={`aii-webcam-card__video ${!userStream ? 'aii-webcam-card__video--hidden' : ''}`}
+        />
+        {!userStream && (
+          <div className="aii-webcam-card__fallback">
+            <User size="22" className="aii-webcam-card__fallback-icon" />
+            <span>Camera Standby</span>
+          </div>
+        )}
+      </div>
     </div>
   );
 };

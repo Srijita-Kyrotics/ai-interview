@@ -67,7 +67,7 @@ const CodingPanel = ({
           ))}
         </div>
         <span className="aii-code-hint">
-          Code written here is shared with Obi for evaluation
+          Code written here is shared with Jack for evaluation
         </span>
         <button
           className="aii-run-btn"
@@ -91,9 +91,9 @@ const CodingPanel = ({
           className="aii-submit-code-btn"
           onClick={onSend}
           disabled={isThinking || !code.trim()}
-          title="Send this solution to Obi for evaluation"
+          title="Send this solution to Jack for evaluation"
         >
-          <Send size="14" /> Submit to Obi
+          <Send size="14" /> Submit to Jack
         </button>
       </div>
       <div className="aii-code-editor-wrap">

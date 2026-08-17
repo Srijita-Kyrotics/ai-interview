@@ -25,7 +25,7 @@ function PageLoader() {
   )
 }
 
-// Full-screen interview room: rendered outside the app Shell so Obi owns the
+// Full-screen interview room: rendered outside the app Shell so Sarah owns the
 // entire viewport (no sidebar / topbar chrome).
 function AiInterviewRoute({ state, setState, user, proctoring, setProctoring }) {
   const navigate = useNavigate()
@@ -237,17 +237,44 @@ export default function App() {
     }
   }, [state.sessionId, navigate])
 
-  if (!user) return <AuthPage onAuth={setUser} />
+  // Auto guest login for standalone /interview and /technical direct link sharing
+  useEffect(() => {
+    if (!user && (window.location.pathname === '/interview' || window.location.pathname === '/technical')) {
+      api.post('/auth/guest').then((res) => {
+        const guestUser = {
+          name: res.name || 'Candidate',
+          email: res.email || 'guest@candidate.com',
+          role: 'candidate',
+          token: res.access_token || res.token || '',
+        }
+        localStorage.setItem('mockRecruitmentUser', JSON.stringify(guestUser))
+        setUser(guestUser)
+      }).catch(() => {
+        const fallbackGuest = {
+          name: 'Candidate',
+          email: 'guest@candidate.com',
+          role: 'candidate',
+          token: 'guest-demo-token',
+        }
+        localStorage.setItem('mockRecruitmentUser', JSON.stringify(fallbackGuest))
+        setUser(fallbackGuest)
+      })
+    }
+  }, [user])
+
+  if (!user && (window.location.pathname !== '/interview' && window.location.pathname !== '/technical')) {
+    return <AuthPage onAuth={setUser} />
+  }
 
   if (state.stage === 'terminated' || window.location.pathname === '/terminated') {
     return <TerminatedPage />
   }
 
-  // Dedicated full-screen interview room — no app chrome around it.
-  if (location.pathname === '/technical') {
+  // Dedicated full-screen interview room — standalone direct route (/interview or /technical)
+  if (location.pathname === '/technical' || location.pathname === '/interview') {
     return (
       <ToastProvider>
-        <AiInterviewRoute state={state} setState={setState} user={user} proctoring={proctoring} setProctoring={setProctoring} />
+        <AiInterviewRoute state={state} setState={setState} user={user || { name: 'Candidate', token: '' }} proctoring={proctoring} setProctoring={setProctoring} />
       </ToastProvider>
     )
   }

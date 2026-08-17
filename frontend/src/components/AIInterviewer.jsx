@@ -8,6 +8,7 @@ import {
   Loader2,
   MessageSquare,
   Mic,
+  RotateCcw,
   Send,
   Volume2,
   XCircle,
@@ -18,6 +19,7 @@ import ObiAvatar from './ObiAvatar';
 import { clearStoredUser } from '../api';
 import { ROLE_MAPPINGS } from '../constants';
 import {
+  CandidateWebcamCard,
   FinalReportView,
   LiveStatusPill,
   MessageBubble,
@@ -50,18 +52,25 @@ const LANGUAGE_OPTIONS = [
   { key: 'cpp', label: 'C++' },
 ];
 
-// Infer the target role from resume skills so a different resume automatically
-// targets a different role. Mirrors the scoring used on the company page.
+// Infer the target role from resume skills, experience, summary, and title.
 function inferRoleFromResume(resume) {
-  const skills = (resume && resume.skills) || [];
-  if (!skills.length) return null;
-  const userSkills = skills.map((s) => String(s).toLowerCase());
+  if (!resume) return null;
+  const fullText = [
+    resume.title,
+    ...(resume.skills || []),
+    resume.summary,
+    resume.text,
+    resume.raw_text,
+    ...(resume.parsed?.experience || []).map(e => `${e.position || e.title} ${e.company || e.organization}`),
+    ...(resume.experience_entries || []).map(e => `${e.role} ${e.company} ${e.key_claims?.join(' ')}`)
+  ].filter(Boolean).join(' ').toLowerCase();
+
+  if (!fullText.trim()) return null;
+
   let bestRole = null;
   let bestScore = 0;
   Object.entries(ROLE_MAPPINGS).forEach(([roleName, meta]) => {
-    const matched = meta.keywords.filter((kw) =>
-      userSkills.some((us) => us.includes(kw))
-    );
+    const matched = meta.keywords.filter((kw) => fullText.includes(kw.toLowerCase()));
     if (matched.length > bestScore) {
       bestScore = matched.length;
       bestRole = roleName;
@@ -115,7 +124,8 @@ export default function AIInterviewer({ sessionId, token, role, company, resume,
   // ── Code Editor State ──────────────────────────────────────────────
   const [code, setCode] = useState('');
   const [language, setLanguage] = useState('python');
-  const [activeTab, setActiveTab] = useState('chat');
+  const [selectedRole, setSelectedRole] = useState(null);
+  const [showCodeEditor, setShowCodeEditor] = useState(false);
   const [stdin, setStdin] = useState('');
   const [runOutput, setRunOutput] = useState('');
   const [runStatus, setRunStatus] = useState('');
@@ -207,20 +217,18 @@ export default function AIInterviewer({ sessionId, token, role, company, resume,
     voiceInterview: true
   });
 
-  // Feed the webcam stream into the hidden proctoring video element.
+  // Feed the webcam stream into the proctoring video element.
   useEffect(() => {
     const video = videoRef.current;
     if (video && userStream) {
-      video.srcObject = userStream;
+      if (video.srcObject !== userStream) {
+        video.srcObject = userStream;
+      }
       video.play?.().catch(() => {
-        // Muted inline playback is normally automatic; a failed play simply
-        // leaves camera-based detection on standby rather than blocking Obi.
+        // Muted inline playback is normally automatic
       });
     }
-    return () => {
-      if (video) video.srcObject = null;
-    };
-  }, [userStream]);
+  }, [userStream, phase]);
 
   // The webcam belongs only to the live interview. Stop it immediately once
   // Obi finishes, fails to start, or proctoring terminates the session.
@@ -389,15 +397,14 @@ export default function AIInterviewer({ sessionId, token, role, company, resume,
     audioAwaitingRef.current = false;
   }, []);
 
-  // ── Speech Synthesis Helper for Obi ─────────────────────────────────
+  // ── Speech Synthesis Helper for Jack (Male Voice) ─────────────────────
   const pickNaturalVoice = useCallback(() => {
     if (!('speechSynthesis' in window)) return null;
     const voices = window.speechSynthesis.getVoices();
     if (!voices.length) return null;
-    const natural = voices.find(v => /Google US English|Microsoft (Aria|Jenny|Guy|Ava) Natural/i.test(v.name));
-    if (natural) return natural;
-    const en = voices.find(v => /en[-_]US/i.test(v.lang) && /Samantha|Daniel|Karen/i.test(v.name));
-    if (en) return en;
+    // Prefer professional male voices (Guy, David, George, Mark, Male, Daniel, Christopher)
+    const maleVoice = voices.find(v => /Guy|David|George|Mark|Daniel|Male|Christopher/i.test(v.name));
+    if (maleVoice) return maleVoice;
     return voices.find(v => /en/i.test(v.lang)) || null;
   }, []);
 
@@ -411,7 +418,7 @@ export default function AIInterviewer({ sessionId, token, role, company, resume,
       if (voice) utterance.voice = voice;
       utterance.lang = 'en-US';
       utterance.rate = 0.95;
-      utterance.pitch = 1.05;
+      utterance.pitch = 0.95;
       setSubtitleText(cleanText);
       setIsSpeaking(true);
       startLipSync();
@@ -440,12 +447,24 @@ export default function AIInterviewer({ sessionId, token, role, company, resume,
     setMessages(prev => [...prev, { id: Date.now() + Math.random(), ...msg }]);
   };
 
+  const addCandidateMessage = useCallback((text) => {
+    if (!text || !text.trim()) return;
+    const cleanText = text.trim();
+    setMessages((prev) => {
+      const lastMsg = prev[prev.length - 1];
+      if (lastMsg && lastMsg.role === 'candidate' && lastMsg.text.trim() === cleanText) {
+        return prev; // Prevent duplicate message
+      }
+      return [...prev, { id: Date.now() + Math.random(), role: 'candidate', text: cleanText, ts: Date.now() / 1000 }];
+    });
+  }, []);
+
   const queueAiMessage = useCallback((message, options = {}) => {
     stopAudioLevelMonitor();
     setIsThinking(false);
     setIsSpeaking(false);
     setIsProcessing(false);
-    setStatusMessage(options.status || 'Obi is speaking...');
+    setStatusMessage(options.status || 'Jack is speaking...');
     setSubtitleText(message || '');
     audioAwaitingRef.current = true;
 
@@ -462,13 +481,19 @@ export default function AIInterviewer({ sessionId, token, role, company, resume,
     }, 4000);
   }, [clearAudioFallbackTimer, speakText, stopAudioLevelMonitor]);
 
-  // Role is derived from the uploaded (or pre-loaded) resume via ROLE_MAPPINGS,
-  // so uploading a different resume changes the target role automatically.
+  // Role is derived from user selection or resume inference via ROLE_MAPPINGS.
   const effectiveRole = useMemo(() => {
+    if (selectedRole) return selectedRole;
     return inferRoleFromResume(uploadedResume || resume) || role || DEFAULT_ROLE;
-  }, [uploadedResume, resume, role]);
+  }, [selectedRole, uploadedResume, resume, role]);
 
-  const openingIntro = `Hi, I'm Obi, your AI interviewer. I've reviewed your resume and I'm tailoring the conversation to your background in ${effectiveRole || DEFAULT_ROLE}. We’ll start with your experience, dig into your projects, and then test your technical depth.`;
+  const candidateFirstName = useMemo(() => {
+    const rawName = (uploadedResume?.name || resume?.name || '').trim();
+    if (!rawName) return 'there';
+    return rawName.split(' ')[0];
+  }, [uploadedResume, resume]);
+
+  const openingIntro = `Hi ${candidateFirstName}, I'm Jack, your interviewer. I've reviewed your resume and I'm tailoring the conversation to your background in ${effectiveRole || DEFAULT_ROLE}. We’ll start with your experience, dig into your projects, and then test your technical depth.`;
 
   // ── WebSocket Message Handler ────────────────────────────────────────
   const handleWsMessage = useCallback((msg) => {
@@ -498,7 +523,7 @@ export default function AIInterviewer({ sessionId, token, role, company, resume,
         setIsThinking(false);
         setIsProcessing(false);
         queueAiMessage(msg.opening_text || openingIntro, {
-          status: 'Obi is joining the interview…',
+          status: 'Jack is joining the interview…',
           phase: 'interviewing',
           isTransition: true,
         });
@@ -533,7 +558,7 @@ export default function AIInterviewer({ sessionId, token, role, company, resume,
           });
         }
         queueAiMessage(msg.text, {
-          status: 'Obi is asking the next question…',
+          status: 'Jack is asking the next question…',
           phase: 'interviewing',
           isFollowUp: msg.is_follow_up,
         });
@@ -542,7 +567,7 @@ export default function AIInterviewer({ sessionId, token, role, company, resume,
       case 'transition':
         setIsThinking(false);
         queueAiMessage(msg.text, {
-          status: 'Obi is updating the interview…',
+          status: 'Jack is updating the interview…',
           phase: 'interviewing',
           isTransition: true,
         });
@@ -551,7 +576,7 @@ export default function AIInterviewer({ sessionId, token, role, company, resume,
       case 'coding_problem': {
         if (msg.problem) {
           setCodingProblem(msg.problem);
-          setActiveTab('code');
+          setShowCodeEditor(true);
           // Pre-fill starter code for the current language if the editor is empty
           const lang = languageRef.current;
           setCode(prev => {
@@ -580,14 +605,16 @@ export default function AIInterviewer({ sessionId, token, role, company, resume,
       case 'stt_result':
         setIsProcessing(false);
         if (msg.is_final && msg.text) {
-          addMessage({ role: 'candidate', text: msg.text, ts: Date.now() / 1000 });
-          setStatusMessage('Obi is thinking about your answer…');
+          addCandidateMessage(msg.text);
+          setStatusMessage('Sarah is thinking about your answer…');
+        } else if (msg.stage === 'evaluation') {
+          setStatusMessage('Sarah is evaluating your response…');
         }
         break;
 
       case 'ai_response_text':
         queueAiMessage(msg.text, {
-          status: 'Obi is speaking…',
+          status: 'Sarah is speaking…',
           phase: 'interviewing',
         });
         break;
@@ -832,7 +859,7 @@ export default function AIInterviewer({ sessionId, token, role, company, resume,
       ws.onopen = () => {
         console.log('[AIInterviewer] WebSocket connected');
         setPhase('opening');
-        setStatusMessage('Connecting to Obi...');
+        setStatusMessage('Connecting to Jack...');
       };
 
       ws.onmessage = (event) => {
@@ -886,7 +913,7 @@ export default function AIInterviewer({ sessionId, token, role, company, resume,
   const sendAnswer = useCallback((text) => {
     if (!text || !wsRef.current || wsRef.current.readyState !== WebSocket.OPEN) return;
 
-    addMessage({ role: 'candidate', text, ts: Date.now() / 1000 });
+    addCandidateMessage(text);
     setIsThinking(true);
 
     wsRef.current.send(JSON.stringify({
@@ -895,7 +922,7 @@ export default function AIInterviewer({ sessionId, token, role, company, resume,
       code: code || undefined,
       language: code ? language : undefined,
     }));
-  }, [code, language]);
+  }, [code, language, addCandidateMessage]);
 
   // ── Run Code ───────────────────────────────────────────────────────
   const runCode = useCallback(async () => {
@@ -1116,6 +1143,7 @@ export default function AIInterviewer({ sessionId, token, role, company, resume,
       <div className="aii-container">
         <StartCard
           effectiveRole={effectiveRole}
+          onRoleChange={setSelectedRole}
           estimatedMinutes={ESTIMATED_MINUTES}
           highlights={interviewHighlights}
           resume={resume}
@@ -1181,9 +1209,9 @@ export default function AIInterviewer({ sessionId, token, role, company, resume,
         <div className="aii-header__interviewer">
           <ObiAvatar compact state={avatarState} lipLevel={lipLevel} audioLevel={audioLevel} />
           <div>
-            <div className="aii-header__name">Obi</div>
+            <div className="aii-header__name">Jack</div>
             <div className="aii-header__subrow">
-              <span className="aii-header__title">AI Technical Interviewer</span>
+              <span className="aii-header__title">Technical Interviewer</span>
               <LiveStatusPill
                 isRecording={isRecording}
                 isSpeaking={isSpeaking}
@@ -1209,6 +1237,10 @@ export default function AIInterviewer({ sessionId, token, role, company, resume,
           {currentStage && (
             <div className="aii-stage-badge">{currentStage}</div>
           )}
+
+          {/* Candidate webcam feed card — top right header placement */}
+          <CandidateWebcamCard videoRef={videoRef} userStream={userStream} proctoringActive={proctoringEnabled} />
+
           <button
             className="aii-end-btn"
             onClick={endInterview}
@@ -1233,43 +1265,49 @@ export default function AIInterviewer({ sessionId, token, role, company, resume,
       <div className="aii-room__stage">
         <ObiAvatar state={avatarState} lipLevel={lipLevel} audioLevel={audioLevel} statusText={stageStatusText} />
         <div className="aii-subtitle-card">
-          <div className="aii-subtitle-card__label"><Volume2 size="12" /> Live subtitle</div>
-          <p className="aii-subtitle-card__text">{subtitleText || 'Obi will speak here once the interview begins.'}</p>
+          <div className="aii-subtitle-card__header">
+            <div className="aii-subtitle-card__label"><Volume2 size="12" /> Live subtitle</div>
+            {subtitleText && phase === 'interviewing' && (
+              <button
+                className="aii-repeat-btn"
+                onClick={() => speakText(subtitleText)}
+                disabled={isSpeaking || isThinking}
+                title="Repeat Jack's question"
+              >
+                <RotateCcw size="12" /> Repeat
+              </button>
+            )}
+          </div>
+          <p className="aii-subtitle-card__text">{subtitleText || 'Jack will speak here once the interview begins.'}</p>
         </div>
       </div>
 
-      {/* Session Panel: tabs + chat + code */}
+      {/* Session Panel: chat + auto-popup code editor */}
       <div className="aii-room__panel">
-        <div className="aii-tabs" role="tablist">
-          <button
-            role="tab"
-            aria-selected={activeTab === 'chat'}
-            className={`aii-tab-btn ${activeTab === 'chat' ? 'aii-tab-btn--active' : ''}`}
-            onClick={() => setActiveTab('chat')}
-          >
-            <MessageSquare size="14" />
-            Chat
-          </button>
-          <button
-            role="tab"
-            aria-selected={activeTab === 'code'}
-            className={`aii-tab-btn ${activeTab === 'code' ? 'aii-tab-btn--active' : ''}`}
-            onClick={() => setActiveTab('code')}
-          >
-            <Code2 size="14" />
-            Code
-          </button>
-        </div>
+        {codingProblem && (
+          <div className="aii-code-banner">
+            <div className="aii-code-banner__info">
+              <Code2 size="16" />
+              <span>Coding Challenge: <strong>{codingProblem.title}</strong> ({codingProblem.difficulty})</span>
+            </div>
+            <button
+              className="aii-repeat-btn"
+              onClick={() => setShowCodeEditor((prev) => !prev)}
+            >
+              {showCodeEditor ? 'Hide Code Editor' : 'Open Code Editor'}
+            </button>
+          </div>
+        )}
 
         {phase === 'initializing' && (
           <div className="aii-init-message">
             <ObiAvatar compact state="connecting" />
             <div className="aii-spinner aii-spinner--sm" />
-            <p>{statusMessage || 'Obi is reading your resume and preparing your interview…'}</p>
+            <p>{statusMessage || 'Jack is reading your resume and preparing your interview…'}</p>
           </div>
         )}
 
-        <div className={`aii-chat ${activeTab !== 'chat' ? 'aii-chat--hidden' : ''}`}>
+        <div className="aii-chat">
           {messages.map((msg) => (
             <MessageBubble key={msg.id || `${msg.role}-${msg.ts}`} message={msg} />
           ))}
@@ -1279,30 +1317,32 @@ export default function AIInterviewer({ sessionId, token, role, company, resume,
           <div ref={messagesEndRef} />
         </div>
 
-        {activeTab === 'code' && (
-          <CodingPanel
-            problem={codingProblem}
-            language={language}
-            onLanguageChange={setLanguage}
-            code={code}
-            onCodeChange={setCode}
-            stdin={stdin}
-            onStdinChange={setStdin}
-            runStatus={runStatus}
-            runOutput={runOutput}
-            isRunning={isRunning}
-            isTesting={isTesting}
-            isThinking={isThinking}
-            testResults={testResults}
-            onRun={runCode}
-            onTest={runTests}
-            onSend={() => {
-              const submission = `Here is my code solution in ${language}:\n\`\`\`${language}\n${code}\n\`\`\`\nExecution Output:\n${runOutput || '(Code executed)'}`;
-              sendAnswer(submission);
-              setActiveTab('chat');
-            }}
-            languageOptions={LANGUAGE_OPTIONS}
-          />
+        {showCodeEditor && (
+          <div className="aii-code-popover">
+            <CodingPanel
+              problem={codingProblem}
+              language={language}
+              onLanguageChange={setLanguage}
+              code={code}
+              onCodeChange={setCode}
+              stdin={stdin}
+              onStdinChange={setStdin}
+              runStatus={runStatus}
+              runOutput={runOutput}
+              isRunning={isRunning}
+              isTesting={isTesting}
+              isThinking={isThinking}
+              testResults={testResults}
+              onRun={runCode}
+              onTest={runTests}
+              onSend={() => {
+                const submission = `Here is my code solution in ${language}:\n\`\`\`${language}\n${code}\n\`\`\`\nExecution Output:\n${runOutput || '(Code executed)'}`;
+                sendAnswer(submission);
+                setShowCodeEditor(false);
+              }}
+              languageOptions={LANGUAGE_OPTIONS}
+            />
+          </div>
         )}
       </div>
 
@@ -1314,64 +1354,42 @@ export default function AIInterviewer({ sessionId, token, role, company, resume,
               <div className="aii-mic-wrap">
                 <button
                   className={`aii-mic-btn ${isRecording ? 'aii-mic-btn--recording' : ''}`}
-                  onMouseDown={startRecording}
-                  onMouseUp={stopRecording}
-                  onTouchStart={startRecording}
-                  onTouchEnd={stopRecording}
-                  onMouseLeave={stopRecording}
-                  onContextMenu={(e) => e.preventDefault()}
+                  onClick={() => {
+                    if (isRecording) {
+                      stopRecording();
+                    } else {
+                      startRecording();
+                    }
+                  }}
                   disabled={isThinking || isSpeaking}
-                  title={isRecording ? 'Release to send voice' : 'Hold to speak to Obi'}
-                  aria-label={isRecording ? 'Release to send voice' : 'Hold to speak to Obi'}
+                  title={isRecording ? 'Click to stop & send answer' : 'Click to start speaking'}
+                  aria-label={isRecording ? 'Click to stop & send answer' : 'Click to start speaking'}
                 >
                   <Mic size="26" />
                 </button>
-                <span className="aii-mic-label">{isRecording ? 'Release to send' : 'Hold to talk'}</span>
+                <span className="aii-mic-label">{isRecording ? 'Click to send' : 'Click to talk'}</span>
               </div>
 
               <div className="aii-voice-meta">
                 <WaveformVisualizer isActive={isRecording || isSpeaking} color={isRecording ? '#f87171' : '#818cf8'} />
                 <div className={`aii-voice-status aii-voice-status--${isRecording ? 'rec' : isSpeaking ? 'speak' : isThinking ? 'think' : 'idle'}`}>
                   {isRecording
-                    ? <><span className="aii-voice-status__dot" /> Recording — release to send</>
+                    ? <><span className="aii-voice-status__dot" /> Recording — click mic to send answer</>
                     : isSpeaking
-                      ? <><Volume2 size="15" /> Obi is speaking</>
+                      ? <><Volume2 size="15" /> Jack is speaking</>
                       : isThinking
-                        ? <><Loader2 size="15" className="aii-spin" /> Obi is thinking…</>
-                        : <><Mic size="15" /> Ready — hold the mic button to answer</>}
+                        ? <><Loader2 size="15" className="aii-spin" /> Jack is thinking…</>
+                        : <><Mic size="15" /> Ready — click mic button to record answer</>}
                 </div>
               </div>
             </div>
-
-            {/* Camera preview — also used by proctoring face/object detection */}
-            <video
-              ref={videoRef}
-              autoPlay
-              muted
-              playsInline
-              aria-hidden="true"
-              style={{
-                position: 'fixed',
-                top: 16,
-                right: 16,
-                width: 160,
-                height: 120,
-                borderRadius: 12,
-                border: '2px solid rgba(129,140,248,0.4)',
-                objectFit: 'cover',
-                zIndex: 50,
-                transform: 'scaleX(-1)',
-                opacity: 0.85,
-                boxShadow: '0 4px 12px rgba(0,0,0,0.3)',
-              }}
-            />
 
             <div className="aii-text-row">
               <input
                 ref={textInputRef}
                 type="text"
                 className="aii-text-input"
-                placeholder="Or type your response to Obi…"
+                placeholder="Or type your response to Jack…"
                 onKeyDown={handleKeyDown}
                 disabled={isThinking || isSpeaking}
                 aria-label="Type your response"

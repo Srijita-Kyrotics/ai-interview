@@ -92,7 +92,7 @@ function DashboardPage({ user, state, onStartAiInterview }) {
           <Bot size={30} />
         </div>
         <div className="ai-hero__body">
-          <h3>Interview with Obi — your AI interviewer</h3>
+          <h3>Interview with Jack — your technical interviewer</h3>
           <p>Voice-based interview with live coding. Skips aptitude and coding rounds — jump straight in.</p>
         </div>
         <button className="btn primary ai-hero__btn" onClick={startAiInterview}>

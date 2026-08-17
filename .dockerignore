@@ -1,4 +1,5 @@
 node_modules
+frontend/node_modules
 .git
 __pycache__
 *.pyc
@@ -7,3 +8,5 @@ __pycache__
 *.db
 .jwt_secret
 frontend/dist
+test-results
+

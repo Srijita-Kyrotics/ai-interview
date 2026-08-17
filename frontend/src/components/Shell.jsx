@@ -72,10 +72,10 @@ function Shell({ state, user, onLogout, proctoring, onStartAiInterview, children
             type="button"
             onClick={handleAiInterview}
             className={`step-item ai-interview-nav ${routeStage === 'technical' ? 'active' : ''}`}
-            title="Jump straight into the Obi AI interview"
+            title="Jump straight into the Jack interview"
           >
             <span><Bot size={15} /></span>
-            <b>AI Interview with Obi</b>
+            <b>Interview with Jack</b>
           </button>
 
           <div className="sidebar-divider" />

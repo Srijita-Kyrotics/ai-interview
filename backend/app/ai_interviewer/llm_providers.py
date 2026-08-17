@@ -459,7 +459,7 @@ def _mock_transition(prompt: str) -> dict:
 def _mock_opening(prompt: str) -> dict:
     return {
         "opening_text": (
-            "Hi there, I'm Obi, and I'll be conducting your technical interview today. "
+            "Hi there, I'm Jack, and I'll be conducting your technical interview today. "
             "This will be a relaxed, conversational interview about your experience and skills. "
             "Let's start with your background: tell me about the project you're most proud of."
         )
