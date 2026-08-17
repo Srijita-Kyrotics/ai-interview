@@ -237,9 +237,9 @@ export default function App() {
     }
   }, [state.sessionId, navigate])
 
-  // Auto guest login for standalone /interview and /technical direct link sharing
+  // Auto guest login for standalone branch link sharing
   useEffect(() => {
-    if (!user && (window.location.pathname === '/interview' || window.location.pathname === '/technical')) {
+    if (!user) {
       api.post('/auth/guest').then((res) => {
         const guestUser = {
           name: res.name || 'Candidate',
@@ -262,16 +262,12 @@ export default function App() {
     }
   }, [user])
 
-  if (!user && (window.location.pathname !== '/interview' && window.location.pathname !== '/technical')) {
-    return <AuthPage onAuth={setUser} />
-  }
-
   if (state.stage === 'terminated' || window.location.pathname === '/terminated') {
     return <TerminatedPage />
   }
 
-  // Dedicated full-screen interview room — standalone direct route (/interview or /technical)
-  if (location.pathname === '/technical' || location.pathname === '/interview') {
+  // Dedicated full-screen interview room — standalone application entry
+  if (location.pathname === '/' || location.pathname === '/technical' || location.pathname === '/interview') {
     return (
       <ToastProvider>
         <AiInterviewRoute state={state} setState={setState} user={user || { name: 'Candidate', token: '' }} proctoring={proctoring} setProctoring={setProctoring} />
