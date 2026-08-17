@@ -1,6 +1,8 @@
-# AI Interview Coach — Mock Recruitment Platform
+# AI Interview Coach — Autonomous Mock Recruitment & AI Interview Platform
 
-A full-stack, end-to-end mock interview platform that simulates real company hiring pipelines with AI-assisted proctoring, resume parsing, multi-round assessments, a LangGraph-powered AI interviewer with live coding support, candidate dashboards, a recruiter portal, and detailed performance reports.
+A full-stack, enterprise-grade AI interview and mock recruitment platform powered by **LangGraph**, **FastAPI**, **React 18**, **PostgreSQL**, **Redis**, and **Docker**. 
+
+Features an autonomous voice & code AI interviewer (**"Jack"**), real-time browser proctoring, resume intelligence, multi-round company assessment pipelines, candidate analytics, recruiter monitoring tools, and automated hiring report generation.
 
 ---
 
@@ -9,114 +11,83 @@ A full-stack, end-to-end mock interview platform that simulates real company hir
 - [Features](#features)
 - [Architecture Overview](#architecture-overview)
 - [Project Structure](#project-structure)
-- [Supported Companies](#supported-companies)
+- [AI Interviewer System (LangGraph)](#ai-interviewer-system-langgraph)
+- [Voice & Live Code Pipeline](#voice--live-code-pipeline)
+- [Docker Architecture & Services](#docker-architecture--services)
 - [Getting Started](#getting-started)
 - [Environment Variables](#environment-variables)
 - [API Reference](#api-reference)
-- [AI Interviewer System (LangGraph)](#ai-interviewer-system-langgraph)
-- [Live Coding Integration](#live-coding-integration)
-- [Voice Pipeline](#voice-pipeline)
 - [Proctoring System](#proctoring-system)
-- [Authentication & Roles](#authentication--roles)
+- [Testing & Quality Assurance](#testing--quality-assurance)
 - [Tech Stack](#tech-stack)
-- [Deployment](#deployment)
-- [Development Notes](#development-notes)
 
 ---
 
 ## Features
 
-### Core Interview Flow
-- **Resume upload & parsing** — Upload a PDF or TXT resume; the backend extracts name, email, phone, skills, education, experience, projects, and certifications automatically.
-- **Company selection** — Choose one or more companies from a catalogue of 20+ firms (product-based, service-based, and hybrid). Interview rounds are merged and de-duplicated across selections.
-- **Multi-round assessments**
-  - **Aptitude** — Timed MCQ quiz (20s per question) with per-category scoring (quantitative, logical, verbal).
-  - **Coding** — In-browser CodeMirror 6 code editor supporting Python, JavaScript, Java, and C++. Code is executed via the Judge0 API (with a seamless heuristic fallback if no API key is provided).
-  - **Technical & HR** — Dynamic, AI-generated interview questions powered by the OpenRouter LLM, tailored to the candidate's parsed skills and selected company.
+### 🎙️ Standalone AI Interviewer ("Jack")
+- **Autonomous Technical Interviewer** — Jack conducts multi-turn, role-tailored technical and behavioral interviews using a structured 10-node **LangGraph** engine.
+- **Dynamic Role Selection** — Select candidate target roles: Full-Stack Engineer, Frontend, Backend, AI/ML Engineer, DevOps, Data Engineer, or Product Manager.
+- **Root App Entry & Instant Link Sharing** — Jack operates as the standalone application entry on `/` (as well as direct `/interview` and `/technical` routes) with automatic guest authentication for friction-free candidate onboarding.
+- **Integrated Top-Right Proctoring** — Real-time camera feeds and integrity scores pinned to the header throughout the interview session.
 
-### AI Interviewer (LangGraph Pipeline)
-- **Structured interview pipeline** — A 10-node LangGraph state graph that autonomously conducts multi-stage interviews: resume analysis, interview planning, question generation, answer analysis, follow-up generation, stage advancement, scoring, and report generation.
-- **Voice-first interface** — Hold-to-talk voice input with real-time STT (Deepgram/Groq Whisper) and natural-sounding TTS (ElevenLabs/OpenAI).
-- **Live coding integration** — A toggleable Chat/Code tab system with a full CodeMirror editor. Code is sent alongside voice answers and evaluated by Obi (the AI interviewer) in real-time.
-- **Adaptive questioning** — Obi adapts difficulty based on answer quality, probes shallow answers with targeted follow-ups, and verifies claims against the resume.
-- **Memory system** — Tracks topics covered, candidate strengths/weaknesses, unresolved claims, and per-topic depth across the entire interview.
-- **Multi-dimensional scoring** — Technical accuracy, depth, clarity, confidence, completeness, and communication quality scored on 0-10 scales with weighted aggregation.
+### ⚡ Voice & Live Coding Pipeline
+- **Hold-to-Talk Voice Stream** — Real-time Speech-to-Text (STT) via **Deepgram Nova-3** (with Groq Whisper & OpenAI Whisper fallbacks) and natural Text-to-Speech (TTS) via **ElevenLabs Turbo v2.5** (Rachel / Male voice options).
+- **CodeMirror 6 Live Code Runner** — Embedded syntax-highlighted editor supporting Python, JavaScript, C++, and Java. Spoken answers and code snapshots are evaluated simultaneously by the AI interviewer.
+- **Dual Code Execution** — Fast isolated local code execution engine with Judge0 API integration.
 
-### Candidate Dashboard
-- **Stats overview** — Total interviews completed, average score, best/worst scores, and companies practiced.
-- **Performance trend chart** — Line chart (Recharts) tracking Overall, Aptitude, Coding, Technical, and HR scores across all past interviews.
-- **Interview history** — Sortable table listing every past session with date, company, rounds completed, score, and drill-down view.
-- **Session detail modal** — Full report view (scores, strengths, weaknesses, AI feedback, proctoring summary).
+### 🏢 Full Recruitment Pipeline & Company Catalogue
+- **Resume Intelligence** — Upload PDF/TXT resumes; the system extracts skills, work experience, projects, education, and red flags automatically.
+- **20+ Top Tech Companies** — Select target companies (Google, Microsoft, Amazon, TCS, Infosys, Wipro, Accenture, etc.) with automated round merging and de-duplication.
+- **Multi-Round Assessments** — Aptitude (timed MCQ with category analytics), Coding (Judge0 / local runner), Technical, and HR interviews.
 
-### Recruiter / Admin Portal
-- **Role-based access** — Only users with `recruiter` or `admin` roles can access. First registered user is automatically admin.
-- **Overview tab** — Platform-wide stats: total candidates, total interviews, average platform score, top score.
-- **Candidates tab** — Filterable list with name, email, interview count, average score, and last active date.
-- **Sessions tab** — Filterable list of every session with company, rounds, score, and actions.
-- **Candidate comparison** — Compare up to 5 sessions side-by-side.
-- **Session replay** — Full timeline view of answers and proctoring violations.
-- **Proctoring viewer** — Integrity score, violation timeline, and webcam snapshot grid.
-
-### Proctoring System
-- **AI proctoring** — Face detection (face-api.js), object detection (TensorFlow COCO-SSD), tab-switch detection, fullscreen enforcement, screen-share monitoring, copy-paste & DevTools blocking.
-- **Violation tracking** — All events logged to the database with timestamps, penalties, and integrity scores.
+### 📊 Candidate Dashboard & Recruiter Portal
+- **Candidate Analytics** — Historical interview timeline, performance trends (Recharts), aggregate scores, and downloadable PDF performance reports (jsPDF).
+- **Recruiter & Admin Tools** — Platform-wide metrics, candidate search, session replay timelines, side-by-side session comparisons, and proctoring violation logs.
 
 ---
 
 ## Architecture Overview
 
 ```
-┌─────────────────────────────────────────────────────────────────┐
-│                        FRONTEND (React)                         │
-│                                                                 │
-│  ┌──────────┐  ┌──────────┐  ┌──────────┐  ┌──────────────┐   │
-│  │   Auth   │  │  Resume  │  │  Rounds  │  │  AI Interview │   │
-│  │  Page    │  │  Upload  │  │  (Apti/  │  │  (Voice+Code) │   │
-│  │          │  │          │  │  Code/   │  │              │   │
-│  │          │  │          │  │  Tech/HR)│  │              │   │
-│  └──────────┘  └──────────┘  └──────────┘  └──────┬───────┘   │
-│                                                     │           │
-│  ┌──────────────┐  ┌──────────────┐  ┌─────────────┴────────┐  │
-│  │  Dashboard   │  │  Recruiter   │  │     Report Page      │  │
-│  │  (Candidate) │  │  Portal      │  │  (PDF Export)        │  │
-│  └──────────────┘  └──────────────┘  └──────────────────────┘  │
-│                                                                 │
-│  WebSocket: /ai-interview/ws/voice                              │
-│  Binary: Audio (WebM/opus) → Server                             │
-│  Binary: TTS (MP3) ← Server                                     │
-│  JSON: {code, language, audio_end} → Server                     │
-└─────────────────────────┬───────────────────────────────────────┘
-                          │
-                          ▼
-┌─────────────────────────────────────────────────────────────────┐
-│                    BACKEND (FastAPI)                             │
-│                                                                 │
-│  ┌──────────────────────────────────────────────────────────┐   │
-│  │              AI Interviewer Package                      │   │
-│  │                                                          │   │
-│  │  ┌──────────┐    ┌──────────────┐    ┌──────────────┐  │   │
-│  │  │  Voice   │───▶│    Graph     │───▶│    Nodes     │  │   │
-│  │  │ Pipeline │    │  (LangGraph) │    │  (10 nodes)  │  │   │
-│  │  │ STT + TTS│    │              │    │              │  │   │
-│  │  └──────────┘    └──────────────┘    └──────────────┘  │   │
-│  │                       │                    │            │   │
-│  │                  ┌────┴────┐          ┌────┴────┐      │   │
-│  │                  │  State  │          │ Prompts │      │   │
-│  │                  │ Schema  │          │ (8 LLM  │      │   │
-│  │                  │         │          │ prompts)│      │   │
-│  │                  └─────────┘          └─────────┘      │   │
-│  └──────────────────────────────────────────────────────────┘   │
-│                                                                 │
-│  ┌──────────────────────────────────────────────────────────┐   │
-│  │              Platform Services                           │   │
-│  │  Auth (JWT) │ Resume Parser │ Scoring │ Proctoring       │   │
-│  └──────────────────────────────────────────────────────────┘   │
-│                                                                 │
-│  ┌──────────────────────────────────────────────────────────┐   │
-│  │              Database (PostgreSQL)                       │   │
-│  │  users | sessions | otp_state | captcha | proctoring     │   │
-│  └──────────────────────────────────────────────────────────┘   │
-└─────────────────────────────────────────────────────────────────┘
+                                  ┌──────────────────────────────────────────────────┐
+                                  │                FRONTEND (React 18 + Vite)        │
+                                  │                                                  │
+                                  │   Jack Standalone Entry  │  Company Selector    │
+                                  │   CodeMirror 6 Editor    │  Recharts Analytics  │
+                                  │   Proctoring (Face/COCO) │  jsPDF Reports       │
+                                  └────────────────────────┬─────────────────────────┘
+                                                           │
+                                             WebSocket / REST HTTP APIs
+                                                           │
+                                                           ▼
+                                  ┌──────────────────────────────────────────────────┐
+                                  │               REVERSE PROXY (Nginx)              │
+                                  └────────────────────────┬─────────────────────────┘
+                                                           │
+                                                           ▼
+                                  ┌──────────────────────────────────────────────────┐
+                                  │               BACKEND (FastAPI / Python)         │
+                                  │                                                  │
+                                  │   ┌──────────────────────────────────────────┐   │
+                                  │   │        AI Interviewer Package            │   │
+                                  │   │  - 10-Node LangGraph State Machine       │   │
+                                  │   │  - STT (Deepgram/Groq) + TTS (ElevenLabs)│   │
+                                  │   │  - Multi-Provider LLM Fallbacks          │   │
+                                  │   └────────────────────┬─────────────────────┘   │
+                                  │                        │                         │
+                                  │   ┌────────────────────┴─────────────────────┐   │
+                                  │   │         Platform & Auth Services         │   │
+                                  │   │  JWT Auth │ Resume Parser │ Code Executor│   │
+                                  │   └──────────────────────────────────────────┘   │
+                                  └───────────────┬──────────────────────┬───────────┘
+                                                  │                      │
+                                                  ▼                      ▼
+                                     ┌──────────────────────┐  ┌───────────────────┐
+                                     │  PostgreSQL 16 DB    │  │   Redis 7 Cache   │
+                                     │  (Users/Sessions/    │  │  (State Store &   │
+                                     │   Proctoring Logs)   │  │   Rate Limiting)  │
+                                     └──────────────────────┘  └───────────────────┘
 ```
 
 ---
@@ -124,578 +95,258 @@ A full-stack, end-to-end mock interview platform that simulates real company hir
 ## Project Structure
 
 ```
-AI-Interview-Coach-main/
+ai-interview/
 ├── backend/
 │   ├── app/
-│   │   ├── main.py                    # FastAPI app, all REST endpoints, JWT auth
-│   │   ├── config.py                  # Pydantic Settings (all env vars)
-│   │   ├── db.py                      # PostgreSQL database layer
-│   │   ├── helpers.py                 # JWT, password hashing, utilities
-│   │   ├── resume_parser.py           # PDF/text resume parsing
-│   │   ├── ai_interviewer/            # NEW: LangGraph AI interviewer package
-│   │   │   ├── __init__.py
-│   │   │   ├── state.py               # TypedDict interview state schema
-│   │   │   ├── nodes.py               # 10 LangGraph node implementations
-│   │   │   ├── graph.py               # LangGraph graph assembly & runner
-│   │   │   ├── prompts.py             # 8 LLM prompt templates
-│   │   │   ├── router.py              # REST + WebSocket endpoints
-│   │   │   ├── memory.py              # Interview memory manager
-│   │   │   └── voice.py               # STT/TTS voice pipeline
-│   │   └── scripts/
-│   │       └── build_aptitude_bank.py  # Regenerate aptitude question bank
-│   ├── requirements.txt
-│   └── accounts.json                   # Legacy accounts (auto-migrated)
+│   │   ├── main.py                    # FastAPI application, route mounting, CORS, middleware
+│   │   ├── config.py                  # Pydantic BaseSettings environment variables
+│   │   ├── db.py                      # PostgreSQL connection pool & SQLAlchemy/asyncpg schema
+│   │   ├── helpers.py                 # JWT token management & password hashing
+│   │   ├── auth_routes.py             # User registration, login, guest auth, OTP, CAPTCHA
+│   │   ├── auth_service.py            # Authentication business logic & security checks
+│   │   ├── session_routes.py          # Interview sessions, resume upload, round management
+│   │   ├── resume_parser.py           # PDF & text resume extraction engine
+│   │   ├── code_executor.py           # Isolated local Python/JS code runner & Judge0 client
+│   │   └── ai_interviewer/            # Autonomous AI Interviewer Package
+│   │       ├── graph.py               # 10-Node LangGraph state graph assembly & async runner
+│   │       ├── nodes.py               # 10 graph node functions (analyzer, planner, analyzer, etc.)
+│   │       ├── state.py               # TypedDict interview state schema
+│   │       ├── state_store.py         # Redis-backed persistent session state store
+│   │       ├── llm_providers.py       # Multi-provider LLM handler (Gemini 2.5, OpenRouter/GPT-5.6)
+│   │       ├── prompts.py             # Dynamic prompt templates for Jack AI persona
+│   │       ├── router.py              # WebSocket (/ai-interview/ws/voice) & REST endpoints
+│   │       ├── voice.py               # STT/TTS audio streaming & buffer processing
+│   │       ├── memory.py              # Interview memory manager (topics, depth, claim verification)
+│   │       ├── coding_judge.py        # Code snapshot evaluation & criteria matching
+│   │       ├── evidence_graph.py      # Candidate claim & response evidence tracker
+│   │       └── communication_analyzer.py # Verbal communication & clarity scoring
+│   ├── alembic/                       # Database schema migration scripts
+│   ├── scripts/                       # Question bank generation & test data utilities
+│   ├── tests/                         # Pytest automated test suite (LLM, parser, code runner, judge)
+│   └── requirements.txt               # Backend Python dependencies
 ├── frontend/
-│   ├── package.json
-│   ├── vite.config.js
-│   ├── tailwind.config.js
-│   ├── index.html
-│   └── src/
-│       ├── main.jsx                    # React entry point
-│       ├── App.jsx                     # SPA routing (all views)
-│       ├── api.js                      # HTTP client wrapper
-│       ├── constants.js
-│       ├── styles.css                  # Global styles (Tailwind + custom)
-│       ├── ErrorBoundary.jsx
-│       ├── hooks/
-│       │   └── useInterviewWebSocket.js
-│       ├── utils/
-│       │   ├── ToastContext.jsx
-│       │   ├── score.js
-│       │   ├── questionFormat.js
-│       │   ├── formatTime.js
-│       │   ├── audio.js
-│       │   └── aptitudeFormat.js
-│       ├── proctoring/
-│       │   ├── useAssessmentProctoring.js
-│       │   ├── ProctoringUI.jsx
-│       │   └── proctoringState.js
-│       └── components/
-│           ├── AIInterviewer.jsx       # NEW: LangGraph AI interviewer UI
-│           ├── aiInterviewer/
-│           │   ├── parts.jsx           # Reusable UI parts (bubbles, report, gauges)
-│           │   ├── StartCard.jsx       # Idle/start screen with resume upload
-│           │   └── CodingPanel.jsx     # Live coding problem + editor + judge UI
-│           ├── ObiAvatar.jsx           # Obi mascot avatar
-│           ├── CodeEditor.jsx          # CodeMirror 6 code editor
-│           ├── AuthPage.jsx
-│           ├── Home.jsx
-│           ├── ResumePage.jsx
-│           ├── CompanyPage.jsx
-│           ├── RoundPage.jsx
-│           ├── DashboardPage.jsx
-│           ├── ReportPage.jsx
-│           ├── RecruiterPage.jsx
-│           ├── Shell.jsx
-│           ├── Skeleton.jsx
-│           ├── TerminatedPage.jsx
-│           ├── SessionDetailModal.jsx
-│           ├── SessionReplay.jsx
-│           ├── CompareModal.jsx
-│           └── AdminSessionModal.jsx
-├── shared/
-│   ├── company_profiles.json           # 20+ company round definitions
-│   ├── coding_questions.json           # Coding challenge bank
-│   ├── technical_questions.json        # Technical Q&A bank
-│   ├── hr_questions.json               # HR / behavioural Q&A bank
-│   └── custom_questions/               # Admin-uploaded custom questions
-├── docker-compose.yml                  # PostgreSQL + Backend + Nginx
-├── Dockerfile                          # Multi-stage: Node build → Python runtime
-├── nginx.conf                          # Reverse proxy + WebSocket support
-├── pyproject.toml
-├── playwright.config.js                # E2E test config
-└── .env.example                        # All environment variables
+│   ├── src/
+│   │   ├── main.jsx                   # React DOM entry point
+│   │   ├── App.jsx                    # SPA Routing, standalone Jack entrance, navigation
+│   │   ├── api.js                     # Axios HTTP client with JWT interceptors
+│   │   ├── styles.css                 # Global CSS design system & Tailwind directives
+│   │   ├── components/
+│   │   │   ├── AIInterviewer.jsx      # Standalone Jack AI Interviewer room controller
+│   │   │   ├── ObiAvatar.jsx          # AI Interviewer avatar component
+│   │   │   ├── CodeEditor.jsx         # CodeMirror 6 code editor wrapper
+│   │   │   ├── aiInterviewer/
+│   │   │   │   ├── StartCard.jsx      # Pre-interview setup, role selection, resume upload
+│   │   │   │   ├── CodingPanel.jsx    # Live problem statement, code editor & test runner UI
+│   │   │   │   └── parts.jsx          # Live speech bubbles, status indicators, score gauges
+│   │   │   ├── DashboardPage.jsx      # Candidate dashboard with historical trends
+│   │   │   ├── RecruiterPage.jsx      # Recruiter portal, candidate search & session replay
+│   │   │   ├── ReportPage.jsx         # Detailed PDF exportable performance breakdown
+│   │   │   └── AuthPage.jsx           # Login, registration, OTP & CAPTCHA page
+│   │   ├── proctoring/                # Face-api.js & COCO-SSD browser proctoring
+│   │   └── __tests__/                 # Vitest frontend unit tests
+│   ├── e2e/                           # Playwright end-to-end interview flow tests
+│   ├── package.json                   # Frontend dependencies & scripts
+│   └── vite.config.js                 # Vite bundler & dev proxy configuration
+├── shared/                            # Centralized company profiles & question banks
+├── docker-compose.yml                 # Production multi-container Docker orchestration
+├── docker-compose.dev.yml             # Hot-reloading development Docker stack
+├── Dockerfile                         # Multi-stage build (Node 20 -> Python 3.12)
+├── nginx.conf                         # Reverse proxy, static asset server & WebSocket upgrades
+└── README.md                          # Platform documentation
 ```
 
 ---
 
-## Supported Companies
+## AI Interviewer System (LangGraph)
 
-| Type | Companies |
-|------|-----------|
-| **Product-based** | Google, Microsoft, Amazon, Adobe, Oracle, Salesforce, Atlassian, NVIDIA |
-| **Service-based** | TCS, Infosys, Wipro, HCLTech, Tech Mahindra, Cognizant, Capgemini, LTIMindtree |
-| **Hybrid** | Accenture, IBM |
+The AI Interviewer **"Jack"** is driven by a 10-node autonomous **LangGraph** execution graph:
 
-Each company has its own round sequence defined in `shared/company_profiles.json`. When multiple companies are selected, rounds are merged and de-duplicated.
+```
+[START] ──► resume_analyzer ──► interview_planner ──► opening
+                                                         │
+    ┌────────────────────────────────────────────────────┘
+    ▼
+question_generator ◄──────────────────┐
+    │                                 │
+ [Candidate Answer + Code]            │
+    │                                 │
+    ▼                                 │
+answer_analyzer                       │
+    │                                 │
+    ├──► (needs follow-up) ──► follow_up_generator ──┘
+    │
+    └──► stage_advance ───────────────► (next stage) ──┘
+             │
+      (should_end)
+             │
+             ▼
+          closing ──► scoring ──► report_generator ──► [END]
+```
+
+### Node Responsibilities
+
+| Node Name | Function |
+| :--- | :--- |
+| `resume_analyzer_node` | Analyzes resume text, flags key projects, skills, gaps, and verification points. |
+| `interview_planner_node` | Builds a candidate-tailored roadmap across technical & behavioral stages. |
+| `opening_node` | Introduces Jack and sets expectations for the candidate session. |
+| `question_generator_node` | Generates role-relevant questions dynamically based on state and covered topics. |
+| `answer_analyzer_node` | Evaluates spoken response and submitted code across 6 performance dimensions. |
+| `follow_up_generator_node` | Probes shallow, incomplete, or ambiguous answers with targeted follow-ups. |
+| `stage_advance_node` | Manages stage transitions (Warmup → Technical → Problem Solving → Behavioral). |
+| `scoring_node` | Aggregates turn scores into weighted FinalScores. |
+| `report_generator_node` | Produces an executive hiring summary, strengths, weaknesses, and recommendations. |
+| `closing_node` | Concludes the interview session professionally. |
+
+---
+
+## Voice & Live Code Pipeline
+
+1. **Audio Streaming**: Candidate voice is recorded via WebRTC (`MediaRecorder`) in WebM/Opus format and streamed over WebSockets (`/ai-interview/ws/voice`).
+2. **STT Transcription**: Converted to text via Deepgram Nova-3 (or Groq Whisper).
+3. **Dual Spoken + Code Evaluation**: Spoken text and current CodeMirror code snapshot are delivered into `InterviewGraphRunner.process_answer()`.
+4. **LLM Evaluation**: Jack evaluates code efficiency, syntax correctness, and verbal alignment simultaneously.
+5. **TTS Audio Output**: Response text is converted to high-fidelity audio via ElevenLabs Turbo v2.5 (or OpenAI TTS) and streamed back to the browser for playback.
+
+---
+
+## Docker Architecture & Services
+
+The application is fully dockerized with a production multi-stage build and a development override.
+
+| Service | Container Image | Port | Description |
+| :--- | :--- | :--- | :--- |
+| **frontend** | `nginx:alpine` | `80` | Serves compiled static Vite build & proxies API/WS requests |
+| **backend** | `ai-interview-backend` | `8000` | FastAPI app, LangGraph engine, voice & code handlers |
+| **db** | `postgres:16-alpine` | `5433` | PostgreSQL database for users, sessions, and proctoring |
+| **redis** | `redis:7-alpine` | `6379` | Persistent Redis store for LangGraph session state & rate limits |
 
 ---
 
 ## Getting Started
 
-### Prerequisites
+### Using Docker (Recommended)
 
-- Python 3.10+
-- Node.js 18+
-- PostgreSQL (for production) or SQLite (for development)
+```bash
+# 1. Clone repository
+git clone https://github.com/Srijita-Kyrotics/ai-interview.git
+cd ai-interview
 
-### Backend
+# 2. Configure environment variables
+cp .env.example .env
 
+# 3. Build and launch all services
+docker compose up -d --build
+```
+Access the application at **[http://localhost](http://localhost)**.
+
+### Local Development (Without Docker)
+
+#### Backend Setup
 ```bash
 cd backend
 python -m venv .venv
 
 # Windows
 .venv\Scripts\activate
-
-# macOS / Linux
+# Linux/macOS
 source .venv/bin/activate
 
 pip install -r requirements.txt
-
-# Copy and configure environment variables
 cp .env.example .env
-# Edit .env with your API keys (see Environment Variables section)
-
-uvicorn app.main:app --reload
+uvicorn app.main:app --reload --port 8000
 ```
 
-The API is now available at `http://127.0.0.1:8000`. Interactive docs at `/docs`.
-
-### Frontend
-
+#### Frontend Setup
 ```bash
 cd frontend
 npm install
 npm run dev
 ```
-
-The dev server runs at `http://localhost:5173` by default.
-
-### Docker (Production)
-
-```bash
-# Build frontend
-cd frontend && npm run build && cd ..
-
-# Start all services
-docker-compose up -d
-```
-
-This starts PostgreSQL, the FastAPI backend, and an Nginx reverse proxy.
+Access the dev server at **[http://localhost:5173](http://localhost:5173)**.
 
 ---
 
 ## Environment Variables
 
-Copy `.env.example` to `.env` and configure:
+Key settings in `.env`:
 
-### Required
+```env
+# Database & Cache
+DATABASE_URL=postgresql://postgres:postgres@localhost:5432/ai_interview
+REDIS_URL=redis://localhost:6379/0
 
-| Variable | Description | Default |
-|----------|-------------|---------|
-| `DATABASE_URL` | PostgreSQL connection string | `postgresql://postgres:postgres@localhost:5432/ai_interview` |
-| `OPENAI_API_KEY` | OpenAI API key (`sk-proj-...`) — the sole LLM provider powering Obi | — |
-| `OPENAI_MODEL` | Luna model slug (Obi's reasoning brain) | `gpt-5.6-luna` |
-| `JWT_SECRET` | JWT signing secret (auto-generated if blank) | — |
+# LLM Providers (OpenAI / OpenRouter / Gemini)
+OPENAI_API_KEY=sk-proj-...
+OPENAI_BASE_URL=https://openrouter.ai/api/v1
+OPENAI_MODEL=openai/gpt-5.6-luna
+AI_INTERVIEWER_GEMINI_MODEL=gemini-2.5-flash-lite
 
-### AI Interviewer — LLM
+# Voice STT / TTS Keys
+DEEPGRAM_API_KEY=your_deepgram_api_key
+GROQ_API_KEY=your_groq_api_key
+ELEVENLABS_API_KEY=your_elevenlabs_api_key
 
-| Variable | Description | Default |
-|----------|-------------|---------|
-| `AI_INTERVIEWER_MAX_QUESTIONS` | Max questions per interview | `12` |
-| `AI_INTERVIEWER_TEMPERATURE` | LLM temperature | `0.7` |
-| `AI_INTERVIEWER_SESSION_TTL_HOURS` | Session expiry in hours | `4` |
-
-### AI Interviewer — Voice Pipeline
-
-| Variable | Description | Default |
-|----------|-------------|---------|
-| `DEEPGRAM_API_KEY` | Deepgram Nova-3 STT (primary) | — |
-| `GROQ_API_KEY` | Groq Whisper STT (fallback) | — |
-| `ELEVENLABS_API_KEY` | ElevenLabs Turbo v2.5 TTS (primary) | — |
-| `ELEVENLABS_VOICE_ID` | ElevenLabs voice ID | `21m00Tcm4TlvDq8ikWAM` (Rachel) |
-| `OPENAI_API_KEY` | OpenAI TTS/STT (fallback) | — |
-
-### Optional Services
-
-| Variable | Description | Default |
-|----------|-------------|---------|
-| `JUDGE0_API_KEY` | Judge0 code execution API (RapidAPI) | — |
-| `SMTP_HOST` / `SMTP_PORT` | Email OTP delivery | `smtp.gmail.com:587` |
-| `SMTP_USER` / `SMTP_PASSWORD` | SMTP credentials | — |
-
-### CORS & Security
-
-| Variable | Description | Default |
-|----------|-------------|---------|
-| `ALLOWED_ORIGINS` | Comma-separated CORS origins | `http://localhost:5173` |
-| `OTP_TTL_SECONDS` | OTP expiry time | `300` |
-| `CODE_RATE_LIMIT` | Code execution rate limit | `20` per `600s` |
+# Code Execution (Judge0)
+JUDGE0_API_KEY=your_rapidapi_judge0_key
+```
 
 ---
 
 ## API Reference
 
-All endpoints are served by FastAPI at `http://127.0.0.1:8000`. Interactive docs at `/docs`.
-
-### Auth
-
-| Method | Path | Auth | Description |
-|--------|------|------|-------------|
-| `GET`  | `/auth/captcha` | — | Get a CAPTCHA challenge token |
-| `POST` | `/auth/send-otp` | — | Send a 6-digit OTP to an email address |
-| `POST` | `/auth/verify` | — | Verify OTP + CAPTCHA |
-| `POST` | `/auth/register` | — | Register a new account (returns JWT) |
-| `POST` | `/auth/login` | — | Log in (returns JWT + user info) |
-| `POST` | `/auth/check-email` | — | Check whether an email is registered |
-| `POST` | `/auth/forgot-password` | — | Send password reset token |
-| `POST` | `/auth/reset-password` | — | Reset password with token |
-
-### Session & Rounds
-
-| Method | Path | Auth | Description |
-|--------|------|------|-------------|
-| `POST` | `/upload-resume` | Bearer | Upload PDF/TXT resume |
-| `GET`  | `/companies` | — | List all company profiles |
-| `POST` | `/select-company` | Bearer | Attach companies to session |
-| `POST` | `/start-round` | Bearer | Mark a round as started |
-| `GET`  | `/rounds/{company}` | — | Fetch round definitions |
-| `GET`  | `/questions/{round_type}` | — | Fetch static question bank |
-| `POST` | `/ai/questions` | Bearer | Generate AI questions |
-| `POST` | `/submit-answer` | Bearer | Submit answer for aptitude/technical/HR |
-| `POST` | `/submit-code` | Bearer | Save a coding submission |
-| `POST` | `/run-code` | Bearer | Execute code via Judge0 |
-| `POST` | `/ai/feedback` | Bearer | Generate AI feedback |
-| `GET`  | `/report` | Bearer | Generate performance report |
+### Auth & User Management
+- `POST /auth/guest` — Quick guest user authentication for instant interview access.
+- `POST /auth/register` — User registration with password hashing.
+- `POST /auth/login` — User authentication returning JWT bearer token.
 
 ### AI Interviewer (LangGraph)
+- `POST /ai-interview/start` — Initialize a new AI interview session with role & resume.
+- `GET /ai-interview/{id}/state` — Fetch current interview graph state.
+- `GET /ai-interview/{id}/report` — Retrieve final generated interview report.
+- `WS /ai-interview/ws/voice` — Real-time binary voice & code submission WebSocket.
 
-| Method | Path | Auth | Description |
-|--------|------|------|-------------|
-| `POST` | `/ai-interview/start` | Bearer | Initialize a new AI interview session |
-| `GET`  | `/ai-interview/{id}/state` | Bearer | Get current session state |
-| `GET`  | `/ai-interview/{id}/report` | Bearer | Get final interview report |
-| `WS`   | `/ai-interview/ws` | Token | Text-based interview WebSocket |
-| `WS`   | `/ai-interview/ws/voice` | Token | Voice + code interview WebSocket |
-
-### Candidate Dashboard
-
-| Method | Path | Auth | Description |
-|--------|------|------|-------------|
-| `GET`  | `/user/sessions` | Bearer | List all user sessions |
-| `GET`  | `/user/sessions/{id}` | Bearer | Session detail + proctoring |
-| `GET`  | `/user/stats` | Bearer | Aggregate stats and trends |
-
-### Recruiter / Admin
-
-| Method | Path | Auth | Description |
-|--------|------|------|-------------|
-| `GET`  | `/admin/candidates` | Recruiter | List all candidates |
-| `GET`  | `/admin/candidates/{email}` | Recruiter | Candidate profile + sessions |
-| `GET`  | `/admin/sessions` | Recruiter | List all sessions |
-| `GET`  | `/admin/sessions/{id}` | Recruiter | Full report + proctoring |
-| `GET`  | `/admin/sessions/{id}/proctoring` | Recruiter | Proctoring logs only |
-| `GET`  | `/admin/sessions/{id}/timeline` | Recruiter | Session replay timeline |
-| `GET`  | `/admin/stats` | Recruiter | Platform-wide stats |
-| `POST` | `/admin/compare` | Recruiter | Compare multiple sessions |
-| `POST` | `/admin/update-role` | Admin | Update user role |
-| `POST` | `/admin/upload-questions` | Admin | Upload custom questions |
-
-### Proctoring
-
-| Method | Path | Auth | Description |
-|--------|------|------|-------------|
-| `POST` | `/proctoring/violation` | Bearer | Log a proctoring violation |
-| `POST` | `/proctoring/snapshot` | Bearer | Store a webcam snapshot |
-| `GET`  | `/proctoring/report` | Bearer | Retrieve proctoring logs |
-
-### Health
-
-| Method | Path | Auth | Description |
-|--------|------|------|-------------|
-| `GET`  | `/health` | — | Application health check |
-| `GET`  | `/health/smtp` | Admin | SMTP configuration status |
-
----
-
-## AI Interviewer System (LangGraph)
-
-The AI Interviewer ("Obi") is a LangGraph-powered autonomous interviewer that conducts structured, multi-stage technical interviews.
-
-### Pipeline Architecture
-
-```
-START
-  │
-  ▼
-resume_analyzer ──────────────────────────────────┐
-  │                                                │ (on error)
-  ▼                                                ▼
-interview_planner                              error_node
-  │
-  ▼
-opening
-  │
-  ▼
-┌─────────────────────────────────────────────────┐
-│             MAIN INTERVIEW LOOP                 │
-│                                                 │
-│  question_generator ◄─────────────────────┐    │
-│       │                                   │    │
-│       ▼                                   │    │
-│  [WAIT FOR ANSWER] ←─ WebSocket           │    │
-│       │                                   │    │
-│       ▼                                   │    │
-│  answer_analyzer                          │    │
-│       │                                   │    │
-│       ▼                                   │    │
-│  route_after_analysis ──► follow_up_gen ──┘    │
-│       │                                        │
-│       ▼ (no follow-up)                         │
-│  stage_advance ──────────────────────────────► │
-│       │ (continue)                             │
-│       └───────────────────────────────────────►│
-│                   (loop)                       │
-└─────────────────────────────────────────────────┘
-  │ (should_end == True)
-  ▼
-closing
-  │
-  ▼
-scoring
-  │
-  ▼
-report_generator
-  │
-  ▼
-END
-```
-
-### Node Descriptions
-
-| Node | Purpose | LLM Call |
-|------|---------|----------|
-| `resume_analyzer_node` | Parses resume, extracts skills, projects, red flags, and interview intelligence | LLM (structured JSON) |
-| `interview_planner_node` | Creates multi-stage interview roadmap (warmup → technical → problem solving → behavioral) | LLM (structured JSON) |
-| `opening_node` | Generates warm opening message with self-introduction | LLM (structured JSON) |
-| `question_generator_node` | Generates next question based on stage, memory, previous evaluation, and resume | LLM (structured JSON) |
-| `answer_analyzer_node` | Scores answer on 6 dimensions (technical, depth, clarity, confidence, completeness, communication) | LLM (structured JSON) |
-| `follow_up_generator_node` | Generates targeted follow-up for shallow/vague answers with escalation levels 1-3 | LLM (structured JSON) |
-| `stage_advance_node` | Checks if stage questions are exhausted, advances to next stage with transition message | LLM (structured JSON) |
-| `scoring_node` | Aggregates all evaluations into weighted FinalScores | Pure computation |
-| `report_generator_node` | Generates comprehensive hiring report with strengths, weaknesses, rationale | LLM (structured JSON) |
-| `closing_node` | Generates professional closing message | LLM (structured JSON) |
-
-### State Schema (`state.py`)
-
-The interview state flows through all nodes as a `TypedDict` with these major sections:
-
-- **Identity** — session_id, candidate_email, role, company
-- **Resume Data** — raw text, parsed data, full `ResumeAnalysis`
-- **Interview Plan** — stages, focus areas, strategies, `InterviewPlan`
-- **Conversation** — questions history, answers history, evaluations, transcript
-- **Current Turn** — current question, answer, evaluation, code snapshot
-- **Memory** — topics covered/pending, strengths, weaknesses, unresolved claims
-- **Timing** — start time, last activity, question start time
-- **Control Flow** — phase, questions asked, max questions, should_end
-- **Final Output** — `FinalReport` with scores and hiring recommendation
-- **Voice Pipeline** — audio chunk buffer, TTS audio response
-
-### Memory System (`memory.py`)
-
-- Tracks topics covered vs. pending across all stages
-- Maintains candidate strengths/weaknesses from evaluation signals
-- Tracks unresolved claims (resume claims needing verification)
-- Maps per-topic depth levels
-- Generates compressed conversation context for long interviews
-- Provides summary snapshots for LLM prompts
-
----
-
-## Live Coding Integration
-
-The Live Coding feature allows candidates to write code in real-time during the AI interview. Obi evaluates both the spoken answer AND the code simultaneously.
-
-### How It Works
-
-1. **Tab System** — The interview room has a toggleable Chat/Code tab bar. The candidate can switch between reading Obi's messages and writing code.
-2. **Language Selection** — Python, JavaScript, Java, and C++ are supported. The language selector updates the CodeMirror editor's syntax highlighting.
-3. **Code Submission** — When the candidate finishes speaking (releases the hold-to-talk button), the current code snapshot is bundled with the audio and sent to the backend:
-   ```json
-   {
-     "type": "audio_end",
-     "code": "def solution(nums):\n    return sorted(nums)",
-     "language": "python"
-   }
-   ```
-4. **Backend Processing** — The WebSocket handler extracts the code and passes it to `InterviewGraphRunner.process_answer()`, which stores it in the `InterviewState`.
-5. **LLM Evaluation** — The `answer_analyzer_node` and `follow_up_generator_node` receive the code snapshot and evaluate it alongside the spoken answer.
-6. **Intelligent Follow-ups** — Obi can reference specific lines of code in follow-up questions (e.g., "I see you used a nested loop on line 12, what is the time complexity of that?").
-7. **Report Inclusion** — All code snapshots are included in the final interview report for comprehensive evaluation.
-
-### Frontend Components
-
-- **`AIInterviewer.jsx`** — Main AI interviewer component (voice WS, resume, proctoring, report)
-- **`aiInterviewer/parts.jsx`, `StartCard.jsx`, `CodingPanel.jsx`** — Extracted interview UI: reusable parts (bubbles, live status, score gauges, final report), start screen with resume upload, and live coding problem + editor + judge
-- **`CodeEditor.jsx`** — CodeMirror 6-based editor with dark theme, syntax highlighting, bracket matching, autocomplete, and fold gutters
-
-### Backend Files
-
-- **`router.py`** — Extracts `code` from WebSocket messages, passes to `process_answer()`
-- **`state.py`** — `current_code_snapshot` in `InterviewState`, `code_snapshot` in `AnswerRecord`
-- **`graph.py`** — `process_answer(answer_text, code_snapshot)` stores code in state
-- **`nodes.py`** — `answer_analyzer_node` and `follow_up_generator_node` format code into prompts
-- **`prompts.py`** — Updated prompts include code context for evaluation
-
-### Code Evaluation Principles
-
-When code is provided, Obi evaluates:
-- **Correctness** — Does the code solve the stated problem?
-- **Consistency** — Does the code match what the candidate described verbally?
-- **Efficiency** — Time/space complexity of the implementation
-- **Readability** — Naming conventions, structure, error handling
-- **Depth signals** — Does the code demonstrate claimed expertise level?
-- **Red flags** — Copy-paste patterns, syntax errors, fundamental misunderstandings
-
----
-
-## Voice Pipeline
-
-The voice pipeline enables real-time voice interviews with sub-1.5s end-to-end latency.
-
-### STT (Speech-to-Text)
-
-| Provider | Model | Priority | Notes |
-|----------|-------|----------|-------|
-| Deepgram | Nova-3 | Primary | REST batch transcription, highest accuracy |
-| Groq | Whisper | Fallback | Faster than OpenAI Whisper |
-| OpenAI | Whisper | Fallback | General-purpose fallback |
-
-### TTS (Text-to-Speech)
-
-| Provider | Model | Priority | Latency |
-|----------|-------|----------|---------|
-| ElevenLabs | Turbo v2.5 | Primary | ~400ms |
-| OpenAI | tts-1 (alloy) | Fallback | ~600ms |
-
-### Voice Interview Flow
-
-```
-Candidate speaks → MediaRecorder (WebM/opus)
-  → Binary audio sent via WebSocket
-  → Server: Deepgram STT → text transcript
-  → Server: InterviewGraphRunner.process_answer(transcript, code)
-  → Server: OpenRouter LLM generates response
-  → Server: ElevenLabs TTS → audio bytes
-  → Binary TTS audio sent back to client
-  → Web Audio API plays response
-```
+### Sessions & Assessment
+- `POST /upload-resume` — Parse PDF/TXT resume.
+- `POST /run-code` — Execute code via Judge0 or local fallback runner.
+- `GET /user/sessions` — Fetch historical candidate sessions and scores.
+- `GET /admin/sessions` — Recruiter view of platform candidate sessions.
 
 ---
 
 ## Proctoring System
 
-The proctoring module runs entirely in the browser and syncs events to the backend.
+The browser-based proctoring suite continuously monitors:
+- 👁️ **Face Detection** — `face-api.js` tracks presence and flags multi-face or missing candidate events.
+- 📦 **Object Detection** — TensorFlow `coco-ssd` checks for forbidden items (e.g. mobile phones).
+- 🖥️ **Tab & Window Focus** — Tracks tab switches (`visibilitychange`) and fullscreen exits.
+- ⌨️ **Keyboard & Mouse Rules** — Prevents copy/paste, right-click, and restricted hotkeys.
 
-### Monitored Behaviours
-
-| Violation | Penalty | Detection |
-|-----------|---------|-----------|
-| Tab switch | -10 pts | `visibilitychange` event |
-| Fullscreen exit | -10 pts | `fullscreenchange` event |
-| Screen share stopped | -15 pts | Screen share stream ended |
-| No face / face missing | -15 pts | face-api.js face detection |
-| Multiple faces detected | -20 pts | face-api.js face count |
-| Copy / Paste | -15 pts | `copy`/`paste` events |
-| DevTools opened | -20 pts | DevTools detection heuristic |
-| Right click | 0 pts (logged) | `contextmenu` event |
-| Restricted shortcut | 0 pts (logged) | Keyboard shortcut detection |
-
-The integrity score starts at **100**. Sessions with excessive violations are flagged.
+Integrity penalties are calculated in real-time and recorded in the database alongside session logs.
 
 ---
 
-## Authentication & Roles
+## Testing & Quality Assurance
 
-- **JWT tokens** — Issued on login/register, expire after 24 hours.
-- **Protected endpoints** — Require `Authorization: Bearer <token>` header.
-- **Roles**: `candidate` (default), `recruiter`, `admin`.
-- **First registered user** automatically becomes `admin`.
-- **Password policy** — Minimum 8 characters, must include uppercase letter and digit. Hashed with PBKDF2-HMAC-SHA256 (120,000 iterations).
-- **OTP verification** — Optional email-based 6-digit OTP with CAPTCHA. In development mode, the OTP is returned in the response for testing.
+Run backend pytest suite:
+```bash
+cd backend
+pytest -v
+```
+
+Run frontend unit & E2E tests:
+```bash
+cd frontend
+npm run test
+npm run e2e
+```
 
 ---
 
 ## Tech Stack
 
-| Layer | Technology |
-|-------|-----------|
-| **Backend Framework** | Python 3.12, FastAPI 0.115, Uvicorn |
-| **Frontend Framework** | React 18, Vite 6, React Router DOM 6 |
-| **Styling** | Tailwind CSS 3.4, Custom CSS (dark theme) |
-| **Code Editor** | CodeMirror 6 (Python, JS, Java, C++ support) |
-| **AI/LLM** | OpenAI (single provider; Luna via `OPENAI_MODEL`, default `gpt-5.6-luna`) |
-| **Voice — STT** | Deepgram Nova-3, Groq Whisper, OpenAI Whisper |
-| **Voice — TTS** | ElevenLabs Turbo v2.5, OpenAI TTS |
-| **Orchestration** | LangGraph 0.2 (10-node state graph) |
-| **Database** | PostgreSQL (production), SQLite (dev fallback) |
-| **Code Execution** | Judge0 CE (RapidAPI) with heuristic fallback |
-| **Proctoring** | face-api.js, TensorFlow.js (COCO-SSD) |
-| **Charts** | Recharts 2.15 |
-| **PDF Export** | jsPDF 4.2 |
-| **Math Rendering** | KaTeX 0.17 |
-| **Icons** | Lucide React |
-| **Testing** | Vitest 2.1, Playwright 1.62, pytest 8.3 |
-| **Linting** | ESLint 9, Ruff 0.8, Prettier 3 |
-| **Deployment** | Docker, Nginx, Docker Compose |
-
----
-
-## Deployment
-
-### Docker Compose (Recommended)
-
-```bash
-# 1. Build the frontend
-cd frontend && npm run build && cd ..
-
-# 2. Configure environment
-cp .env.example .env
-# Edit .env with your API keys
-
-# 3. Start services
-docker-compose up -d
-```
-
-**Services:**
-- **db** — PostgreSQL 16 Alpine on port 5432
-- **backend** — FastAPI on port 8000
-- **frontend** — Nginx serving static build on port 80
-
-### Manual Deployment
-
-```bash
-# Backend
-cd backend
-pip install -r requirements.txt
-uvicorn app.main:app --host 0.0.0.0 --port 8000 --workers 2
-
-# Frontend
-cd frontend
-npm install
-npm run build
-# Serve dist/ with any static file server
-```
-
-### Nginx Configuration
-
-The included `nginx.conf` handles:
-- Static asset caching (1 year, immutable)
-- API proxy to backend (with WebSocket upgrade support)
-- SPA fallback (all routes → index.html)
-- Security headers (CSP, X-Frame-Options, HSTS)
-- Gzip compression
-
----
-
-## Development Notes
-
-- **API Keys (Optional)** — The platform supports `OPENAI_API_KEY` (Luna, default `gpt-5.6-luna`) for dynamic AI questions/feedback and `JUDGE0_API_KEY` for real code execution. Without these, the system falls back to a deterministic offline mock LLM and heuristic code validation.
-- **JWT Secret** — Set `JWT_SECRET` in `.env` for production. If blank, a random secret is auto-generated and persisted to `backend/.jwt_secret`.
-- **Database** — Users, sessions, OTPs, CAPTCHAs, and proctoring logs are stored in PostgreSQL (or SQLite in dev). Restarting does not clear data.
-- **Aptitude Bank** — Run `python backend/scripts/build_aptitude_bank.py` to regenerate the aptitude question bank.
-- **CORS** — Default allows `localhost:5173`. Restrict before public deployment.
-- **AI Interview UI** — `AIInterviewer.jsx` (voice WebSocket + LangGraph pipeline) drives the `/technical` and `/hr` rounds; its UI is split into `aiInterviewer/parts.jsx`, `StartCard.jsx`, and `CodingPanel.jsx`. The old `oiv-*`/legacy chat interviewer UI has been removed.
-- **WebSocket Protocol** — Voice interview uses binary frames for audio and JSON text frames for control messages. The `audio_end` message optionally includes `code` and `language` fields for live coding.
-- **Rate Limiting** — DB-backed rate limiting on code execution, AI requests, OTP sends, and admin operations. Works across multiple Uvicorn workers.
+- **Backend**: Python 3.12, FastAPI, LangGraph, Pydantic, SQLAlchemy, Asyncpg, Redis, Uvicorn
+- **Frontend**: React 18, Vite 6, React Router DOM 6, CodeMirror 6, Recharts, jsPDF, Lucide Icons
+- **AI & Speech**: Deepgram Nova-3, Groq Whisper, ElevenLabs Turbo v2.5, OpenRouter / Gemini LLM
+- **Proctoring**: face-api.js, TensorFlow.js (COCO-SSD)
+- **Infrastructure**: Docker, Docker Compose, Nginx, PostgreSQL 16, Redis 7
