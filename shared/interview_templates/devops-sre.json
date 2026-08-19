@@ -1,0 +1,74 @@
+{
+  "id": "devops-sre",
+  "name": "DevOps / SRE",
+  "description": "Infrastructure, reliability, and automation focus",
+  "role": "DevOps Engineer",
+  "companies": [],
+  "max_questions": 11,
+  "voice_enabled": false,
+  "stages": [
+    {
+      "id": "linux_internals",
+      "name": "Linux & Internals",
+      "topics": [
+        "Kernel",
+        "Networking",
+        "Filesystems",
+        "Performance"
+      ],
+      "target_questions": 2
+    },
+    {
+      "id": "cloud_native",
+      "name": "Cloud Native",
+      "topics": [
+        "Kubernetes",
+        "Service Mesh",
+        "Observability",
+        "GitOps"
+      ],
+      "target_questions": 3
+    },
+    {
+      "id": "reliability",
+      "name": "Reliability Engineering",
+      "topics": [
+        "SLO/SLI",
+        "Incident Response",
+        "Chaos Engineering",
+        "Capacity Planning"
+      ],
+      "target_questions": 3
+    },
+    {
+      "id": "automation",
+      "name": "Automation & Tooling",
+      "topics": [
+        "IaC",
+        "CI/CD",
+        "Scripting",
+        "Developer Experience"
+      ],
+      "target_questions": 2
+    },
+    {
+      "id": "behavioral",
+      "name": "Operational Maturity",
+      "topics": [
+        "On-call",
+        "Postmortems",
+        "Communication"
+      ],
+      "target_questions": 1
+    }
+  ],
+  "focus_areas": [
+    "Kubernetes",
+    "Observability",
+    "Reliability",
+    "Automation"
+  ],
+  "created_by": "system",
+  "created_at": 0.0,
+  "is_system": true
+}

@@ -176,6 +176,170 @@ function CompanyPage({ state, setState, user }) {
 
   const recommendedRoles = recommendRoles(state.resume?.skills || [])
 
+  // Render content based on mode
+  const renderCompanyMode = () => (
+    <>
+      <div style={{ marginBottom: '1rem', display: 'flex', gap: '10px' }}>
+        <button className="btn ghost" type="button" onClick={() => setSelectedCompanies(Object.keys(state.companies))}>Select All</button>
+        <button className="btn ghost" type="button" onClick={() => setSelectedCompanies([])}>Clear</button>
+      </div>
+
+      {COMPANY_GROUPS.map((group) => {
+        const companies = group.companies.filter((company) => state.companies[company])
+        if (!companies.length) return null
+
+        return (
+          <div className="company-group" key={group.key}>
+            <div className="company-group-header">
+              <span className={`company-group-badge ${group.key}`}>{group.badge}</span>
+              <span className="company-group-sub">{group.sub}</span>
+            </div>
+            <div className="company-grid">
+              {companies.map(company => renderCompanyCard(company, selectedCompanies, toggleCompany))}
+            </div>
+          </div>
+        )
+      })}
+
+      <div className="assessment-btn-wrap">
+        <button className="btn primary" type="button" onClick={() => startAssessment()}>
+          {selectedCompanies.length === 0
+            ? 'Select Companies to Begin'
+            : selectedCompanies.length === 1
+              ? `Start Assessment for ${selectedCompanies[0]} →`
+              : `Start Assessment for ${selectedCompanies.slice(0, -1).join(', ')} and ${selectedCompanies[selectedCompanies.length - 1]} →`
+          }
+        </button>
+        {selectedCompanies.length > 0 && (
+          <span className="muted tiny">{selectedCompanies.length} {selectedCompanies.length === 1 ? 'company' : 'companies'} selected</span>
+        )}
+      </div>
+    </>
+  )
+
+  const renderRoleMode = () => (
+    <>
+      <div className="role-section-head">
+        <div className="ai-badge">✦ AI Analysis</div>
+        <h3>Recommended Roles Based on Your Resume</h3>
+      </div>
+      {recommendedRoles.length > 0 ? (
+        <div className="role-grid">
+          {recommendedRoles.map((rec) => (
+            <div key={rec.role} className="role-card">
+              <h3>{rec.role}</h3>
+              <div className="role-card-meta">
+                <span className="match-badge">⬆ {rec.matchPercentage}% Match</span>
+                {rec.difficulty && (
+                  <span className={`difficulty-badge ${rec.difficulty}`}>
+                    {rec.difficulty}
+                  </span>
+                )}
+              </div>
+              <div className="skills-list">
+                {rec.matched.map(skill => <span key={skill}>{skill}</span>)}
+              </div>
+              {rec.techStack && rec.techStack.length > 0 && (
+                <div className="tech-stack-row">
+                  {rec.techStack.map(tech => <span key={tech} className="tech-chip">{tech}</span>)}
+                </div>
+              )}
+              <button className="btn primary full" type="button" onClick={() => startAssessment([rec.role], true)}>
+                Start {rec.role} Test →
+              </button>
+            </div>
+          ))}
+        </div>
+      ) : (
+        <div className="empty-state">
+          <b>No precise roles detected</b>
+          <p>We couldn't extract enough matching skills from your resume to suggest a specific role. Please use the Company-Based Assessment mode.</p>
+        </div>
+      )}
+    </>
+  )
+
+  const renderTemplateMode = () => (
+    <>
+      <div className="role-section-head">
+        <div className="ai-badge">📋 Templates</div>
+        <h3>Pre-Built Interview Templates</h3>
+        <p className="muted">Choose a curated interview plan tailored for specific roles and companies</p>
+      </div>
+      {templateLoading ? (
+        <div className="empty-state" style={{ minHeight: '200px' }}>
+          <div className="loading-spinner" />
+          <p>Loading templates...</p>
+        </div>
+      ) : templates.length > 0 ? (
+        <div className="template-grid">
+          {templates.map((template) => (
+            <div
+              key={template.id}
+              className={`template-card ${selectedTemplate === template.id ? 'selected' : ''}`}
+              onClick={() => setSelectedTemplate(template.id)}
+            >
+              <div className="template-header">
+                <div className="template-icon" style={{ background: template.is_system ? 'linear-gradient(135deg, #6366f1, #a855f7)' : 'linear-gradient(135deg, #10b981, #059669)' }}>
+                  {template.is_system ? '★' : '✎'}
+                </div>
+                <span className={`template-badge ${template.is_system ? 'system' : 'custom'}`}>
+                  {template.is_system ? 'System' : 'Custom'}
+                </span>
+              </div>
+              <div className="template-body">
+                <h3>{template.name}</h3>
+                <p className="template-desc">{template.description}</p>
+                <div className="template-meta">
+                  <span className="meta-item">🎯 {template.role}</span>
+                  <span className="meta-item">📝 {template.stage_count} stages</span>
+                  <span className="meta-item">❓ {template.max_questions} questions</span>
+                </div>
+                {template.companies.length > 0 && (
+                  <div className="template-companies">
+                    {template.companies.slice(0, 3).map(c => <span key={c} className="company-pill">{c}</span>)}
+                    {template.companies.length > 3 && <span className="company-pill">+{template.companies.length - 3} more</span>}
+                  </div>
+                )}
+                <div className="template-focus">
+                  {template.focus_areas.slice(0, 4).map(f => <span key={f} className="focus-pill">{f}</span>)}
+                </div>
+              </div>
+              <div className="template-footer">
+                <button 
+                  className={`btn ${selectedTemplate === template.id ? 'primary' : 'ghost'} full`}
+                  type="button"
+                  onClick={(e) => {
+                    e.stopPropagation()
+                    setSelectedTemplate(template.id)
+                  }}
+                >
+                  {selectedTemplate === template.id ? 'Selected ✓' : 'Use This Template'}
+                </button>
+              </div>
+            </div>
+          ))}
+        </div>
+      ) : (
+        <div className="empty-state">
+          <b>No templates available</b>
+          <p>Create a custom template from the recruiter portal or contact your admin.</p>
+        </div>
+      )}
+      
+      {selectedTemplate && (
+        <div className="template-selected-banner">
+          <div className="banner-content">
+            <span>Template selected: <strong>{templates.find(t => t.id === selectedTemplate)?.name}</strong></span>
+            <button className="btn primary" onClick={applySelectedTemplate}>
+              Apply & Start Interview →
+            </button>
+          </div>
+        </div>
+      )}
+    </>
+  )
+
   return (
     <section className="panel main-panel">
       <div className="section-head">
@@ -218,164 +382,9 @@ function CompanyPage({ state, setState, user }) {
 
       {error ? <div className="notice danger">{error}</div> : null}
 
-      {mode === 'company' ? (
-        <>
-          <div style={{ marginBottom: '1rem', display: 'flex', gap: '10px' }}>
-            <button className="btn ghost" type="button" onClick={() => setSelectedCompanies(Object.keys(state.companies))}>Select All</button>
-            <button className="btn ghost" type="button" onClick={() => setSelectedCompanies([])}>Clear</button>
-          </div>
-
-          {COMPANY_GROUPS.map((group) => {
-            const companies = group.companies.filter((company) => state.companies[company])
-            if (!companies.length) return null
-
-            return (
-              <div className="company-group" key={group.key}>
-                <div className="company-group-header">
-                  <span className={`company-group-badge ${group.key}`}>{group.badge}</span>
-                  <span className="company-group-sub">{group.sub}</span>
-                </div>
-                <div className="company-grid">
-                  {companies.map(company => renderCompanyCard(company, selectedCompanies, toggleCompany))}
-                </div>
-              </div>
-            )
-          })}
-
-          <div className="assessment-btn-wrap">
-            <button className="btn primary" type="button" onClick={() => startAssessment()}>
-              {selectedCompanies.length === 0
-                ? 'Select Companies to Begin'
-                : selectedCompanies.length === 1
-                  ? `Start Assessment for ${selectedCompanies[0]} →`
-                  : `Start Assessment for ${selectedCompanies.slice(0, -1).join(', ')} and ${selectedCompanies[selectedCompanies.length - 1]} →`
-              }
-            </button>
-            {selectedCompanies.length > 0 && (
-              <span className="muted tiny">{selectedCompanies.length} {selectedCompanies.length === 1 ? 'company' : 'companies'} selected</span>
-            )}
-          </div>
-        </>
-      ) : mode === 'role' ? (
-        <>
-          <div className="role-section-head">
-            <div className="ai-badge">✦ AI Analysis</div>
-            <h3>Recommended Roles Based on Your Resume</h3>
-          </div>
-          {recommendedRoles.length > 0 ? (
-            <div className="role-grid">
-              {recommendedRoles.map((rec) => (
-                <div key={rec.role} className="role-card">
-                  <h3>{rec.role}</h3>
-                  <div className="role-card-meta">
-                    <span className="match-badge">⬆ {rec.matchPercentage}% Match</span>
-                    {rec.difficulty && (
-                      <span className={`difficulty-badge ${rec.difficulty}`}>
-                        {rec.difficulty}
-                      </span>
-                    )}
-                  </div>
-                  <div className="skills-list">
-                    {rec.matched.map(skill => <span key={skill}>{skill}</span>)}
-                  </div>
-                  {rec.techStack && rec.techStack.length > 0 && (
-                    <div className="tech-stack-row">
-                      {rec.techStack.map(tech => <span key={tech} className="tech-chip">{tech}</span>)}
-                    </div>
-                  )}
-                  <button className="btn primary full" type="button" onClick={() => startAssessment([rec.role], true)}>
-                    Start {rec.role} Test →
-                  </button>
-                </div>
-              ))}
-            </div>
-          ) : (
-            <div className="empty-state">
-              <b>No precise roles detected</b>
-              <p>We couldn't extract enough matching skills from your resume to suggest a specific role. Please use the Company-Based Assessment mode.</p>
-            </div>
-          )
-        </>
-      ) : (
-        <>
-          <div className="role-section-head">
-            <div className="ai-badge">📋 Templates</div>
-            <h3>Pre-Built Interview Templates</h3>
-            <p className="muted">Choose a curated interview plan tailored for specific roles and companies</p>
-          </div>
-          {templateLoading ? (
-            <div className="empty-state" style={{ minHeight: '200px' }}>
-              <div className="loading-spinner" />
-              <p>Loading templates...</p>
-            </div>
-          ) : templates.length > 0 ? (
-            <div className="template-grid">
-              {templates.map((template) => (
-                <div
-                  key={template.id}
-                  className={`template-card ${selectedTemplate === template.id ? 'selected' : ''}`}
-                  onClick={() => setSelectedTemplate(template.id)}
-                >
-                  <div className="template-header">
-                    <div className="template-icon" style={{ background: template.is_system ? 'linear-gradient(135deg, #6366f1, #a855f7)' : 'linear-gradient(135deg, #10b981, #059669)' }}>
-                      {template.is_system ? '★' : '✎'}
-                    </div>
-                    <span className={`template-badge ${template.is_system ? 'system' : 'custom'}`}>
-                      {template.is_system ? 'System' : 'Custom'}
-                    </span>
-                  </div>
-                  <div className="template-body">
-                    <h3>{template.name}</h3>
-                    <p className="template-desc">{template.description}</p>
-                    <div className="template-meta">
-                      <span className="meta-item">🎯 {template.role}</span>
-                      <span className="meta-item">📝 {template.stage_count} stages</span>
-                      <span className="meta-item">❓ {template.max_questions} questions</span>
-                    </div>
-                    {template.companies.length > 0 && (
-                      <div className="template-companies">
-                        {template.companies.slice(0, 3).map(c => <span key={c} className="company-pill">{c}</span>)}
-                        {template.companies.length > 3 && <span className="company-pill">+{template.companies.length - 3} more</span>}
-                      </div>
-                    )}
-                    <div className="template-focus">
-                      {template.focus_areas.slice(0, 4).map(f => <span key={f} className="focus-pill">{f}</span>)}
-                    </div>
-                  </div>
-                  <div className="template-footer">
-                    <button 
-                      className={`btn ${selectedTemplate === template.id ? 'primary' : 'ghost'} full`}
-                      type="button"
-                      onClick={(e) => {
-                        e.stopPropagation()
-                        setSelectedTemplate(template.id)
-                      }}
-                    >
-                      {selectedTemplate === template.id ? 'Selected ✓' : 'Use This Template'}
-                    </button>
-                  </div>
-                </div>
-              ))}
-            </div>
-          ) : (
-            <div className="empty-state">
-              <b>No templates available</b>
-              <p>Create a custom template from the recruiter portal or contact your admin.</p>
-            </div>
-          )}
-          
-          {selectedTemplate && (
-            <div className="template-selected-banner">
-              <div className="banner-content">
-                <span>Template selected: <strong>{templates.find(t => t.id === selectedTemplate)?.name}</strong></span>
-                <button className="btn primary" onClick={applySelectedTemplate}>
-                  Apply & Start Interview →
-                </button>
-              </div>
-            </div>
-          )}
-        </>
-      )}
+      {mode === 'company' && renderCompanyMode()}
+      {mode === 'role' && renderRoleMode()}
+      {mode === 'template' && renderTemplateMode()}
     </section>
   )
 }

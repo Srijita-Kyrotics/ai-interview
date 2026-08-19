@@ -1,0 +1,75 @@
+{
+  "id": "frontend-specialist",
+  "name": "Frontend Specialist",
+  "description": "React, performance, accessibility, and frontend architecture",
+  "role": "Frontend Engineer",
+  "companies": [],
+  "max_questions": 10,
+  "voice_enabled": false,
+  "stages": [
+    {
+      "id": "react_deep",
+      "name": "React Internals",
+      "topics": [
+        "Reconciliation",
+        "Hooks",
+        "Suspense",
+        "Server Components"
+      ],
+      "target_questions": 2
+    },
+    {
+      "id": "performance",
+      "name": "Performance & Core Web Vitals",
+      "topics": [
+        "Bundle Size",
+        "Rendering",
+        "Caching",
+        "Lazy Loading"
+      ],
+      "target_questions": 2
+    },
+    {
+      "id": "architecture",
+      "name": "Frontend Architecture",
+      "topics": [
+        "State Management",
+        "Micro-frontends",
+        "Design Systems",
+        "Testing"
+      ],
+      "target_questions": 2
+    },
+    {
+      "id": "coding",
+      "name": "Frontend Coding",
+      "topics": [
+        "Component Design",
+        "Accessibility",
+        "TypeScript",
+        "Animation"
+      ],
+      "target_questions": 2
+    },
+    {
+      "id": "collab",
+      "name": "Design & Product Collab",
+      "topics": [
+        "Design Systems",
+        "Figma",
+        "Product Thinking"
+      ],
+      "target_questions": 2
+    }
+  ],
+  "focus_areas": [
+    "React",
+    "Performance",
+    "TypeScript",
+    "Accessibility",
+    "Design Systems"
+  ],
+  "created_by": "system",
+  "created_at": 0.0,
+  "is_system": true
+}

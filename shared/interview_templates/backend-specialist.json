@@ -1,0 +1,75 @@
+{
+  "id": "backend-specialist",
+  "name": "Backend Specialist",
+  "description": "Distributed systems, databases, APIs, and backend architecture",
+  "role": "Backend Engineer",
+  "companies": [],
+  "max_questions": 11,
+  "voice_enabled": false,
+  "stages": [
+    {
+      "id": "distributed",
+      "name": "Distributed Systems",
+      "topics": [
+        "Consensus",
+        "Replication",
+        "Sharding",
+        "Consistency Models"
+      ],
+      "target_questions": 3
+    },
+    {
+      "id": "databases",
+      "name": "Database Internals",
+      "topics": [
+        "Indexing",
+        "Query Optimization",
+        "Transactions",
+        "NoSQL vs SQL"
+      ],
+      "target_questions": 2
+    },
+    {
+      "id": "api_design",
+      "name": "API Design & Architecture",
+      "topics": [
+        "REST/gRPC/GraphQL",
+        "Versioning",
+        "Rate Limiting",
+        "Observability"
+      ],
+      "target_questions": 2
+    },
+    {
+      "id": "coding",
+      "name": "Backend Coding",
+      "topics": [
+        "Concurrency",
+        "Caching",
+        "Queue Systems",
+        "Idempotency"
+      ],
+      "target_questions": 2
+    },
+    {
+      "id": "operational",
+      "name": "Production Readiness",
+      "topics": [
+        "Migrations",
+        "Deployments",
+        "Debugging",
+        "Cost Optimization"
+      ],
+      "target_questions": 2
+    }
+  ],
+  "focus_areas": [
+    "Distributed Systems",
+    "Databases",
+    "API Design",
+    "Production Ops"
+  ],
+  "created_by": "system",
+  "created_at": 0.0,
+  "is_system": true
+}

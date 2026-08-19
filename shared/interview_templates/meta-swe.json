@@ -1,0 +1,71 @@
+{
+  "id": "meta-swe",
+  "name": "Meta Software Engineer",
+  "description": "Meta interview: coding, system design, behavioral, product sense",
+  "role": "Software Engineer",
+  "companies": [
+    "Meta",
+    "Facebook"
+  ],
+  "max_questions": 13,
+  "voice_enabled": true,
+  "stages": [
+    {
+      "id": "coding_1",
+      "name": "Coding Interview 1",
+      "topics": [
+        "Arrays/Strings",
+        "Two Pointers",
+        "Sliding Window"
+      ],
+      "target_questions": 2
+    },
+    {
+      "id": "coding_2",
+      "name": "Coding Interview 2",
+      "topics": [
+        "Trees/Graphs",
+        "Recursion",
+        "Dynamic Programming"
+      ],
+      "target_questions": 2
+    },
+    {
+      "id": "system_design",
+      "name": "System Design",
+      "topics": [
+        "Social Systems",
+        "Feed Ranking",
+        "Real-time"
+      ],
+      "target_questions": 3
+    },
+    {
+      "id": "behavioral",
+      "name": "Behavioral & Product Sense",
+      "topics": [
+        "Move Fast",
+        "Impact",
+        "Communication"
+      ],
+      "target_questions": 3
+    },
+    {
+      "id": "domain",
+      "name": "Domain Round",
+      "topics": [
+        "Role-specific"
+      ],
+      "target_questions": 2
+    }
+  ],
+  "focus_areas": [
+    "Coding",
+    "System Design",
+    "Product Sense",
+    "Impact"
+  ],
+  "created_by": "system",
+  "created_at": 0.0,
+  "is_system": true
+}

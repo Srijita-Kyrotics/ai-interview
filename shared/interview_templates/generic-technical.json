@@ -1,0 +1,59 @@
+{
+  "id": "generic-technical",
+  "name": "Generic Technical Interview",
+  "description": "Balanced technical interview for any software engineering role",
+  "role": "Software Engineer",
+  "companies": [],
+  "max_questions": 10,
+  "voice_enabled": false,
+  "stages": [
+    {
+      "id": "intro",
+      "name": "Introduction & Background",
+      "topics": [
+        "Experience",
+        "Tech Stack",
+        "Projects"
+      ],
+      "target_questions": 2
+    },
+    {
+      "id": "technical_depth",
+      "name": "Technical Depth",
+      "topics": [
+        "Core CS",
+        "Language Internals",
+        "Frameworks"
+      ],
+      "target_questions": 3
+    },
+    {
+      "id": "problem_solving",
+      "name": "Problem Solving & Coding",
+      "topics": [
+        "Algorithms",
+        "Data Structures",
+        "Clean Code"
+      ],
+      "target_questions": 3
+    },
+    {
+      "id": "system_design",
+      "name": "System Design (Light)",
+      "topics": [
+        "Architecture",
+        "Scaling",
+        "Trade-offs"
+      ],
+      "target_questions": 2
+    }
+  ],
+  "focus_areas": [
+    "Problem Solving",
+    "Technical Depth",
+    "Communication"
+  ],
+  "created_by": "system",
+  "created_at": 0.0,
+  "is_system": true
+}

@@ -1,0 +1,70 @@
+{
+  "id": "ml-engineer",
+  "name": "ML Engineer / Data Scientist",
+  "description": "ML-focused interview: modeling, MLOps, system design for ML",
+  "role": "ML Engineer",
+  "companies": [],
+  "max_questions": 12,
+  "voice_enabled": false,
+  "stages": [
+    {
+      "id": "ml_fundamentals",
+      "name": "ML Fundamentals",
+      "topics": [
+        "Supervised/Unsupervised",
+        "Evaluation",
+        "Bias-Variance"
+      ],
+      "target_questions": 3
+    },
+    {
+      "id": "ml_system_design",
+      "name": "ML System Design",
+      "topics": [
+        "Training Pipeline",
+        "Serving",
+        "Monitoring",
+        "Feature Stores"
+      ],
+      "target_questions": 3
+    },
+    {
+      "id": "coding_ml",
+      "name": "ML Coding",
+      "topics": [
+        "PyTorch/TF",
+        "Data Processing",
+        "Custom Layers"
+      ],
+      "target_questions": 2
+    },
+    {
+      "id": "applied",
+      "name": "Applied Experience",
+      "topics": [
+        "Production Models",
+        "A/B Testing",
+        "Drift Detection"
+      ],
+      "target_questions": 2
+    },
+    {
+      "id": "behavioral",
+      "name": "Collaboration & Impact",
+      "topics": [
+        "Cross-functional",
+        "Stakeholders",
+        "Research to Prod"
+      ],
+      "target_questions": 2
+    }
+  ],
+  "focus_areas": [
+    "ML Systems",
+    "Production ML",
+    "Model Evaluation"
+  ],
+  "created_by": "system",
+  "created_at": 0.0,
+  "is_system": true
+}
