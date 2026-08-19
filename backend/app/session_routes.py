@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import re
+import time
 import uuid
 from typing import Any
 
@@ -1069,6 +1070,270 @@ def admin_session_timeline(session_id: str, user: dict[str, Any] = Depends(requi
 
 CUSTOM_QUESTIONS_DIR = settings.base_dir / "shared" / "custom_questions"
 
+# ── Interview Templates ────────────────────────────────────────────────────────
+TEMPLATES_DIR = settings.shared_dir_path / "interview_templates"
+TEMPLATES_DIR.mkdir(parents=True, exist_ok=True)
+
+
+class InterviewTemplate(BaseModel):
+    id: str
+    name: str
+    description: str
+    role: str
+    companies: list[str] = []
+    max_questions: int = 12
+    voice_enabled: bool = False
+    stages: list[dict] = []
+    focus_areas: list[str] = []
+    created_by: str = ""
+    created_at: float = 0
+    is_system: bool = False
+
+
+class CreateTemplateRequest(BaseModel):
+    name: str
+    description: str
+    role: str
+    companies: list[str] = []
+    max_questions: int = 12
+    voice_enabled: bool = False
+    stages: list[dict] = []
+    focus_areas: list[str] = []
+
+
+class ApplyTemplateRequest(BaseModel):
+    template_id: str
+    session_id: str
+    role: str
+    company: str
+    max_questions: int = 12
+    voice_enabled: bool = False
+
+
+def _load_template(template_id: str) -> InterviewTemplate | None:
+    """Load a template from disk."""
+    filepath = TEMPLATES_DIR / f"{template_id}.json"
+    if not filepath.exists():
+        return None
+    try:
+        with open(filepath, encoding="utf-8") as f:
+            data = json.load(f)
+        return InterviewTemplate(**data)
+    except Exception:
+        return None
+
+
+def _save_template(template: InterviewTemplate) -> None:
+    """Save a template to disk."""
+    filepath = TEMPLATES_DIR / f"{template.id}.json"
+    with open(filepath, "w", encoding="utf-8") as f:
+        json.dump(template.model_dump(), f, indent=2)
+
+
+def _list_templates() -> list[InterviewTemplate]:
+    """List all available templates."""
+    templates = []
+    for filepath in TEMPLATES_DIR.glob("*.json"):
+        try:
+            with open(filepath, encoding="utf-8") as f:
+                data = json.load(f)
+            templates.append(InterviewTemplate(**data))
+        except Exception:
+            continue
+    return templates
+
+
+def _create_system_templates() -> None:
+    """Create built-in system templates if they don't exist."""
+    system_templates = [
+        InterviewTemplate(
+            id="google-swe",
+            name="Google Software Engineer",
+            description="Full Google-style interview: system design, coding, behavioral, Googleyness",
+            role="Software Engineer",
+            companies=["Google"],
+            max_questions=14,
+            voice_enabled=True,
+            stages=[
+                {"id": "warmup", "name": "Warmup & Background", "topics": ["Background", "Motivation"], "target_questions": 2},
+                {"id": "coding", "name": "Coding & Algorithms", "topics": ["Data Structures", "Algorithms", "Problem Solving"], "target_questions": 4},
+                {"id": "system_design", "name": "System Design", "topics": ["Scalability", "Distributed Systems", "Trade-offs"], "target_questions": 3},
+                {"id": "behavioral", "name": "Behavioral & Googleyness", "topics": ["Leadership", "Conflict Resolution", "Growth"], "target_questions": 3},
+                {"id": "domain", "name": "Domain Expertise", "topics": ["Specific Role Skills"], "target_questions": 2},
+            ],
+            focus_areas=["System Design", "Coding", "Scalability", "Leadership"],
+            created_by="system",
+            created_at=0,
+            is_system=True,
+        ),
+        InterviewTemplate(
+            id="amazon-sde",
+            name="Amazon SDE (LP Focused)",
+            description="Amazon interview with heavy Leadership Principles focus",
+            role="Software Development Engineer",
+            companies=["Amazon"],
+            max_questions=12,
+            voice_enabled=True,
+            stages=[
+                {"id": "lp_behavioral", "name": "Leadership Principles Deep Dive", "topics": ["Customer Obsession", "Ownership", "Bias for Action", "Dive Deep"], "target_questions": 4},
+                {"id": "coding", "name": "Coding Challenge", "topics": ["Trees/Graphs", "Dynamic Programming", "System Design (Light)"], "target_questions": 3},
+                {"id": "system_design", "name": "System Design", "topics": ["High Availability", "Data Consistency", "Operational Excellence"], "target_questions": 3},
+                {"id": "bar_raiser", "name": "Bar Raiser Round", "topics": ["Hiring Bar", "Mentorship", "Innovation"], "target_questions": 2},
+            ],
+            focus_areas=["Leadership Principles", "Operational Excellence", "Customer Obsession"],
+            created_by="system",
+            created_at=0,
+            is_system=True,
+        ),
+        InterviewTemplate(
+            id="meta-swe",
+            name="Meta Software Engineer",
+            description="Meta interview: coding, system design, behavioral, product sense",
+            role="Software Engineer",
+            companies=["Meta", "Facebook"],
+            max_questions=13,
+            voice_enabled=True,
+            stages=[
+                {"id": "coding_1", "name": "Coding Interview 1", "topics": ["Arrays/Strings", "Two Pointers", "Sliding Window"], "target_questions": 2},
+                {"id": "coding_2", "name": "Coding Interview 2", "topics": ["Trees/Graphs", "Recursion", "Dynamic Programming"], "target_questions": 2},
+                {"id": "system_design", "name": "System Design", "topics": ["Social Systems", "Feed Ranking", "Real-time"], "target_questions": 3},
+                {"id": "behavioral", "name": "Behavioral & Product Sense", "topics": ["Move Fast", "Impact", "Communication"], "target_questions": 3},
+                {"id": "domain", "name": "Domain Round", "topics": ["Role-specific"], "target_questions": 2},
+            ],
+            focus_areas=["Coding", "System Design", "Product Sense", "Impact"],
+            created_by="system",
+            created_at=0,
+            is_system=True,
+        ),
+        InterviewTemplate(
+            id="startup-fullstack",
+            name="Startup Full-Stack Engineer",
+            description="Pragmatic startup interview: shipping features, breadth over depth",
+            role="Full Stack Engineer",
+            companies=[],
+            max_questions=10,
+            voice_enabled=False,
+            stages=[
+                {"id": "experience", "name": "Project Deep Dive", "topics": ["Recent Projects", "Tech Choices", "Trade-offs"], "target_questions": 3},
+                {"id": "coding", "name": "Practical Coding", "topics": ["API Design", "Database", "Frontend Integration"], "target_questions": 3},
+                {"id": "architecture", "name": "Architecture & Decisions", "topics": ["Scaling", "Tech Debt", "Monitoring"], "target_questions": 2},
+                {"id": "culture", "name": "Culture & Ownership", "topics": ["Autonomy", "Learning", "Prioritization"], "target_questions": 2},
+            ],
+            focus_areas=["Shipping", "Pragmatism", "End-to-End Ownership"],
+            created_by="system",
+            created_at=0,
+            is_system=True,
+        ),
+        InterviewTemplate(
+            id="ml-engineer",
+            name="ML Engineer / Data Scientist",
+            description="ML-focused interview: modeling, MLOps, system design for ML",
+            role="ML Engineer",
+            companies=[],
+            max_questions=12,
+            voice_enabled=False,
+            stages=[
+                {"id": "ml_fundamentals", "name": "ML Fundamentals", "topics": ["Supervised/Unsupervised", "Evaluation", "Bias-Variance"], "target_questions": 3},
+                {"id": "ml_system_design", "name": "ML System Design", "topics": ["Training Pipeline", "Serving", "Monitoring", "Feature Stores"], "target_questions": 3},
+                {"id": "coding_ml", "name": "ML Coding", "topics": ["PyTorch/TF", "Data Processing", "Custom Layers"], "target_questions": 2},
+                {"id": "applied", "name": "Applied Experience", "topics": ["Production Models", "A/B Testing", "Drift Detection"], "target_questions": 2},
+                {"id": "behavioral", "name": "Collaboration & Impact", "topics": ["Cross-functional", "Stakeholders", "Research to Prod"], "target_questions": 2},
+            ],
+            focus_areas=["ML Systems", "Production ML", "Model Evaluation"],
+            created_by="system",
+            created_at=0,
+            is_system=True,
+        ),
+        InterviewTemplate(
+            id="devops-sre",
+            name="DevOps / SRE",
+            description="Infrastructure, reliability, and automation focus",
+            role="DevOps Engineer",
+            companies=[],
+            max_questions=11,
+            voice_enabled=False,
+            stages=[
+                {"id": "linux_internals", "name": "Linux & Internals", "topics": ["Kernel", "Networking", "Filesystems", "Performance"], "target_questions": 2},
+                {"id": "cloud_native", "name": "Cloud Native", "topics": ["Kubernetes", "Service Mesh", "Observability", "GitOps"], "target_questions": 3},
+                {"id": "reliability", "name": "Reliability Engineering", "topics": ["SLO/SLI", "Incident Response", "Chaos Engineering", "Capacity Planning"], "target_questions": 3},
+                {"id": "automation", "name": "Automation & Tooling", "topics": ["IaC", "CI/CD", "Scripting", "Developer Experience"], "target_questions": 2},
+                {"id": "behavioral", "name": "Operational Maturity", "topics": ["On-call", "Postmortems", "Communication"], "target_questions": 1},
+            ],
+            focus_areas=["Kubernetes", "Observability", "Reliability", "Automation"],
+            created_by="system",
+            created_at=0,
+            is_system=True,
+        ),
+        InterviewTemplate(
+            id="frontend-specialist",
+            name="Frontend Specialist",
+            description="React, performance, accessibility, and frontend architecture",
+            role="Frontend Engineer",
+            companies=[],
+            max_questions=10,
+            voice_enabled=False,
+            stages=[
+                {"id": "react_deep", "name": "React Internals", "topics": ["Reconciliation", "Hooks", "Suspense", "Server Components"], "target_questions": 2},
+                {"id": "performance", "name": "Performance & Core Web Vitals", "topics": ["Bundle Size", "Rendering", "Caching", "Lazy Loading"], "target_questions": 2},
+                {"id": "architecture", "name": "Frontend Architecture", "topics": ["State Management", "Micro-frontends", "Design Systems", "Testing"], "target_questions": 2},
+                {"id": "coding", "name": "Frontend Coding", "topics": ["Component Design", "Accessibility", "TypeScript", "Animation"], "target_questions": 2},
+                {"id": "collab", "name": "Design & Product Collab", "topics": ["Design Systems", "Figma", "Product Thinking"], "target_questions": 2},
+            ],
+            focus_areas=["React", "Performance", "TypeScript", "Accessibility", "Design Systems"],
+            created_by="system",
+            created_at=0,
+            is_system=True,
+        ),
+        InterviewTemplate(
+            id="backend-specialist",
+            name="Backend Specialist",
+            description="Distributed systems, databases, APIs, and backend architecture",
+            role="Backend Engineer",
+            companies=[],
+            max_questions=11,
+            voice_enabled=False,
+            stages=[
+                {"id": "distributed", "name": "Distributed Systems", "topics": ["Consensus", "Replication", "Sharding", "Consistency Models"], "target_questions": 3},
+                {"id": "databases", "name": "Database Internals", "topics": ["Indexing", "Query Optimization", "Transactions", "NoSQL vs SQL"], "target_questions": 2},
+                {"id": "api_design", "name": "API Design & Architecture", "topics": ["REST/gRPC/GraphQL", "Versioning", "Rate Limiting", "Observability"], "target_questions": 2},
+                {"id": "coding", "name": "Backend Coding", "topics": ["Concurrency", "Caching", "Queue Systems", "Idempotency"], "target_questions": 2},
+                {"id": "operational", "name": "Production Readiness", "topics": ["Migrations", "Deployments", "Debugging", "Cost Optimization"], "target_questions": 2},
+            ],
+            focus_areas=["Distributed Systems", "Databases", "API Design", "Production Ops"],
+            created_by="system",
+            created_at=0,
+            is_system=True,
+        ),
+        InterviewTemplate(
+            id="generic-technical",
+            name="Generic Technical Interview",
+            description="Balanced technical interview for any software engineering role",
+            role="Software Engineer",
+            companies=[],
+            max_questions=10,
+            voice_enabled=False,
+            stages=[
+                {"id": "intro", "name": "Introduction & Background", "topics": ["Experience", "Tech Stack", "Projects"], "target_questions": 2},
+                {"id": "technical_depth", "name": "Technical Depth", "topics": ["Core CS", "Language Internals", "Frameworks"], "target_questions": 3},
+                {"id": "problem_solving", "name": "Problem Solving & Coding", "topics": ["Algorithms", "Data Structures", "Clean Code"], "target_questions": 3},
+                {"id": "system_design", "name": "System Design (Light)", "topics": ["Architecture", "Scaling", "Trade-offs"], "target_questions": 2},
+            ],
+            focus_areas=["Problem Solving", "Technical Depth", "Communication"],
+            created_by="system",
+            created_at=0,
+            is_system=True,
+        ),
+    ]
+    
+    for template in system_templates:
+        filepath = TEMPLATES_DIR / f"{template.id}.json"
+        if not filepath.exists():
+            _save_template(template)
+
+
+# Initialize system templates on module load
+_create_system_templates()
+
 
 @router.post("/admin/upload-questions")
 async def admin_upload_questions(file: UploadFile = File(...), user: dict[str, Any] = Depends(require_admin)):
@@ -1104,3 +1369,174 @@ def admin_list_custom_questions(user: dict[str, Any] = Depends(require_admin)):
         except Exception:
             continue
     return {"questions": result}
+
+
+# ── Interview Templates Endpoints ──────────────────────────────────────────────
+
+@router.get("/templates")
+def list_interview_templates(user: dict[str, Any] = Depends(get_current_user)):
+    """List all available interview templates."""
+    templates = _list_templates()
+    return {
+        "templates": [
+            {
+                "id": t.id,
+                "name": t.name,
+                "description": t.description,
+                "role": t.role,
+                "companies": t.companies,
+                "max_questions": t.max_questions,
+                "voice_enabled": t.voice_enabled,
+                "stage_count": len(t.stages),
+                "focus_areas": t.focus_areas,
+                "is_system": t.is_system,
+            }
+            for t in templates
+        ]
+    }
+
+
+@router.get("/templates/{template_id}")
+def get_interview_template(template_id: str, user: dict[str, Any] = Depends(get_current_user)):
+    """Get a specific interview template."""
+    template = _load_template(template_id)
+    if not template:
+        raise HTTPException(status_code=404, detail="Template not found")
+    return template
+
+
+@router.post("/templates", status_code=201)
+def create_interview_template(
+    request: CreateTemplateRequest,
+    user: dict[str, Any] = Depends(require_recruiter),
+):
+    """Create a custom interview template (recruiter/admin only)."""
+    template_id = f"custom-{uuid.uuid4().hex[:8]}"
+    template = InterviewTemplate(
+        id=template_id,
+        name=request.name,
+        description=request.description,
+        role=request.role,
+        companies=request.companies,
+        max_questions=request.max_questions,
+        voice_enabled=request.voice_enabled,
+        stages=request.stages,
+        focus_areas=request.focus_areas,
+        created_by=user.get("email", ""),
+        created_at=time.time(),
+        is_system=False,
+    )
+    _save_template(template)
+    return template
+
+
+@router.put("/templates/{template_id}")
+def update_interview_template(
+    template_id: str,
+    request: CreateTemplateRequest,
+    user: dict[str, Any] = Depends(require_recruiter),
+):
+    """Update a custom interview template."""
+    template = _load_template(template_id)
+    if not template:
+        raise HTTPException(status_code=404, detail="Template not found")
+    if template.is_system:
+        raise HTTPException(status_code=403, detail="Cannot modify system templates")
+    if template.created_by != user.get("email", "") and user.get("role") != "admin":
+        raise HTTPException(status_code=403, detail="Can only edit your own templates")
+    
+    template.name = request.name
+    template.description = request.description
+    template.role = request.role
+    template.companies = request.companies
+    template.max_questions = request.max_questions
+    template.voice_enabled = request.voice_enabled
+    template.stages = request.stages
+    template.focus_areas = request.focus_areas
+    _save_template(template)
+    return template
+
+
+@router.delete("/templates/{template_id}")
+def delete_interview_template(
+    template_id: str,
+    user: dict[str, Any] = Depends(require_recruiter),
+):
+    """Delete a custom interview template."""
+    template = _load_template(template_id)
+    if not template:
+        raise HTTPException(status_code=404, detail="Template not found")
+    if template.is_system:
+        raise HTTPException(status_code=403, detail="Cannot delete system templates")
+    if template.created_by != user.get("email", "") and user.get("role") != "admin":
+        raise HTTPException(status_code=403, detail="Can only delete your own templates")
+    
+    filepath = TEMPLATES_DIR / f"{template_id}.json"
+    filepath.unlink(missing_ok=True)
+    return {"ok": True, "message": "Template deleted"}
+
+
+@router.post("/templates/{template_id}/apply")
+def apply_interview_template(
+    template_id: str,
+    request: ApplyTemplateRequest,
+    user: dict[str, Any] = Depends(get_current_user),
+):
+    """Apply a template to create an interview session."""
+    template = _load_template(template_id)
+    if not template:
+        raise HTTPException(status_code=404, detail="Template not found")
+    
+    # Create session with template settings
+    session_id = str(uuid.uuid4())
+    
+    # Build interview plan from template stages
+    stages = []
+    for i, stage in enumerate(template.stages):
+        stages.append({
+            "id": stage.get("id", f"stage_{i}"),
+            "name": stage.get("name", f"Stage {i+1}"),
+            "description": stage.get("description", ""),
+            "topics": stage.get("topics", []),
+            "target_questions": stage.get("target_questions", 2),
+            "completed": False,
+        })
+    
+    interview_plan = {
+        "stages": stages,
+        "total_questions": template.max_questions,
+        "focus_areas": template.focus_areas,
+        "opening_strategy": f"Start with {stages[0]['name'] if stages else 'introduction'}",
+        "closing_strategy": "Wrap up with behavioral questions",
+        "estimated_duration_minutes": template.max_questions * 4,
+    }
+    
+    state = {
+        "sessionId": session_id,
+        "user_id": user.get("email", ""),
+        "resume": {"name": "", "skills": []},
+        "selectedCompany": request.company,
+        "selectedCompanies": template.companies if template.companies else [request.company],
+        "currentRound": "ai_interview",
+        "currentQuestion": 0,
+        "answers": {},
+        "codingSubmissions": [],
+        "scores": default_scores(),
+        "ai_interview_plan": interview_plan,
+        "ai_interview_role": request.role,
+        "ai_interview_max_questions": template.max_questions,
+        "ai_interview_voice_enabled": template.voice_enabled,
+    }
+    
+    save_session(session_id, state, user_id=user.get("email", ""))
+    
+    return {
+        "session_id": session_id,
+        "template": {
+            "id": template.id,
+            "name": template.name,
+            "role": template.role,
+        },
+        "interview_plan": interview_plan,
+        "message": "Template applied. Start interview via /ai-interview/start",
+    }
