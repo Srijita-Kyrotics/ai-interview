@@ -270,7 +270,7 @@ export default function App() {
   if (location.pathname === '/' || location.pathname === '/technical' || location.pathname === '/interview') {
     return (
       <ToastProvider>
-        <AiInterviewRoute state={state} setState={setState} user={user || { name: 'Candidate', token: '' }} proctoring={proctoring} setProctoring={setProctoring} />
+        <AiInterviewRoute state={state} setState={setState} user={user || { name: 'Candidate', token: '' }} proctoring={proctoring} setProctoring={setProctoring} proctoringEnabled={false} />
       </ToastProvider>
     )
   }

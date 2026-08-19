@@ -79,7 +79,7 @@ function inferRoleFromResume(resume) {
   return bestRole;
 }
 
-export default function AIInterviewer({ sessionId, token, role, company, resume, onComplete, proctoring, setProctoring }) {
+export default function AIInterviewer({ sessionId, token, role, company, resume, onComplete, proctoring, setProctoring, proctoringEnabled = true }) {
   const navigate = useNavigate();
 
   // ── State ───────────────────────────────────────────────────────────
@@ -160,7 +160,7 @@ export default function AIInterviewer({ sessionId, token, role, company, resume,
   // Camera-based video proctoring is enabled for the Obi round. The camera is
   // optional (requested gracefully): if it is denied, tab-switch / fullscreen /
   // devtools checks still run and face detection simply stays off.
-  const proctoringEnabled = true;
+  const isProctoringEnabled = proctoringEnabled;
 
   // The proctoring hook terminates the interview on the 3rd warning. Route
   // that through phase so the UI stops, the WS closes and we never keep
@@ -202,7 +202,7 @@ export default function AIInterviewer({ sessionId, token, role, company, resume,
   }, []);
 
   const proctor = useAssessmentProctoring({
-    active: proctoringEnabled && (
+    active: isProctoringEnabled && (
       phase === 'interviewing' || phase === 'opening' || phase === 'initializing'
     ),
     round: 'technical',
@@ -1239,7 +1239,7 @@ export default function AIInterviewer({ sessionId, token, role, company, resume,
           )}
 
           {/* Candidate webcam feed card — top right header placement */}
-          <CandidateWebcamCard videoRef={videoRef} userStream={userStream} proctoringActive={proctoringEnabled} />
+          <CandidateWebcamCard videoRef={videoRef} userStream={userStream} proctoringActive={isProctoringEnabled} />
 
           <button
             className="aii-end-btn"
