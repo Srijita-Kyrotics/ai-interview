@@ -869,6 +869,134 @@ def admin_stats(user: dict[str, Any] = Depends(require_recruiter)):
     }
 
 
+@router.get("/admin/benchmark")
+def admin_benchmark(user: dict[str, Any] = Depends(require_recruiter)):
+    """
+    Get platform-wide benchmark data for candidate comparison.
+    
+    Returns percentile distributions and median scores across dimensions.
+    """
+    sessions = get_all_sessions()
+    
+    # Collect all scores from completed sessions
+    score_data = {
+        "overall": [],
+        "technical": [],
+        "communication": [],
+        "problem_solving": [],
+        "system_design": [],
+        "coding": [],
+        "behavioral": [],
+    }
+    
+    for s in sessions:
+        # Check AI interview data first
+        ai_interview = s.get("aiInterview", {})
+        if ai_interview:
+            for interview_id, interview_data in ai_interview.items():
+                scores = interview_data.get("scores", {})
+                if scores:
+                    score_data["overall"].append(scores.get("overall_score", 0))
+                    score_data["technical"].append(scores.get("technical_score", 0))
+                    score_data["communication"].append(scores.get("communication_score", 0))
+                    score_data["problem_solving"].append(scores.get("problem_solving_score", 0))
+                    score_data["system_design"].append(scores.get("system_design_score", 0))
+                    score_data["coding"].append(scores.get("coding_score", 0))
+                    score_data["behavioral"].append(scores.get("behavioral_score", 0))
+        
+        # Fallback to platform scores
+        scores = s.get("scores", {})
+        if scores:
+            overall = round(sum(scores.values()) / len(scores))
+            score_data["overall"].append(overall)
+            # Distribute the overall score to dimensions as estimates
+            score_data["technical"].append(scores.get("technical", overall))
+            score_data["communication"].append(scores.get("communication", overall))
+            score_data["problem_solving"].append(scores.get("problem_solving", overall))
+    
+    def calculate_stats(values):
+        if not values:
+            return {
+                "count": 0,
+                "median": 0,
+                "mean": 0,
+                "std": 0,
+                "min": 0,
+                "max": 0,
+                "p25": 0,
+                "p50": 0,
+                "p75": 0,
+                "p90": 0,
+                "p95": 0,
+                "percentiles": [],
+            }
+        
+        sorted_vals = sorted(values)
+        n = len(sorted_vals)
+        
+        def percentile(p):
+            idx = int(p / 100 * (n - 1))
+            return sorted_vals[idx]
+        
+        return {
+            "count": n,
+            "median": round(sum(values) / n),
+            "mean": round(sum(values) / n),
+            "std": round((sum((x - sum(values)/n)**2 for x in values) / n)**0.5),
+            "min": sorted_vals[0],
+            "max": sorted_vals[-1],
+            "p25": percentile(25),
+            "p50": percentile(50),
+            "p75": percentile(75),
+            "p90": percentile(90),
+            "p95": percentile(95),
+            "percentiles": sorted_vals,  # For calculating candidate percentiles
+        }
+    
+    benchmark = {}
+    for dim, vals in score_data.items():
+        benchmark[f"{dim}_stats"] = calculate_stats(vals)
+    
+    # Flatten for easier frontend consumption
+    result = {
+        "total_sessions_analyzed": len([s for s in sessions if s.get("scores") or s.get("aiInterview")]),
+        "median_overall": benchmark.get("overall_stats", {}).get("median", 0),
+        "median_technical": benchmark.get("technical_stats", {}).get("median", 0),
+        "median_communication": benchmark.get("communication_stats", {}).get("median", 0),
+        "median_problem_solving": benchmark.get("problem_solving_stats", {}).get("median", 0),
+        "median_system_design": benchmark.get("system_design_stats", {}).get("median", 0),
+        "median_coding": benchmark.get("coding_stats", {}).get("median", 0),
+        "median_behavioral": benchmark.get("behavioral_stats", {}).get("median", 0),
+        "p75_overall": benchmark.get("overall_stats", {}).get("p75", 0),
+        "p90_overall": benchmark.get("overall_stats", {}).get("p90", 0),
+        "p95_overall": benchmark.get("overall_stats", {}).get("p95", 0),
+        "p75_technical": benchmark.get("technical_stats", {}).get("p75", 0),
+        "p90_technical": benchmark.get("technical_stats", {}).get("p90", 0),
+        "percentiles": {
+            "overall": benchmark.get("overall_stats", {}).get("percentiles", []),
+            "technical": benchmark.get("technical_stats", {}).get("percentiles", []),
+            "communication": benchmark.get("communication_stats", {}).get("percentiles", []),
+            "problem_solving": benchmark.get("problem_solving_stats", {}).get("percentiles", []),
+        },
+        "distributions": {
+            dim: {
+                "count": stats["count"],
+                "buckets": {
+                    "0-40": len([v for v in vals if v < 40]),
+                    "40-60": len([v for v in vals if 40 <= v < 60]),
+                    "60-75": len([v for v in vals if 60 <= v < 75]),
+                    "75-90": len([v for v in vals if 75 <= v < 90]),
+                    "90-100": len([v for v in vals if v >= 90]),
+                }
+            }
+            for dim, vals in score_data.items()
+            for stats in [benchmark.get(f"{dim}_stats", {})]
+        },
+    }
+    
+    return {"benchmark": result}
+
+
 @router.post("/admin/update-role")
 def admin_update_role(payload: UpdateRoleRequest, user: dict[str, Any] = Depends(require_admin)):
     if not _check_rate_limit(f"admin:{user['email']}", settings.admin_rate_limit, settings.admin_rate_window):

@@ -5,7 +5,7 @@ from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import JSONResponse
+from fastapi.responses import JSONResponse, Response
 from pythonjsonlogger import json as json_logger
 
 from app.ai_interviewer.router import router as ai_interviewer_router
@@ -21,6 +21,12 @@ from app.db import (
     migrate_accounts_json,
 )
 from app.helpers import create_token, decode_token, default_scores
+from app.observability import (
+    ObservabilityMiddleware,
+    configure_logging,
+    get_health_status,
+    get_metrics,
+)
 from app.session_routes import router as session_router
 from app.session_routes import score_open_round
 
@@ -90,6 +96,9 @@ app.include_router(ai_interviewer_router)
 app.include_router(auth_router)
 app.include_router(session_router)
 
+# Add observability middleware (must be first to capture all requests)
+app.add_middleware(ObservabilityMiddleware)
+
 app.add_middleware(
     CORSMiddleware,
     allow_origins=settings.cors_origins,
@@ -119,7 +128,7 @@ async def add_security_headers(request, call_next):
 
 
 @app.get("/health")
-def health_check():
+async def health_check():
     db_ok = check_db_health()
     redis_ok = False
     state_store = "unavailable"
@@ -144,3 +153,17 @@ def health_check():
             "environment": settings.environment,
         },
     )
+
+
+@app.get("/health/detailed")
+async def health_detailed():
+    """Detailed health check with system metrics."""
+    health = await get_health_status()
+    health["database"] = "ok" if check_db_health() else "unreachable"
+    return health
+
+
+@app.get("/metrics")
+async def metrics():
+    """Prometheus metrics endpoint."""
+    return Response(content=await get_metrics(), media_type="text/plain")

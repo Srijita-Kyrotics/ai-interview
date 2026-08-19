@@ -96,6 +96,95 @@ def clean_text_for_speech(text: str) -> str:
     return cleaned.strip()
 
 
+# ── Multi-Language Support ──────────────────────────────────────────────────────
+
+# Language codes mapping for different providers
+LANGUAGE_MAP = {
+    "en": {"deepgram": "en-US", "whisper": "en", "elevenlabs": "en-US", "openai": "en"},
+    "es": {"deepgram": "es", "whisper": "es", "elevenlabs": "es", "openai": "es"},
+    "fr": {"deepgram": "fr", "whisper": "fr", "elevenlabs": "fr", "openai": "fr"},
+    "de": {"deepgram": "de", "whisper": "de", "elevenlabs": "de", "openai": "de"},
+    "it": {"deepgram": "it", "whisper": "it", "elevenlabs": "it", "openai": "it"},
+    "pt": {"deepgram": "pt", "whisper": "pt", "elevenlabs": "pt", "openai": "pt"},
+    "hi": {"deepgram": "hi", "whisper": "hi", "elevenlabs": "hi", "openai": "hi"},
+    "ja": {"deepgram": "ja", "whisper": "ja", "elevenlabs": "ja", "openai": "ja"},
+    "ko": {"deepgram": "ko", "whisper": "ko", "elevenlabs": "ko", "openai": "ko"},
+    "zh": {"deepgram": "zh", "whisper": "zh", "elevenlabs": "zh", "openai": "zh"},
+}
+
+# ElevenLabs multilingual voices (v2.5 supports 28+ languages)
+ELEVENLABS_VOICES = {
+    "en-US": {"male": "pNInz6obpgDQGcFmaJgB", "female": "21m00Tcm4TlvDq8ikWAM"},  # Adam, Rachel
+    "es": {"male": "ErXwobaYiN019PkySvjV", "female": "AZnzlk1XvdvUeBnXmlld"},
+    "fr": {"male": "VR6AewLTigWG4xSOukaG", "female": "pMsXgVXv3BLzUgSXRzdE"},
+    "de": {"male": "MF3mGyEYCl7XYWbV9V6O", "female": "EXAVITQu4vr4xnSDxMaL"},
+    "it": {"male": "zcAOhNBS3c14rBihAFp1", "female": "eKpK1MX9V4pP3y1Dn30S"},
+    "pt": {"male": "TxGEqnHWrfWFTfGW9XjX", "female": "GBvfxmT1sQBllAIe52uv"},
+    "hi": {"male": "iP95p4xoKVk53GoZ742B", "female": "jBpfuIE2acCO8z3wKNLl"},
+    "ja": {"male": "cgSgspJ2msm6clMCkdW9", "female": "fYdN0eO5P5mV7Z4kL2jD"},
+    "ko": {"male": "bVMeCyTHy58xNoL34h3p", "female": "ZF6FPAbjXT4488Vc0Rww"},
+    "zh": {"male": "zrHiDhphv9ZnVXBqCLjz", "female": "Xb7hH8MSUJpSbSDYk0k2"},
+}
+
+# OpenAI TTS voices
+OPENAI_VOICES = {
+    "en": {"male": "echo", "female": "nova"},
+    "es": {"male": "onyx", "female": "nova"},
+    "fr": {"male": "onyx", "female": "nova"},
+    "de": {"male": "onyx", "female": "nova"},
+    "it": {"male": "onyx", "female": "nova"},
+    "pt": {"male": "onyx", "female": "nova"},
+    "hi": {"male": "onyx", "female": "nova"},
+    "ja": {"male": "onyx", "female": "nova"},
+    "ko": {"male": "onyx", "female": "nova"},
+    "zh": {"male": "onyx", "female": "nova"},
+}
+
+
+def get_supported_languages() -> list[dict]:
+    """Get list of supported languages with their codes and native names."""
+    return [
+        {"code": "en", "name": "English", "native": "English"},
+        {"code": "es", "name": "Spanish", "native": "Español"},
+        {"code": "fr", "name": "French", "native": "Français"},
+        {"code": "de", "name": "German", "native": "Deutsch"},
+        {"code": "it", "name": "Italian", "native": "Italiano"},
+        {"code": "pt", "name": "Portuguese", "native": "Português"},
+        {"code": "hi", "name": "Hindi", "native": "हिन्दी"},
+        {"code": "ja", "name": "Japanese", "native": "日本語"},
+        {"code": "ko", "name": "Korean", "native": "한국어"},
+        {"code": "zh", "name": "Chinese", "native": "中文"},
+    ]
+
+
+async def detect_language(audio_bytes: bytes) -> str:
+    """
+    Detect the language from audio bytes.
+    
+    Uses a simple heuristic - in production, you'd use a dedicated
+    language identification model like fastText or Whisper's built-in
+    language detection.
+    
+    For now, returns the default language.
+    """
+    # TODO: Implement actual language detection
+    # Could use whisper-large-v3's language detection
+    return "en-US"
+
+
+def get_voice_for_language(language: str, gender: str = "male", provider: str = "elevenlabs") -> str:
+    """Get the appropriate voice ID for a language and provider."""
+    lang_code = language.split("-")[0]  # Extract base language code
+    
+    if provider == "elevenlabs":
+        voices = ELEVENLABS_VOICES.get(lang_code, ELEVENLABS_VOICES.get("en-US", {}))
+        return voices.get(gender, ELEVENLABS_VOICES["en-US"][gender])
+    elif provider == "openai":
+        voices = OPENAI_VOICES.get(lang_code, OPENAI_VOICES.get("en", {}))
+        return voices.get(gender, OPENAI_VOICES["en"][gender])
+    return ELEVENLABS_VOICES["en-US"][gender]
+
+
 # ── STT: Deepgram ──────────────────────────────────────────────────────────────
 
 class DeepgramSTT:
@@ -108,19 +197,20 @@ class DeepgramSTT:
 
     BASE_URL = "wss://api.deepgram.com/v1/listen"
 
-    def __init__(self, api_key: str):
+    def __init__(self, api_key: str, language: str = "en-US"):
         self.api_key = api_key
+        self.language = language
         self.ws = None
 
     @classmethod
-    def from_settings(cls) -> DeepgramSTT:
+    def from_settings(cls, language: str = "en-US") -> DeepgramSTT:
         api_key = getattr(settings, "deepgram_api_key", "")
-        return cls(api_key=api_key)
+        return cls(api_key=api_key, language=language)
 
     def get_ws_url(self) -> str:
         params = (
-            "model=nova-3"
-            "&language=en-US"
+            f"model=nova-3"
+            f"&language={self.language}"
             "&smart_format=true"
             "&punctuate=true"
             "&endpointing=800"  # 800ms silence = end of utterance
@@ -129,7 +219,11 @@ class DeepgramSTT:
         )
         return f"{self.BASE_URL}?{params}"
 
-    async def transcribe_audio_bytes(self, audio_bytes: bytes) -> str:
+    def set_language(self, language: str) -> None:
+        """Change the transcription language."""
+        self.language = language
+
+    async def transcribe_audio_bytes(self, audio_bytes: bytes, language: str | None = None) -> str:
         """
         Send raw audio bytes to Deepgram REST API (for non-streaming usage).
         Returns the transcribed text.
@@ -138,10 +232,11 @@ class DeepgramSTT:
             logger.warning("Deepgram API key not configured, using fallback")
             return ""
 
+        lang = language or self.language
         client = _shared_client(10.0)
         try:
             response = await client.post(
-                "https://api.deepgram.com/v1/listen?model=nova-3&smart_format=true&punctuate=true",
+                f"https://api.deepgram.com/v1/listen?model=nova-3&smart_format=true&punctuate=true&language={lang}",
                 headers={
                     "Authorization": f"Token {self.api_key}",
                     "Content-Type": "audio/webm",
@@ -157,7 +252,7 @@ class DeepgramSTT:
                     return alternatives[0].get("transcript", "").strip()
             return ""
         except Exception as e:
-            logger.error("Deepgram transcription failed", extra={"error": str(e)})
+            logger.error("Deepgram transcription failed", extra={"error": str(e), "language": lang})
             return ""
 
 
@@ -180,7 +275,7 @@ class WhisperSTT:
             openai_api_key=getattr(settings, "openai_api_key", ""),
         )
 
-    async def transcribe_audio_bytes(self, audio_bytes: bytes, filename: str = "audio.webm") -> str:
+    async def transcribe_audio_bytes(self, audio_bytes: bytes, filename: str = "audio.webm", language: str = "en") -> str:
         """Transcribe audio bytes using Groq Whisper API."""
         api_key = self.groq_api_key or self.openai_api_key
         if not api_key:
@@ -198,7 +293,7 @@ class WhisperSTT:
             files = {
                 "file": (filename, io.BytesIO(audio_bytes), "audio/webm"),
                 "model": (None, "whisper-large-v3-turbo"),
-                "language": (None, "en"),
+                "language": (None, language),
                 "response_format": (None, "json"),
             }
             response = await client.post(
@@ -209,7 +304,7 @@ class WhisperSTT:
             response.raise_for_status()
             return response.json().get("text", "").strip()
         except Exception as e:
-            logger.error("Whisper transcription failed", extra={"error": str(e)})
+            logger.error("Whisper transcription failed", extra={"error": str(e), "language": language})
             return ""
 
 
@@ -220,22 +315,32 @@ class ElevenLabsTTS:
     ElevenLabs Turbo v2.5 text-to-speech.
 
     Uses the "eleven_turbo_v2_5" model for lowest latency.
-    Voice: "Jack" persona mapped to Adam (deep, professional male voice).
+    Supports multilingual voices for 28+ languages.
     """
 
     BASE_URL = "https://api.elevenlabs.io/v1"
-    DEFAULT_VOICE_ID = "pNInz6obpgDQGcFmaJgB"  # Adam - professional male voice
+    DEFAULT_VOICE_ID = "pNInz6obpgDQGcFmaJgB"  # Adam - professional male voice (English)
 
-    def __init__(self, api_key: str, voice_id: str = ""):
+    def __init__(self, api_key: str, voice_id: str = "", language: str = "en-US", gender: str = "male"):
         self.api_key = api_key
-        self.voice_id = voice_id or self.DEFAULT_VOICE_ID
+        self.voice_id = voice_id or get_voice_for_language(language, gender, "elevenlabs")
+        self.language = language
+        self.gender = gender
 
     @classmethod
-    def from_settings(cls) -> ElevenLabsTTS:
+    def from_settings(cls, language: str = "en-US", gender: str = "male") -> ElevenLabsTTS:
         return cls(
             api_key=getattr(settings, "elevenlabs_api_key", ""),
             voice_id=getattr(settings, "elevenlabs_voice_id", ""),
+            language=language,
+            gender=gender,
         )
+
+    def set_voice(self, language: str, gender: str = "male") -> None:
+        """Change the voice for a different language."""
+        self.language = language
+        self.gender = gender
+        self.voice_id = get_voice_for_language(language, gender, "elevenlabs")
 
     async def synthesize(self, text: str) -> bytes:
         """
@@ -251,7 +356,7 @@ class ElevenLabsTTS:
 
         payload = {
             "text": text,
-            "model_id": "eleven_turbo_v2_5",
+            "model_id": "eleven_multilingual_v2",  # Supports 28+ languages
             "voice_settings": {
                 "stability": 0.5,
                 "similarity_boost": 0.8,
@@ -278,11 +383,11 @@ class ElevenLabsTTS:
             latency_ms = int((time.time() - t0) * 1000)
             logger.info(
                 "ElevenLabs TTS synthesized",
-                extra={"chars": len(text), "bytes": len(audio_bytes), "latency_ms": latency_ms}
+                extra={"chars": len(text), "bytes": len(audio_bytes), "latency_ms": latency_ms, "language": self.language, "voice": self.voice_id}
             )
             return audio_bytes
         except Exception as e:
-            logger.error("ElevenLabs TTS failed", extra={"error": str(e)})
+            logger.error("ElevenLabs TTS failed", extra={"error": str(e), "language": self.language})
             return b""
 
     async def synthesize_streaming(self, text: str) -> AsyncIterator[bytes]:
@@ -296,7 +401,7 @@ class ElevenLabsTTS:
         url = f"{self.BASE_URL}/text-to-speech/{self.voice_id}/stream"
         payload = {
             "text": text,
-            "model_id": "eleven_turbo_v2_5",
+            "model_id": "eleven_multilingual_v2",
             "voice_settings": {"stability": 0.5, "similarity_boost": 0.8},
         }
 
@@ -313,19 +418,31 @@ class ElevenLabsTTS:
 
 # ── TTS: OpenAI (Fallback) ────────────────────────────────────────────────────
 
+# ── TTS: OpenAI (Fallback) ──────────────────────────────────────────────────────
+
 class OpenAITTS:
     """
     OpenAI TTS API as fallback.
-    Uses "echo" (male voice) with tts-1 model.
+    Supports multiple languages with tts-1 model.
     """
 
-    def __init__(self, api_key: str, voice: str = "echo"):
+    def __init__(self, api_key: str, voice: str = "echo", language: str = "en"):
         self.api_key = api_key
-        self.voice = getattr(settings, "openai_tts_voice", "") or voice
+        self.voice = voice or get_voice_for_language(language, "male", "openai")
+        self.language = language
 
     @classmethod
-    def from_settings(cls) -> OpenAITTS:
-        return cls(api_key=getattr(settings, "openai_api_key", ""))
+    def from_settings(cls, language: str = "en", voice: str = "") -> OpenAITTS:
+        return cls(
+            api_key=getattr(settings, "openai_api_key", ""),
+            voice=voice or getattr(settings, "openai_tts_voice", ""),
+            language=language,
+        )
+
+    def set_voice(self, language: str, gender: str = "male") -> None:
+        """Change the voice for a different language."""
+        self.language = language
+        self.voice = get_voice_for_language(language, gender, "openai")
 
     async def synthesize(self, text: str) -> bytes:
         if not self.api_key:
@@ -349,76 +466,107 @@ class OpenAITTS:
             response.raise_for_status()
             return response.content
         except Exception as e:
-            logger.error("OpenAI TTS failed", extra={"error": str(e)})
+            logger.error("OpenAI TTS failed", extra={"error": str(e), "language": self.language})
             return b""
 
 
 # ── Voice Pipeline Orchestrator ────────────────────────────────────────────────
-
+ 
 class VoicePipeline:
     """
     Orchestrates the full voice interview pipeline:
     Audio → STT → Interview Agent → TTS → Audio
-
+ 
     Handles:
     - STT provider selection with fallback
     - TTS provider selection with fallback
+    - Multi-language support with language detection
     - Latency tracking
     - Silence detection and VAD signals
     - Audio format normalization
     """
-
+ 
     def __init__(
         self,
         stt: DeepgramSTT | WhisperSTT,
         tts: ElevenLabsTTS | OpenAITTS,
         on_transcript: Callable[[str], None] | None = None,
+        language: str = "en-US",
+        gender: str = "male",
     ):
         self.stt = stt
         self.tts = tts
         self.on_transcript = on_transcript
+        self.language = language
+        self.gender = gender
         self._total_latency_ms: list[int] = []
-
+ 
     @classmethod
-    def from_settings(cls) -> VoicePipeline:
+    def from_settings(cls, language: str = "en-US", gender: str = "male") -> VoicePipeline:
         """Create pipeline with best available providers.
-
+ 
         STT priority: Deepgram → Groq/OpenAI Whisper.
         TTS priority: ElevenLabs → OpenAI.
         """
         # STT: Deepgram first, then Groq/OpenAI Whisper.
         deepgram_key = getattr(settings, "deepgram_api_key", "")
         if deepgram_key:
-            stt = DeepgramSTT(api_key=deepgram_key)
-            logger.info("Voice pipeline: using Deepgram STT")
+            stt = DeepgramSTT.from_settings(language=language)
+            logger.info("Voice pipeline: using Deepgram STT", extra={"language": language})
         else:
+            whisper_lang = language.split("-")[0]
             stt = WhisperSTT.from_settings()
-            logger.info("Voice pipeline: using Whisper STT (fallback)")
-
+            logger.info("Voice pipeline: using Whisper STT (fallback)", extra={"language": whisper_lang})
+ 
         # TTS: ElevenLabs first, then OpenAI.
         el_key = getattr(settings, "elevenlabs_api_key", "")
         if el_key:
-            tts = ElevenLabsTTS.from_settings()
-            logger.info("Voice pipeline: using ElevenLabs TTS")
+            tts = ElevenLabsTTS.from_settings(language=language, gender=gender)
+            logger.info("Voice pipeline: using ElevenLabs TTS", extra={"language": language, "gender": gender})
         else:
-            tts = OpenAITTS.from_settings()
-            logger.info("Voice pipeline: using OpenAI TTS (fallback)")
-
-        return cls(stt=stt, tts=tts)
-
+            openai_lang = language.split("-")[0]
+            tts = OpenAITTS.from_settings(language=openai_lang)
+            logger.info("Voice pipeline: using OpenAI TTS (fallback)", extra={"language": openai_lang})
+ 
+        return cls(stt=stt, tts=tts, language=language, gender=gender)
+ 
+    def set_language(self, language: str, gender: str | None = None) -> None:
+        """Change the pipeline language."""
+        self.language = language
+        if gender:
+            self.gender = gender
+        
+        # Update STT language
+        if isinstance(self.stt, DeepgramSTT):
+            self.stt.set_language(language)
+        
+        # Update TTS voice
+        if isinstance(self.tts, ElevenLabsTTS):
+            self.tts.set_voice(language, gender or self.gender)
+        elif isinstance(self.tts, OpenAITTS):
+            self.tts.set_voice(language, gender or self.gender)
+ 
     async def audio_to_text(self, audio_bytes: bytes) -> str:
         """
         Convert audio bytes to text transcript.
         Returns empty string if transcription fails.
         """
         t0 = time.time()
-        text = await self.stt.transcribe_audio_bytes(audio_bytes)
+        # Pass language to STT
+        if isinstance(self.stt, DeepgramSTT):
+            text = await self.stt.transcribe_audio_bytes(audio_bytes, language=self.language)
+        elif isinstance(self.stt, WhisperSTT):
+            whisper_lang = self.language.split("-")[0]
+            text = await self.stt.transcribe_audio_bytes(audio_bytes, language=whisper_lang)
+        else:
+            text = await self.stt.transcribe_audio_bytes(audio_bytes)
+        
         latency_ms = int((time.time() - t0) * 1000)
-        logger.info("STT completed", extra={"latency_ms": latency_ms, "text_len": len(text)})
-
+        logger.info("STT completed", extra={"latency_ms": latency_ms, "text_len": len(text), "language": self.language})
+ 
         if self.on_transcript and text:
             self.on_transcript(text)
-
+ 
         return text
 
     async def text_to_audio(self, text: str) -> bytes:

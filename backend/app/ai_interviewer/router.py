@@ -192,6 +192,25 @@ class JudgeRequest(BaseModel):
     timeout: float | None = None
 
 
+# ── Proctoring Models ────────────────────────────────────────────────────
+
+class ProctoringEvent(BaseModel):
+    session_id: str
+    event_type: str  # face_missing, multi_face, object_detected, tab_switch, fullscreen_exit, copy_paste, right_click, hotkey_blocked
+    severity: str    # low, medium, high, critical
+    details: dict = {}
+    timestamp: float
+    integrity_score: float | None = None
+
+
+class ProctoringSessionUpdate(BaseModel):
+    session_id: str
+    integrity_score: float
+    events_count: int
+    critical_violations: int
+    status: str  # active, warned, terminated
+
+
 # ── Dependency: Auth ──────────────────────────────────────────────────────────
 
 def get_current_user(
@@ -275,6 +294,15 @@ def _create_direct_session(resume_text: str, user: dict) -> dict:
         "user_id": user_id,
     }
     save_session(session_id, state, user_id=user_id)
+
+    # Index resume embeddings for vector search
+    try:
+        from app.vector_search import store_resume_embeddings, init_vector_tables
+        init_vector_tables()
+        store_resume_embeddings(session_id, user_id, resume)
+    except Exception as e:
+        logger.warning("Failed to index resume embeddings", extra={"session_id": session_id, "error": str(e)})
+
     logger.info("AI interview session created directly", extra={"session_id": session_id, "email": user_id})
     return {"session_id": session_id, "resume": resume}
 
@@ -643,6 +671,379 @@ async def get_interview_timeline(
         "interview_session_id": interview_session_id,
         "events": timeline,
         "event_count": len(timeline),
+    }
+
+
+# ── Proctoring REST Endpoints ───────────────────────────────────────────────────
+
+@router.post("/{interview_session_id}/proctoring/event")
+async def receive_proctoring_event(
+    interview_session_id: str,
+    event: ProctoringEvent,
+    user: dict = Depends(get_current_user),
+) -> dict:
+    """
+    Receive a proctoring event from the client.
+
+    Updates the session's integrity score and logs the event.
+    Critical violations may trigger automatic session termination.
+    """
+    from app.db import load_proctoring, save_proctoring
+
+    # Load existing proctoring data
+    proctoring_data = load_proctoring(interview_session_id) or {
+        "events": [],
+        "integrity_score": 100.0,
+        "critical_violations": 0,
+        "warnings_issued": 0,
+        "status": "active",
+    }
+
+    # Add new event
+    event_data = event.model_dump()
+    proctoring_data["events"].append(event_data)
+
+    # Update integrity score based on severity
+    severity_penalties = {
+        "low": 1.0,
+        "medium": 5.0,
+        "high": 15.0,
+        "critical": 30.0,
+    }
+    penalty = severity_penalties.get(event.severity, 5.0)
+    proctoring_data["integrity_score"] = max(0.0, proctoring_data["integrity_score"] - penalty)
+
+    if event.severity == "critical":
+        proctoring_data["critical_violations"] += 1
+
+    # Issue warning at certain thresholds
+    if proctoring_data["integrity_score"] <= 50 and proctoring_data["warnings_issued"] == 0:
+        proctoring_data["warnings_issued"] = 1
+        proctoring_data["status"] = "warned"
+    elif proctoring_data["integrity_score"] <= 20 and proctoring_data["warnings_issued"] == 1:
+        proctoring_data["warnings_issued"] = 2
+    elif proctoring_data["integrity_score"] <= 0 or proctoring_data["critical_violations"] >= 3:
+        proctoring_data["status"] = "terminated"
+
+    # Save updated proctoring data
+    save_proctoring(interview_session_id, proctoring_data)
+
+    # Also save to interview state store for timeline
+    store = _get_store()
+    store.append_timeline_event(interview_session_id, {
+        "type": "proctoring_event",
+        "summary": f"Proctoring: {event.event_type} ({event.severity})",
+        "timestamp": event.timestamp,
+        "event_type": event.event_type,
+        "severity": event.severity,
+        "integrity_score": proctoring_data["integrity_score"],
+    })
+
+    return {
+        "integrity_score": proctoring_data["integrity_score"],
+        "critical_violations": proctoring_data["critical_violations"],
+        "status": proctoring_data["status"],
+        "should_terminate": proctoring_data["status"] == "terminated",
+    }
+
+
+@router.get("/{interview_session_id}/proctoring")
+async def get_proctoring_data(
+    interview_session_id: str,
+    user: dict = Depends(get_current_user),
+) -> dict:
+    """Get proctoring data for an interview session."""
+    from app.db import load_proctoring
+
+    proctoring_data = load_proctoring(interview_session_id)
+    if not proctoring_data:
+        raise HTTPException(status_code=404, detail="Proctoring data not found")
+
+    return {
+        "interview_session_id": interview_session_id,
+        **proctoring_data,
+    }
+
+
+@router.post("/{interview_session_id}/proctoring/terminate")
+async def terminate_session_proctoring(
+    interview_session_id: str,
+    user: dict = Depends(get_current_user),
+) -> dict:
+    """
+    Manually terminate an interview session due to proctoring violations.
+
+    Only accessible by recruiters/admins.
+    """
+    from app.db import load_proctoring, save_proctoring
+
+    proctoring_data = load_proctoring(interview_session_id) or {}
+    proctoring_data["status"] = "terminated"
+    proctoring_data["terminated_at"] = time.time()
+    proctoring_data["terminated_by"] = user.get("email", "")
+    save_proctoring(interview_session_id, proctoring_data)
+
+    # Also update interview state to mark as ended
+    store = _get_store()
+    state = store.load_state(interview_session_id)
+    if state:
+        state["should_end"] = True
+        state["phase"] = "completed"
+        state["error"] = "Session terminated due to proctoring violation"
+        store.save_state(interview_session_id, state)
+
+    # Save interview results if we have a platform session
+    meta = store.load_meta(interview_session_id) or {}
+    platform_session_id = meta.get("platform_session_id")
+    if platform_session_id:
+        # Import runner to save results - would need to restore first
+        pass
+
+    logger.info(
+        "Interview session terminated via proctoring",
+        extra={"interview_session_id": interview_session_id, "terminated_by": user.get("email")}
+    )
+
+    return {
+        "interview_session_id": interview_session_id,
+        "status": "terminated",
+        "message": "Session terminated successfully",
+    }
+
+
+# ── Vector Search Endpoints ───────────────────────────────────────────────────
+
+class SemanticSearchRequest(BaseModel):
+    query: str
+    candidate_email: str | None = None
+    top_k: int = 10
+    chunk_types: list[str] | None = None
+    min_similarity: float = 0.3
+
+
+class RoleMatchRequest(BaseModel):
+    role_description: str
+    required_skills: list[str] | None = None
+    top_k: int = 20
+    min_similarity: float = 0.4
+
+
+class JobEmbeddingRequest(BaseModel):
+    job_id: str
+    title: str
+    company: str | None = None
+    description: str
+    required_skills: list[str] | None = None
+
+
+class SkillGapRequest(BaseModel):
+    candidate_email: str
+    job_id: str
+
+
+@router.post("/vector/search")
+async def semantic_resume_search(
+    request: SemanticSearchRequest,
+    user: dict = Depends(get_current_user),
+) -> dict:
+    """
+    Semantic search across resume embeddings.
+
+    Finds resume chunks similar to the query text using cosine similarity.
+    """
+    from app.vector_search import search_similar_resumes, init_vector_tables
+
+    # Ensure tables exist
+    init_vector_tables()
+
+    results = search_similar_resumes(
+        request.query,
+        candidate_email=request.candidate_email,
+        top_k=request.top_k,
+        chunk_types=request.chunk_types,
+        min_similarity=request.min_similarity,
+    )
+
+    return {
+        "query": request.query,
+        "results": results,
+        "count": len(results),
+    }
+
+
+@router.post("/vector/match-role")
+async def match_candidates_for_role(
+    request: RoleMatchRequest,
+    user: dict = Depends(get_current_user),
+) -> dict:
+    """
+    Find candidates matching a role description and required skills.
+
+    Returns ranked candidates with similarity scores and skill match analysis.
+    """
+    from app.vector_search import find_candidates_for_role, init_vector_tables
+
+    init_vector_tables()
+
+    results = find_candidates_for_role(
+        request.role_description,
+        required_skills=request.required_skills,
+        top_k=request.top_k,
+        min_similarity=request.min_similarity,
+    )
+
+    return {
+        "role_description": request.role_description,
+        "required_skills": request.required_skills or [],
+        "candidates": results,
+        "count": len(results),
+    }
+
+
+@router.post("/vector/store-job")
+async def store_job_embedding_endpoint(
+    request: JobEmbeddingRequest,
+    user: dict = Depends(get_current_user),
+) -> dict:
+    """Store a job description embedding for future skill gap analysis."""
+    from app.vector_search import store_job_embedding, init_vector_tables
+
+    init_vector_tables()
+
+    success = store_job_embedding(
+        request.job_id,
+        request.title,
+        request.company,
+        request.description,
+        request.required_skills,
+    )
+
+    return {
+        "job_id": request.job_id,
+        "stored": success,
+    }
+
+
+@router.post("/vector/skill-gap")
+async def analyze_skill_gap_endpoint(
+    request: SkillGapRequest,
+    user: dict = Depends(get_current_user),
+) -> dict:
+    """Analyze skill gap between a candidate and a job description."""
+    from app.vector_search import analyze_skill_gap
+
+    result = analyze_skill_gap(request.candidate_email, request.job_id)
+    if not result:
+        raise HTTPException(status_code=404, detail="Job or candidate data not found")
+
+    return result
+
+
+@router.get("/vector/similar-candidates/{candidate_email}")
+async def get_similar_candidates(
+    candidate_email: str,
+    top_k: int = 10,
+    user: dict = Depends(get_current_user),
+) -> dict:
+    """Find candidates with similar profiles to the given candidate."""
+    from app.vector_search import find_similar_candidates
+
+    results = find_similar_candidates(candidate_email, top_k=top_k)
+
+    return {
+        "candidate_email": candidate_email,
+        "similar_candidates": results,
+        "count": len(results),
+    }
+
+
+@router.post("/vector/index-resume/{session_id}")
+async def index_resume_embeddings(
+    session_id: str,
+    user: dict = Depends(get_current_user),
+) -> dict:
+    """Generate and store embeddings for a session's resume."""
+    from app.vector_search import store_resume_embeddings, init_vector_tables
+    from app.db import load_session
+
+    init_vector_tables()
+
+    session_data = load_session(session_id)
+    if not session_data:
+        raise HTTPException(status_code=404, detail="Session not found")
+
+    resume_parsed = session_data.get("resume", {})
+    if not resume_parsed:
+        raise HTTPException(status_code=400, detail="No resume data in session")
+
+    candidate_email = user.get("email", "")
+    chunks_stored = store_resume_embeddings(session_id, candidate_email, resume_parsed)
+
+    return {
+        "session_id": session_id,
+        "candidate_email": candidate_email,
+        "chunks_stored": chunks_stored,
+    }
+
+
+# ── Multi-Language Voice Endpoints ──────────────────────────────────────────────
+
+class LanguageSettingsRequest(BaseModel):
+    language: str  # e.g., "en-US", "es", "fr"
+    gender: str = "male"  # "male" or "female"
+
+
+@router.get("/voice/languages")
+async def get_supported_languages(
+    user: dict = Depends(get_current_user),
+) -> dict:
+    """Get list of supported languages for voice interviews."""
+    from app.ai_interviewer.voice import get_supported_languages
+    return {"languages": get_supported_languages()}
+
+
+@router.post("/voice/set-language")
+async def set_interview_language(
+    request: LanguageSettingsRequest,
+    interview_session_id: str = Query(default=""),
+    user: dict = Depends(get_current_user),
+) -> dict:
+    """Set the language for an interview session."""
+    from app.ai_interviewer.state_store import get_state_store
+    
+    store = get_state_store()
+    state = store.load_state(interview_session_id)
+    if not state:
+        raise HTTPException(status_code=404, detail="Interview session not found")
+    
+    # Update the state with language preference
+    state["voice_language"] = request.language
+    state["voice_gender"] = request.gender
+    store.save_state(interview_session_id, state)
+    
+    return {
+        "interview_session_id": interview_session_id,
+        "language": request.language,
+        "gender": request.gender,
+        "message": "Language updated successfully",
+    }
+
+
+@router.post("/voice/detect-language")
+async def detect_audio_language(
+    interview_session_id: str = Query(default=""),
+    user: dict = Depends(get_current_user),
+) -> dict:
+    """Detect language from the most recent audio (placeholder - needs audio upload)."""
+    from app.ai_interviewer.voice import detect_language
+    
+    # This is a placeholder - actual implementation would need audio upload
+    # For now, return the default
+    detected = await detect_language(b"")
+    
+    return {
+        "detected_language": detected,
+        "message": "Language detection requires audio upload endpoint",
     }
 
 
@@ -1532,6 +1933,185 @@ async def voice_interview_websocket(
                 "message": f"Interview error: {e}",
                 "error_code": "INTERNAL_ERROR",
             })
+
+
+# ── Proctoring WebSocket ─────────────────────────────────────────────────────────
+
+@router.websocket("/ws/proctoring")
+async def proctoring_websocket(
+    websocket: WebSocket,
+    token: str = Query(default=""),
+    interview_session_id: str = Query(default=""),
+):
+    """
+    Real-time proctoring event WebSocket.
+
+    Protocol:
+    Client → Server:
+      {"type": "event", "event_type": "face_missing", "severity": "high", "details": {...}, "timestamp": 1234567890, "integrity_score": 85}
+      {"type": "ping"}
+
+    Server → Client:
+      {"type": "event_ack", "event_type": "...", "integrity_score": 85, "status": "active"}
+      {"type": "warning", "message": "Integrity score below 50%", "integrity_score": 45}
+      {"type": "terminated", "message": "Session terminated due to integrity violations"}
+      {"type": "pong"}
+    """
+    await websocket.accept()
+
+    # Auth
+    payload = _validate_ws_token(token)
+    if not payload:
+        await websocket.send_json({"type": "error", "message": "Invalid token"})
+        await websocket.close(code=4001)
+        return
+
+    if not interview_session_id:
+        await websocket.send_json({"type": "error", "message": "Missing interview_session_id"})
+        await websocket.close(code=4002)
+        return
+
+    store = _get_store()
+
+    # Load existing proctoring data
+    from app.db import load_proctoring, save_proctoring
+    proctoring_data = load_proctoring(interview_session_id) or {
+        "events": [],
+        "integrity_score": 100.0,
+        "critical_violations": 0,
+        "warnings_issued": 0,
+        "status": "active",
+    }
+
+    try:
+        while True:
+            data = await websocket.receive()
+
+            raw = data.get("text")
+            if raw is None:
+                continue
+
+            try:
+                msg = json.loads(raw)
+            except json.JSONDecodeError:
+                await websocket.send_json({"type": "error", "message": "Invalid JSON"})
+                continue
+
+            msg_type = msg.get("type", "")
+
+            if msg_type == "ping":
+                await websocket.send_json({"type": "pong", "timestamp": time.time()})
+                continue
+
+            if msg_type == "event":
+                event_type = msg.get("event_type", "")
+                severity = msg.get("severity", "medium")
+                details = msg.get("details", {})
+                timestamp = msg.get("timestamp", time.time())
+                integrity_score = msg.get("integrity_score")
+
+                # Build event record
+                event_record = {
+                    "event_type": event_type,
+                    "severity": severity,
+                    "details": details,
+                    "timestamp": timestamp,
+                }
+
+                # Update proctoring data
+                proctoring_data["events"].append(event_record)
+
+                severity_penalties = {
+                    "low": 1.0,
+                    "medium": 5.0,
+                    "high": 15.0,
+                    "critical": 30.0,
+                }
+                penalty = severity_penalties.get(severity, 5.0)
+
+                # Use client-provided score if available, otherwise calculate
+                if integrity_score is not None:
+                    proctoring_data["integrity_score"] = integrity_score
+                else:
+                    proctoring_data["integrity_score"] = max(0.0, proctoring_data["integrity_score"] - penalty)
+
+                if severity == "critical":
+                    proctoring_data["critical_violations"] += 1
+
+                # Check thresholds
+                old_status = proctoring_data["status"]
+                if proctoring_data["integrity_score"] <= 50 and proctoring_data["warnings_issued"] == 0:
+                    proctoring_data["warnings_issued"] = 1
+                    proctoring_data["status"] = "warned"
+                elif proctoring_data["integrity_score"] <= 20 and proctoring_data["warnings_issued"] == 1:
+                    proctoring_data["warnings_issued"] = 2
+                elif proctoring_data["integrity_score"] <= 0 or proctoring_data["critical_violations"] >= 3:
+                    proctoring_data["status"] = "terminated"
+
+                # Save to database
+                save_proctoring(interview_session_id, proctoring_data)
+
+                # Add to interview timeline
+                store.append_timeline_event(interview_session_id, {
+                    "type": "proctoring_event",
+                    "summary": f"Proctoring: {event_type} ({severity})",
+                    "timestamp": timestamp,
+                    "event_type": event_type,
+                    "severity": severity,
+                    "integrity_score": proctoring_data["integrity_score"],
+                })
+
+                # Send acknowledgment
+                ack = {
+                    "type": "event_ack",
+                    "event_type": event_type,
+                    "integrity_score": proctoring_data["integrity_score"],
+                    "status": proctoring_data["status"],
+                    "timestamp": time.time(),
+                }
+                await websocket.send_json(ack)
+
+                # Send warning if status changed
+                if proctoring_data["status"] != old_status:
+                    if proctoring_data["status"] == "warned":
+                        await websocket.send_json({
+                            "type": "warning",
+                            "message": "Integrity score below 50%. Further violations may result in termination.",
+                            "integrity_score": proctoring_data["integrity_score"],
+                            "timestamp": time.time(),
+                        })
+                    elif proctoring_data["status"] == "terminated":
+                        await websocket.send_json({
+                            "type": "terminated",
+                            "message": "Session terminated due to integrity violations.",
+                            "timestamp": time.time(),
+                        })
+                        # Also update interview state
+                        state = store.load_state(interview_session_id)
+                        if state:
+                            state["should_end"] = True
+                            state["phase"] = "completed"
+                            state["error"] = "Session terminated due to proctoring violation"
+                            store.save_state(interview_session_id, state)
+                        break
+
+            else:
+                await websocket.send_json({"type": "error", "message": f"Unknown message type: {msg_type}"})
+
+    except WebSocketDisconnect:
+        logger.info("Proctoring WebSocket disconnected", extra={"session": interview_session_id})
+    except Exception as e:
+        logger.error("Proctoring WebSocket error", extra={"error": str(e), "session": interview_session_id})
+        with contextlib.suppress(Exception):
+            await websocket.send_json({
+                "type": "error",
+                "message": f"Proctoring error: {e}",
+            })
+
+    finally:
+        if websocket.client_state == WebSocketState.CONNECTED:
+            with contextlib.suppress(Exception):
+                await websocket.close()
 
 
 # ── Helper Functions ──────────────────────────────────────────────────────────

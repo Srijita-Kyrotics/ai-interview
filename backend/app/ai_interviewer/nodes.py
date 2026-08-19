@@ -55,6 +55,8 @@ from app.ai_interviewer.prompts import (
     STAGE_TRANSITION_PROMPT,
     SYSTEM_DESIGN_EVALUATOR_PROMPT,
     SYSTEM_DESIGN_EVALUATOR_SYSTEM,
+    SYSTEM_DESIGN_GENERATOR_PROMPT,
+    SYSTEM_DESIGN_GENERATOR_SYSTEM,
 )
 from app.ai_interviewer.state import (
     AnswerEvaluation,
@@ -1212,6 +1214,12 @@ def _is_coding_stage(stage: dict) -> bool:
     return any(token in name for token in ("coding", "cod", "live-code", "algorithm"))
 
 
+def _is_system_design_stage(stage: dict) -> bool:
+    """Heuristic: a stage is a system design stage if its id/name signals system design."""
+    name = f"{stage.get('name', '')} {stage.get('id', '')}".lower()
+    return any(token in name for token in ("system design", "system_design", "architect", "scalability"))
+
+
 def _as_list(value) -> list:
     """Coerce an LLM field into a list, tolerating None or non-list junk."""
     return list(value) if isinstance(value, list | tuple | set) else []
@@ -1340,6 +1348,10 @@ async def stage_advance_node(state: InterviewState) -> dict:
             updates.update(coding_result)
         except Exception as e:  # noqa: BLE001
             logger.warning("Coding problem generation failed", extra={"error": str(e)})
+
+    # ── Feature 7: Enable system design mode when entering system design stage ──
+    if _is_system_design_stage(next_stage):
+        updates["is_system_design_mode"] = True
 
     # Generate transition message
     prompt = STAGE_TRANSITION_PROMPT.format(
@@ -1729,4 +1741,124 @@ async def system_design_evaluator_node(state: InterviewState) -> dict:
 
     return {
         "system_design_scores": system_design_scores,
+    }
+
+
+# ══════════════════════════════════════════════════════════════════════════════
+# SYSTEM DESIGN QUESTION GENERATOR NODE
+# ══════════════════════════════════════════════════════════════════════════════
+
+async def system_design_question_generator_node(state: InterviewState) -> dict:
+    """
+    Generates system design questions for the dedicated system design stage.
+    Evaluates across 7 architectural dimensions progressively.
+    """
+    logger.info("Executing system_design_question_generator_node", extra={"session": state["session_id"]})
+
+    analysis = state.get("resume_analysis", {})
+    current_stage = state.get("current_stage", {})
+    memory = state.get("memory", {})
+    transcript = state.get("conversation_transcript", [])
+    evaluations = state.get("evaluations_history", [])
+    system_design_scores = state.get("system_design_scores", {})
+
+    # Filter for system design questions and evaluations
+    sd_questions = [q for q in state.get("questions_history", []) if q.get("intent") == "system_design"]
+    sd_evaluations = evaluations[-len(sd_questions):] if sd_questions else []
+
+    sd_questions_asked = len(sd_questions)
+    max_sd_questions = 7  # One per dimension
+
+    # Get last evaluation if available
+    last_eval = sd_evaluations[-1] if sd_evaluations else {}
+    last_answer_record = state.get("answers_history", [{}])
+    last_answer_text = last_answer_record[-1].get("answer_text", "") if last_answer_record else ""
+
+    # Build system design conversation history
+    sd_transcript = [t for t in transcript if t.get("question_id") in [q.get("id") for q in sd_questions]]
+    conversation_history = "\n".join([
+        f"{t['role'].upper()}: {t['text'][:300]}" for t in sd_transcript[-6:]
+    ])
+
+    # Build resume summary
+    resume_summary = (
+        f"Name: {analysis.get('candidate_name', 'Candidate')}\n"
+        f"Level: {analysis.get('seniority_level', 'mid')}\n"
+        f"Strong Areas: {', '.join(analysis.get('strong_areas', [])[:3])}\n"
+        f"Projects: {', '.join([p.get('name', '') for p in analysis.get('projects', [])[:2]])}"
+    )
+
+    # System design scores summary
+    if system_design_scores:
+        sd_scores_summary = "\n".join([
+            f"- {k}: {v}/10" for k, v in system_design_scores.items() if k != "overall_system_design_score"
+        ])
+    else:
+        sd_scores_summary = "No system design scores yet."
+
+    # Topics covered/pending
+    sd_topics = ["requirements_clarification", "api_design", "database_design", "scalability", "caching", "tradeoffs", "failure_handling"]
+    sd_topics_covered = [e.get("topic", "") for e in sd_questions if e.get("topic") in sd_topics]
+    sd_topics_pending = [t for t in sd_topics if t not in sd_topics_covered]
+
+    # Last system design evaluation details
+    last_overall_score = last_eval.get("overall_system_design_score", "N/A")
+    last_missing = ", ".join(last_eval.get("missing_components", [])) if last_eval.get("missing_components") else "N/A"
+    last_followup = last_eval.get("suggested_follow_up", "N/A")
+
+    prompt = SYSTEM_DESIGN_GENERATOR_PROMPT.format(
+        candidate_name=analysis.get("candidate_name", "the candidate"),
+        role=state["role"],
+        company=state["company"],
+        sd_questions_asked=sd_questions_asked,
+        max_sd_questions=max_sd_questions,
+        resume_summary=resume_summary,
+        sd_conversation_history=conversation_history or "No previous system design discussion.",
+        sd_scores_summary=sd_scores_summary,
+        sd_topics_covered=", ".join(sd_topics_covered) if sd_topics_covered else "None",
+        sd_topics_pending=", ".join(sd_topics_pending) if sd_topics_pending else "All dimensions covered",
+        last_answer=last_answer_text[:500] if last_answer_text else "N/A",
+        last_overall_score=last_overall_score,
+        last_missing_components=last_missing,
+        last_suggested_followup=last_followup,
+    )
+
+    result = await _call_llm_json(SYSTEM_DESIGN_GENERATOR_SYSTEM, prompt, model=_fast_model())
+
+    question_id = str(uuid.uuid4())
+    question_record = QuestionRecord(
+        id=question_id,
+        question=result.get("question_text", ""),
+        stage=current_stage.get("id", "system_design"),
+        topic=result.get("topic", "system_design"),
+        asked_at=time.time(),
+        intent="system_design",
+    )
+
+    # Add to transcript
+    transcript_entry = {
+        "role": "interviewer",
+        "text": question_record["question"],
+        "ts": time.time(),
+        "question_id": question_id,
+    }
+    updated_transcript = list(state.get("conversation_transcript", [])) + [transcript_entry]
+    updated_questions = list(state.get("questions_history", [])) + [question_record]
+
+    logger.info(
+        "System design question generated",
+        extra={
+            "topic": question_record["topic"],
+            "sd_question_num": sd_questions_asked + 1,
+        }
+    )
+
+    return {
+        "current_question": question_record,
+        "questions_history": updated_questions,
+        "conversation_transcript": updated_transcript,
+        "ai_response_text": question_record["question"],
+        "questions_asked": state["questions_asked"] + 1,
+        "main_questions_asked": state["main_questions_asked"] + 1,
+        "last_activity_at": time.time(),
     }
