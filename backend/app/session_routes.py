@@ -484,11 +484,12 @@ async def _run_judge0_test_cases(
 
     judge0_host = settings.judge0_host
     language_ids = settings.judge0_language_ids
-    headers = {
-        "x-rapidapi-key": settings.judge0_api_key,
-        "x-rapidapi-host": judge0_host,
-        "Content-Type": "application/json",
-    }
+    
+    # Build headers conditionally based on whether using RapidAPI
+    headers = {"Content-Type": "application/json"}
+    if settings.judge0_use_rapidapi_headers:
+        headers["x-rapidapi-key"] = settings.judge0_api_key
+        headers["x-rapidapi-host"] = judge0_host
 
     async with httpx.AsyncClient() as client:
         for case in test_cases:

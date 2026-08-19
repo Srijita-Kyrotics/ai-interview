@@ -1,10 +1,9 @@
 """Objective test-case judge for the AI interview live coding round.
 
 Runs a candidate's submission against a list of ``{input, expected}`` test
-cases in a sandboxed subprocess (the same local engine as the coding-round
-grader) and reports per-case pass/fail. Problems use a stdin/stdout contract:
-the program must read its input from standard input and print the answer to
-standard output.
+cases via Judge0 API (RapidAPI or self-hosted) and reports per-case pass/fail.
+Problems use a stdin/stdout contract: the program must read its input from
+standard input and print the answer to standard output.
 """
 
 from __future__ import annotations
@@ -12,117 +11,154 @@ from __future__ import annotations
 import time
 from typing import Any
 
-from app.code_executor import EXEC_TIMEOUT_SECONDS, execute_local, normalize_output
+from app.config import settings
 
 _COMPILED_LANGS = {"c", "c++", "cpp", "java"}
 
+# Language ID mapping for Judge0
+_JUDGE0_LANGUAGE_IDS = settings.judge0_language_ids
 
-def _normalize_output(text: str | None) -> str:
-    """Collapse all whitespace so ``" 3 "`` / ``"3\\n"`` / ``"3"`` compare equal.
+# Judge0 status codes
+_JUDGE0_STATUS = {
+    1: "queued",
+    2: "running",
+    3: "accepted",
+    4: "wrong_answer",
+    5: "time_limit_exceeded",
+    6: "compilation_error",
+    7: "runtime_error",
+    8: "internal_error",
+    9: "exec_format_error",
+    10: "memory_limit_exceeded",
+    11: "output_limit_exceeded",
+    12: "wall_time_limit_exceeded",
+    13: "deleted",
+    14: "memory_limit_exceeded",
+}
 
-    Judges treat whitespace between tokens as insignificant; leading/trailing
-    whitespace from a stray ``print("  ", x)`` must not fail a correct case.
-    """
-    return " ".join(normalize_output(text).split())
-
-
-def _is_compile_error(language: str, stderr: str) -> bool:
-    """Whether a stderr-only run means compilation failed vs. a runtime crash.
-
-    Compiled languages write compiler diagnostics to stderr before execution,
-    so any stderr with no stdout means the build failed. Interpreted languages
-    only surface syntax/indentation errors at execution time; every other
-    traceback is a per-case runtime error and must not short-circuit the suite.
-    """
-    if (language or "").lower().strip() in _COMPILED_LANGS:
-        return True
-    lowered = stderr.lower()
-    return "syntaxerror" in lowered or "indentationerror" in lowered
-
-
-async def judge_submission(
+async def _run_judge0(
     language: str,
     code: str,
     test_cases: list[dict[str, Any]],
-    timeout: float = EXEC_TIMEOUT_SECONDS,
+    timeout: float,
 ) -> dict[str, Any]:
-    """Run ``code`` against every test case and return per-case results.
+    """Run code against test cases via Judge0 API."""
+    import httpx
 
-    Returns a dict::
+    judge0_host = settings.judge0_host
+    language_id = _JUDGE0_LANGUAGE_IDS.get(language.lower())
+    
+    if not language_id:
+        return _abort([], 0, f"Language '{language}' not supported by Judge0", "")
 
-        {
-          "ok": bool,                  # False only when the runtime/compiler is missing
-          "compile_error": str | "",   # compiler output when compilation fails
-          "results": [
-            {"input", "expected", "output", "status", "time_ms"}
-          ],
-          "passed": int,
-          "total": int,
-          "score": int,                # 0-100
-        }
+    # Build headers
+    headers = {"Content-Type": "application/json"}
+    if settings.judge0_use_rapidapi_headers:
+        headers["x-rapidapi-key"] = settings.judge0_api_key
+        headers["x-rapidapi-host"] = judge0_host
 
-    ``status`` is one of ``"passed"``, ``"failed"``, ``"timeout"``,
-    ``"runtime_error"`` or ``"error"``.
-    """
     results: list[dict[str, Any]] = []
     passed = 0
     compile_error = ""
 
-    for case in test_cases:
-        expected = str(case.get("expected", ""))
-        case_input = str(case.get("input", ""))
+    async with httpx.AsyncClient(timeout=timeout + 5.0) as client:
+        for case in test_cases:
+            expected = str(case.get("expected", ""))
+            case_input = str(case.get("input", ""))
 
-        started = time.monotonic()
-        run = await execute_local(language, code, case_input, timeout)
-        time_ms = round((time.monotonic() - started) * 1000, 1)
+            payload = {
+                "language_id": language_id,
+                "source_code": code,
+                "stdin": case_input,
+                "expected_output": expected,
+            }
 
-        if run.get("ok") is False and run.get("error"):
-            return _abort(results, passed, run["error"], compile_error="")
-        if run.get("missing_runtime"):
-            return _abort(results, passed, run.get("error") or "Runtime not available", compile_error="")
+            started = time.monotonic()
+            try:
+                response = await client.post(
+                    f"https://{judge0_host}/submissions?base64_encoded=false&wait=true",
+                    json=payload,
+                    headers=headers,
+                    timeout=timeout,
+                )
+            except Exception as e:
+                return _abort(results, passed, f"Judge0 request failed: {e}", compile_error="")
 
-        stdout = run.get("stdout", "")
-        stderr = run.get("stderr", "")
+            time_ms = round((time.monotonic() - started) * 1000, 1)
 
-        # Timeouts and runtime errors are per-case; only a genuine compile
-        # failure short-circuits the suite.
-        if run.get("timed_out"):
-            status = "timeout"
-            output = stderr or "Execution timed out."
-            error = ""
-        elif stderr and not stdout and _is_compile_error(language, stderr):
-            compile_error = stderr
+            if response.status_code != 200:
+                return _abort(results, passed, f"Judge0 API error {response.status_code}: {response.text}", compile_error="")
+
+            data = response.json()
+            stdout = data.get("stdout") or ""
+            stderr = data.get("stderr") or ""
+            compile_output = data.get("compile_output") or ""
+            status_id = data.get("status", {}).get("id")
+
+            # Determine result
+            if status_id == 3:  # Accepted
+                status = "passed"
+                passed += 1
+                output = stdout
+                error = ""
+            elif status_id == 6:  # Compilation error (compiled languages)
+                compile_error = compile_output or stderr
+                results.append({
+                    "input": case_input,
+                    "expected": expected,
+                    "output": compile_error,
+                    "status": "failed",
+                    "error": "Compilation error",
+                    "time_ms": time_ms,
+                })
+                break
+            elif status_id == 5:  # Time limit exceeded
+                status = "timeout"
+                output = stderr or "Execution timed out."
+                error = ""
+            elif status_id in (7, 10, 11):  # Runtime error, memory limit, output limit
+                # For Python, syntax errors appear as status 11 (NZEC) with SyntaxError in stderr
+                if language.lower() == "python" and status_id == 11 and "SyntaxError" in stderr:
+                    compile_error = stderr
+                    results.append({
+                        "input": case_input,
+                        "expected": expected,
+                        "output": stderr,
+                        "status": "failed",
+                        "error": "Compilation error (SyntaxError)",
+                        "time_ms": time_ms,
+                    })
+                    break
+                status = "runtime_error"
+                output = stderr or _JUDGE0_STATUS.get(status_id, "Runtime error")
+                error = ""
+            elif status_id == 4:  # Wrong answer
+                status = "failed"
+                output = stdout or "(no output)"
+                error = ""
+            else:
+                status = "error"
+                output = stderr or stdout or f"Unknown status: {status_id}"
+                error = ""
+
+            # Normalize output for comparison
+            if status == "passed":
+                # Already handled by Judge0's expected_output check
+                pass
+            elif _normalize_output(stdout) == _normalize_output(expected):
+                status = "passed"
+                passed += 1
+                output = stdout
+                error = ""
+
             results.append({
                 "input": case_input,
                 "expected": expected,
-                "output": stderr,
-                "status": "failed",
-                "error": "Compilation error",
+                "output": output,
+                "status": status,
+                "error": error,
                 "time_ms": time_ms,
             })
-            break
-        elif stderr:
-            status = "runtime_error"
-            output = stderr
-            error = ""
-        elif _normalize_output(stdout) == _normalize_output(expected):
-            status = "passed"
-            passed += 1
-            output = stdout
-            error = ""
-        else:
-            status = "failed"
-            output = stdout or "(no output)"
-            error = ""
-
-        results.append({
-            "input": case_input,
-            "expected": expected,
-            "output": output,
-            "status": status,
-            "error": error,
-            "time_ms": time_ms,
-        })
 
     total = len(test_cases)
     return {
@@ -136,10 +172,17 @@ async def judge_submission(
     }
 
 
+def _normalize_output(text: str | None) -> str:
+    """Collapse all whitespace for comparison."""
+    if not text:
+        return ""
+    return " ".join(text.split())
+
+
 def _abort(
     results: list[dict[str, Any]], passed: int, error: str, compile_error: str
 ) -> dict[str, Any]:
-    """Return an error payload (runtime unavailable, etc.)."""
+    """Return an error payload."""
     return {
         "ok": False,
         "compile_error": compile_error,
@@ -148,5 +191,58 @@ def _abort(
         "total": 0,
         "score": 0,
         "error": error,
+        "time_ms": 0,
+    }
+
+
+async def judge_submission(
+    language: str,
+    code: str,
+    test_cases: list[dict[str, Any]],
+    timeout: float = 10.0,
+) -> dict[str, Any]:
+    """Run ``code`` against every test case via Judge0 API.
+
+    Returns a dict::
+        {
+          "ok": bool,
+          "compile_error": str,
+          "results": [{"input", "expected", "output", "status", "time_ms"}],
+          "passed": int,
+          "total": int,
+          "score": int,  # 0-100
+        }
+
+    ``status`` is one of ``"passed"``, ``"failed"``, ``"timeout"``,
+    ``"runtime_error"`` or ``"error"``.
+    """
+    if not test_cases:
+        return {
+            "ok": True,
+            "compile_error": "",
+            "results": [],
+            "passed": 0,
+            "total": 0,
+            "score": 0,
+            "time_ms": 0,
+        }
+
+    # Try Judge0 first
+    try:
+        result = await _run_judge0(language, code, test_cases, timeout)
+        if result.get("ok"):
+            return result
+    except Exception as e:
+        pass  # Fall through to error
+
+    # Judge0 failed - return error (no local fallback)
+    return {
+        "ok": False,
+        "compile_error": "",
+        "results": [],
+        "passed": 0,
+        "total": len(test_cases),
+        "score": 0,
+        "error": f"Judge0 unavailable: {e}",
         "time_ms": 0,
     }
