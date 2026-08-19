@@ -446,9 +446,9 @@ async def question_generator_node(state: InterviewState) -> dict:
         intent=result.get("intent", "technical"),
     )
 
-    # ── Feature 9: In a coding stage, the question is the live-coding problem ──
+    # ── Feature 9: In a coding stage, or if intent is coding_challenge, pop live-coding ──
     problem_updates: dict = {}
-    if _is_coding_stage(current_stage):
+    if _is_coding_stage(current_stage) or result.get("intent") == "coding_challenge":
         active_problem = state.get("active_coding_problem")
         if not (active_problem and active_problem.get("description")):
             problem_updates = await coding_problem_generator_node(state)

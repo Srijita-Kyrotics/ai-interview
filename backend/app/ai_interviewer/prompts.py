@@ -218,11 +218,12 @@ Instructions:
 9. Make the speech sound natural and conversational — like a senior technical interviewer asking it.
 10. CRITICAL: `question_text` is the ONLY thing the candidate hears. It must never contain
    internal reasoning, analysis, evaluation logic, or meta-commentary.
+11. If you want to evaluate the candidate's algorithmic or implementation skills with a live coding test (which will pop up a code editor for them), set `intent` to `coding_challenge`. Use this sparingly (max once or twice per interview).
 
 Return ONLY valid JSON:
 {{
   "question_text": "Natural spoken technical question (with brief feedback on the last answer ONLY when one exists)",
-  "intent": "probe|verify|deep_dive|behavioral|technical|clarification",
+  "intent": "probe|verify|deep_dive|behavioral|technical|clarification|coding_challenge",
   "topic": "the specific technical topic this question addresses",
   "rationale": "why you're asking this question now (internal reasoning)",
   "difficulty": "easy|medium|hard|expert",
