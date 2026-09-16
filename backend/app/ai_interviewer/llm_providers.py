@@ -745,9 +745,9 @@ def get_llm_registry() -> LLMProviderRegistry:
     Get or create the singleton LLM provider registry.
 
     OpenAI (with the configured ``OPENAI_MODEL``, default ``gpt-5.6-luna``) is
-    the single LLM provider powering Obi. If its key is missing or a
-    placeholder, we fall back to the deterministic offline mock so the app
-    still works for dev and E2E tests.
+    the primary LLM provider powering Obi. The MockProvider is always registered
+    as a fallback so offline mode, API failures, 401s, or 429 rate limits seamlessly
+    fall back without crashing the candidate session.
     """
     global _registry
     if _registry is not None:
@@ -758,10 +758,9 @@ def get_llm_registry() -> LLMProviderRegistry:
     if _has_usable_api_key(settings.openai_api_key):
         _registry.register(OpenAIProvider(), priority=0)
         logger.info("Registered LLM provider: OpenAI (%s)", settings.openai_model)
-    else:
-        _registry.register(MockProvider(), priority=99)
-        logger.warning(
-            "No OPENAI_API_KEY configured — using deterministic offline mock provider"
-        )
+    
+    # Always register MockProvider as low-priority fallback
+    _registry.register(MockProvider(), priority=99)
+    logger.info("Registered fallback LLM provider: MockProvider")
 
     return _registry

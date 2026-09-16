@@ -25,8 +25,103 @@ import tempfile
 from pathlib import Path
 from typing import Any
 
+import httpx
+
+from app.config import settings
+
 EXEC_TIMEOUT_SECONDS = 5.0
 MAX_CAPTURE_BYTES = 64 * 1024
+
+
+async def execute_judge0(
+    language: str,
+    source: str,
+    stdin_data: str = "",
+    timeout: float = EXEC_TIMEOUT_SECONDS,
+) -> dict[str, Any]:
+    """Execute code using the Judge0 API service (https://judge.bhasantar.com/judge0/)."""
+    lang_key = (language or "").lower().strip()
+    lang_id = settings.judge0_language_ids.get(lang_key)
+    if not lang_id:
+        return {
+            "ok": False,
+            "missing_runtime": False,
+            "timed_out": False,
+            "stdout": "",
+            "stderr": "",
+            "error": f"Language '{language}' is not supported by Judge0.",
+        }
+
+    url = f"{settings.judge0_url.rstrip('/')}/submissions?base64_encoded=false&wait=true"
+    payload = {
+        "language_id": lang_id,
+        "source_code": source,
+        "stdin": stdin_data,
+    }
+
+    try:
+        async with httpx.AsyncClient() as client:
+            resp = await client.post(url, json=payload, timeout=timeout)
+            if resp.status_code not in (200, 201):
+                return {
+                    "ok": False,
+                    "missing_runtime": False,
+                    "timed_out": False,
+                    "stdout": "",
+                    "stderr": f"Judge0 error (HTTP {resp.status_code})",
+                    "error": f"Judge0 API returned HTTP status {resp.status_code}",
+                }
+            data = resp.json()
+            stdout = data.get("stdout") or ""
+            stderr = data.get("stderr") or ""
+            compile_output = data.get("compile_output") or ""
+            message = data.get("message") or ""
+            status = data.get("status") or {}
+            status_id = status.get("id")
+
+            timed_out = status_id == 5
+            combined_err = stderr or compile_output or message or ""
+
+            return {
+                "ok": True,
+                "missing_runtime": False,
+                "timed_out": timed_out,
+                "stdout": stdout[:MAX_CAPTURE_BYTES],
+                "stderr": combined_err[:MAX_CAPTURE_BYTES],
+                "status_id": status_id,
+                "status_description": status.get("description", ""),
+                "time": data.get("time"),
+                "memory": data.get("memory"),
+                "error": "",
+            }
+    except Exception as exc:
+        return {
+            "ok": False,
+            "missing_runtime": False,
+            "timed_out": False,
+            "stdout": "",
+            "stderr": f"Judge0 connection failed: {exc}",
+            "error": str(exc),
+        }
+
+
+async def execute_code(
+    language: str,
+    source: str,
+    stdin_data: str = "",
+    timeout: float = EXEC_TIMEOUT_SECONDS,
+) -> dict[str, Any]:
+    """Execute code using Judge0 first, falling back to local sandboxed execution."""
+    result = await execute_judge0(language, source, stdin_data, timeout)
+    if result.get("ok"):
+        return result
+
+    local_result = await execute_local(language, source, stdin_data, timeout)
+    if local_result.get("ok"):
+        return local_result
+
+    return result
+
 
 
 def _find(executable: str) -> str | None:

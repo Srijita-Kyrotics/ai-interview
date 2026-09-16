@@ -12,7 +12,7 @@ from __future__ import annotations
 import time
 from typing import Any
 
-from app.code_executor import EXEC_TIMEOUT_SECONDS, execute_local, normalize_output
+from app.code_executor import EXEC_TIMEOUT_SECONDS, execute_code, normalize_output
 
 _COMPILED_LANGS = {"c", "c++", "cpp", "java"}
 
@@ -69,11 +69,11 @@ async def judge_submission(
     compile_error = ""
 
     for case in test_cases:
-        expected = str(case.get("expected", ""))
+        expected = str(case.get("expected") if "expected" in case else case.get("expected_output", ""))
         case_input = str(case.get("input", ""))
 
         started = time.monotonic()
-        run = await execute_local(language, code, case_input, timeout)
+        run = await execute_code(language, code, case_input, timeout)
         time_ms = round((time.monotonic() - started) * 1000, 1)
 
         if run.get("ok") is False and run.get("error"):
@@ -83,24 +83,26 @@ async def judge_submission(
 
         stdout = run.get("stdout", "")
         stderr = run.get("stderr", "")
+        status_id = run.get("status_id")
 
         # Timeouts and runtime errors are per-case; only a genuine compile
         # failure short-circuits the suite.
-        if run.get("timed_out"):
+        if run.get("timed_out") or status_id == 5:
             status = "timeout"
             output = stderr or "Execution timed out."
             error = ""
-        elif stderr and not stdout and _is_compile_error(language, stderr):
-            compile_error = stderr
+        elif status_id == 6 or (stderr and not stdout and _is_compile_error(language, stderr)):
+            compile_error = stderr or "Compilation error"
             results.append({
                 "input": case_input,
                 "expected": expected,
-                "output": stderr,
+                "output": compile_error,
                 "status": "failed",
                 "error": "Compilation error",
                 "time_ms": time_ms,
             })
             break
+
         elif stderr:
             status = "runtime_error"
             output = stderr

@@ -54,7 +54,10 @@ function getStoredUser() {
     const stored = localStorage.getItem('mockRecruitmentUser')
     if (!stored) return null
     const user = JSON.parse(stored)
-    if (!user?.email) return null
+    if (!user?.email || !user?.token || user.token === 'guest-demo-token' || user.token.split('.').length !== 3) {
+      localStorage.removeItem('mockRecruitmentUser')
+      return null
+    }
     return {
       name: user.name || user.email.split('@')[0] || 'Candidate',
       email: user.email,

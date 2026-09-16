@@ -50,7 +50,13 @@ const LANGUAGE_OPTIONS = [
   { key: 'javascript', label: 'JavaScript' },
   { key: 'java', label: 'Java' },
   { key: 'cpp', label: 'C++' },
+  { key: 'c', label: 'C' },
+  { key: 'csharp', label: 'C#' },
+  { key: 'go', label: 'Go' },
+  { key: 'rust', label: 'Rust' },
+  { key: 'typescript', label: 'TypeScript' },
 ];
+
 
 // Infer the target role from resume skills, experience, summary, and title.
 function inferRoleFromResume(resume) {
@@ -126,6 +132,7 @@ export default function AIInterviewer({ sessionId, token, role, company, resume,
   const [language, setLanguage] = useState('python');
   const [selectedRole, setSelectedRole] = useState(null);
   const [showCodeEditor, setShowCodeEditor] = useState(false);
+  const [isDirectCodeMode, setIsDirectCodeMode] = useState(false);
   const [stdin, setStdin] = useState('');
   const [runOutput, setRunOutput] = useState('');
   const [runStatus, setRunStatus] = useState('');
@@ -202,7 +209,7 @@ export default function AIInterviewer({ sessionId, token, role, company, resume,
   }, []);
 
   const proctor = useAssessmentProctoring({
-    active: proctoringEnabled && (
+    active: proctoringEnabled && !isDirectCodeMode && (
       phase === 'interviewing' || phase === 'opening' || phase === 'initializing'
     ),
     round: 'technical',
@@ -257,6 +264,7 @@ export default function AIInterviewer({ sessionId, token, role, company, resume,
   const audioEndTimerRef = useRef(null);
   const audioQueueRef = useRef([]);
   const isPlayingAudioRef = useRef(false);
+  const pendingQuestionTextRef = useRef(null);
 
   useEffect(() => { phaseRef.current = phase }, [phase]);
   useEffect(() => { reconnectAttemptsRef.current = reconnectAttempts }, [reconnectAttempts]);
@@ -462,11 +470,26 @@ export default function AIInterviewer({ sessionId, token, role, company, resume,
   const queueAiMessage = useCallback((message, options = {}) => {
     stopAudioLevelMonitor();
     setIsThinking(false);
-    setIsSpeaking(false);
     setIsProcessing(false);
     setStatusMessage(options.status || 'Jack is speaking...');
-    setSubtitleText(message || '');
+
+    if (isPlayingAudioRef.current && subtitleText) {
+      pendingQuestionTextRef.current = message || '';
+    } else {
+      setSubtitleText(message || '');
+    }
     audioAwaitingRef.current = true;
+
+    if (message && message.trim()) {
+      const cleanText = message.trim();
+      setMessages((prev) => {
+        const lastMsg = prev[prev.length - 1];
+        if (lastMsg && lastMsg.role === 'interviewer' && lastMsg.text.trim() === cleanText) {
+          return prev;
+        }
+        return [...prev, { id: Date.now() + Math.random(), role: 'interviewer', text: cleanText, ts: Date.now() / 1000 }];
+      });
+    }
 
     if (options.phase) {
       setPhase(options.phase);
@@ -557,6 +580,32 @@ export default function AIInterviewer({ sessionId, token, role, company, resume,
             total: msg.total_stages || 1,
           });
         }
+        
+        // Auto-detect coding question or coding stage → show code editor & construct fallback problem if needed
+        const isCodingQuestion = (msg.stage || '').toLowerCase().includes('coding') ||
+                                 (msg.text || '').toLowerCase().includes('coding problem') ||
+                                 (msg.text || '').toLowerCase().includes('please solve');
+        if (isCodingQuestion) {
+          setShowCodeEditor(true);
+          setCodingProblem((prev) => {
+            if (prev && prev.description) return prev;
+            const lines = (msg.text || '').split('\n').map(l => l.trim()).filter(Boolean);
+            const firstLine = lines[0] || '';
+            const titleMatch = firstLine.match(/coding problem:\s*(.+)$/i);
+            const title = titleMatch ? titleMatch[1].trim() : 'Live Coding Challenge';
+            const desc = lines.length > 1 ? lines.slice(1).join('\n\n') : msg.text;
+            return {
+              id: 'coding-auto',
+              title,
+              difficulty: 'medium',
+              topic: 'algorithms',
+              description: desc,
+              starter_code: { python: '# Write your solution here\n' },
+              visible_test_cases: [],
+            };
+          });
+        }
+
         queueAiMessage(msg.text, {
           status: 'Jack is asking the next question…',
           phase: 'interviewing',
@@ -644,7 +693,15 @@ export default function AIInterviewer({ sessionId, token, role, company, resume,
       setIsSpeaking(false);
       clearLipSync();
       finishAiResponse();
+      if (pendingQuestionTextRef.current) {
+        setSubtitleText(pendingQuestionTextRef.current);
+        pendingQuestionTextRef.current = null;
+      }
       return;
+    }
+    if (pendingQuestionTextRef.current) {
+      setSubtitleText(pendingQuestionTextRef.current);
+      pendingQuestionTextRef.current = null;
     }
     const arrayBuffer = queue.shift();
     const audioCtx = audioContextRef.current || new (window.AudioContext || window.webkitAudioContext)();
@@ -895,10 +952,74 @@ export default function AIInterviewer({ sessionId, token, role, company, resume,
     }
   }, [sessionId, token, effectiveRole, company, resumeText, resumableSession, uploadedSessionId]);
 
+  // ── Direct IDE Mode Handler ─────────────────────────────────────────
+  const startCodingDemo = useCallback(() => {
+    const demoProblem = {
+      id: 'demo-two-sum',
+      title: 'Two Sum',
+      topic: 'Arrays & Hashing',
+      difficulty: 'easy',
+      description:
+        'Given an array of integers `nums` and an integer `target`, return indices of the two numbers such that they add up to `target`.\n\nYou may assume that each input would have exactly one solution, and you may not use the same element twice.\n\nYou can return the answer in any order.',
+      examples: [
+        {
+          input: 'nums = [2, 7, 11, 15], target = 9',
+          output: '[0, 1]',
+          explanation: 'Because nums[0] + nums[1] == 9, we return [0, 1].',
+        },
+        {
+          input: 'nums = [3, 2, 4], target = 6',
+          output: '[1, 2]',
+          explanation: 'Because nums[1] + nums[2] == 6, we return [1, 2].',
+        },
+      ],
+      constraints: [
+        '2 <= nums.length <= 10^4',
+        '-10^9 <= nums[i] <= 10^9',
+        '-10^9 <= target <= 10^9',
+        'Only one valid answer exists.',
+      ],
+      starter_code: {
+        python: 'def two_sum(nums, target):\n    # Write your solution here\n    hashmap = {}\n    for i, num in enumerate(nums):\n        diff = target - num\n        if diff in hashmap:\n            return [hashmap[diff], i]\n        hashmap[num] = i\n    return []\n\n# Quick test run\nprint(two_sum([2, 7, 11, 15], 9))\n',
+        javascript: 'function twoSum(nums, target) {\n    const map = new Map();\n    for (let i = 0; i < nums.length; i++) {\n        const diff = target - nums[i];\n        if (map.has(diff)) {\n            return [map.get(diff), i];\n        }\n        map.set(nums[i], i);\n    }\n    return [];\n}\n\nconsole.log(twoSum([2, 7, 11, 15], 9));\n',
+        java: 'import java.util.HashMap;\nimport java.util.Arrays;\n\nclass Solution {\n    public static int[] twoSum(int[] nums, int target) {\n        HashMap<Integer, Integer> map = new HashMap<>();\n        for (int i = 0; i < nums.length; i++) {\n            int diff = target - nums[i];\n            if (map.containsKey(diff)) {\n                return new int[] { map.get(diff), i };\n            }\n            map.put(nums[i], i);\n        }\n        return new int[]{};\n    }\n    public static void main(String[] args) {\n        System.out.println(Arrays.toString(twoSum(new int[]{2, 7, 11, 15}, 9)));\n    }\n}\n',
+        cpp: '#include <iostream>\n#include <vector>\n#include <unordered_map>\nusing namespace std;\n\nvector<int> twoSum(vector<int>& nums, int target) {\n    unordered_map<int, int> mp;\n    for (int i = 0; i < nums.size(); i++) {\n        int diff = target - nums[i];\n        if (mp.count(diff)) return {mp[diff], i};\n        mp[nums[i]] = i;\n    }\n    return {};\n}\n\nint main() {\n    vector<int> nums = {2, 7, 11, 15};\n    vector<int> ans = twoSum(nums, 9);\n    cout << "[" << ans[0] << ", " << ans[1] << "]" << endl;\n    return 0;\n}\n',
+      },
+      visible_test_cases: [
+        { input: '[2, 7, 11, 15]\n9', expected_output: '[0, 1]' },
+        { input: '[3, 2, 4]\n6', expected_output: '[1, 2]' },
+      ],
+    };
+
+    setIsDirectCodeMode(true);
+    setCodingProblem(demoProblem);
+    const initialLang = language || 'python';
+    setCode(demoProblem.starter_code[initialLang] || demoProblem.starter_code.python);
+    setShowCodeEditor(true);
+    setCurrentStage('Live Coding Challenge');
+    setPhase('interviewing');
+    setMessages([
+      {
+        id: Date.now(),
+        role: 'interviewer',
+        text: '⚡ Direct Code Editor Mode active! You can write, execute, and run unit tests on your code directly using the IDE on the right.',
+        timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+      },
+    ]);
+  }, [language]);
+
+  const handleLanguageChange = useCallback((newLang) => {
+    setLanguage(newLang);
+    if (codingProblem?.starter_code?.[newLang]) {
+      setCode(codingProblem.starter_code[newLang]);
+    }
+  }, [codingProblem]);
+
   // ── Explicit start (Begin button) ────────────────────────────────────
   // The interview only starts on user action — no surprise mic/camera
   // requests on page load.
   const beginInterview = useCallback(async (resumeExisting = true) => {
+    setIsDirectCodeMode(false);
     const allowed = await requestMicPermission();
     if (!allowed) {
       setError('Microphone permission is required to start the voice interview.');
@@ -911,9 +1032,26 @@ export default function AIInterviewer({ sessionId, token, role, company, resume,
 
   // ── Send Text Answer ─────────────────────────────────────────────────
   const sendAnswer = useCallback((text) => {
-    if (!text || !wsRef.current || wsRef.current.readyState !== WebSocket.OPEN) return;
-
+    if (!text) return;
     addCandidateMessage(text);
+
+    if (isDirectCodeMode || !wsRef.current || wsRef.current.readyState !== WebSocket.OPEN) {
+      setIsThinking(true);
+      setTimeout(() => {
+        setIsThinking(false);
+        setMessages(prev => [
+          ...prev,
+          {
+            id: Date.now(),
+            role: 'interviewer',
+            text: `[Direct IDE Feedback] Solution received! Output: "${runOutput || 'Code submitted successfully.'}".`,
+            timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+          }
+        ]);
+      }, 700);
+      return;
+    }
+
     setIsThinking(true);
 
     wsRef.current.send(JSON.stringify({
@@ -922,7 +1060,7 @@ export default function AIInterviewer({ sessionId, token, role, company, resume,
       code: code || undefined,
       language: code ? language : undefined,
     }));
-  }, [code, language, addCandidateMessage]);
+  }, [code, language, addCandidateMessage, isDirectCodeMode, runOutput]);
 
   // ── Run Code ───────────────────────────────────────────────────────
   const runCode = useCallback(async () => {
@@ -1085,12 +1223,18 @@ export default function AIInterviewer({ sessionId, token, role, company, resume,
 
   // ── End Interview ────────────────────────────────────────────────────
   const endInterview = useCallback(() => {
+    if (isDirectCodeMode) {
+      setPhase('idle');
+      setIsDirectCodeMode(false);
+      setShowCodeEditor(false);
+      return;
+    }
     if (wsRef.current && wsRef.current.readyState === WebSocket.OPEN) {
       wsRef.current.send(JSON.stringify({ type: 'end_voice' }));
       setIsThinking(true);
       setPhase('completing');
     }
-  }, []);
+  }, [isDirectCodeMode]);
 
   // ── Keyboard Handler ─────────────────────────────────────────────────
   const submitTypedAnswer = useCallback(() => {
@@ -1238,6 +1382,16 @@ export default function AIInterviewer({ sessionId, token, role, company, resume,
             <div className="aii-stage-badge">{currentStage}</div>
           )}
 
+          {/* Code Editor toggle button */}
+          <button
+            className="aii-repeat-btn"
+            onClick={() => setShowCodeEditor((prev) => !prev)}
+            title="Toggle Live Code Editor"
+            style={{ background: 'rgba(99, 102, 241, 0.25)', borderColor: 'rgba(129, 140, 248, 0.5)' }}
+          >
+            <Code2 size="14" /> {showCodeEditor ? 'Close Code Editor' : 'Code Editor'}
+          </button>
+
           {/* Candidate webcam feed card — top right header placement */}
           <CandidateWebcamCard videoRef={videoRef} userStream={userStream} proctoringActive={proctoringEnabled} />
 
@@ -1261,68 +1415,118 @@ export default function AIInterviewer({ sessionId, token, role, company, resume,
         />
       )}
 
-      {/* Interview Room Stage — Obi is the main visual focus */}
-      <div className="aii-room__stage">
-        <ObiAvatar state={avatarState} lipLevel={lipLevel} audioLevel={audioLevel} statusText={stageStatusText} />
-        <div className="aii-subtitle-card">
-          <div className="aii-subtitle-card__header">
-            <div className="aii-subtitle-card__label"><Volume2 size="12" /> Live subtitle</div>
-            {subtitleText && phase === 'interviewing' && (
-              <button
-                className="aii-repeat-btn"
-                onClick={() => speakText(subtitleText)}
-                disabled={isSpeaking || isThinking}
-                title="Repeat Jack's question"
-              >
-                <RotateCcw size="12" /> Repeat
-              </button>
-            )}
-          </div>
-          <p className="aii-subtitle-card__text">{subtitleText || 'Jack will speak here once the interview begins.'}</p>
-        </div>
-      </div>
-
-      {/* Session Panel: chat + auto-popup code editor */}
-      <div className="aii-room__panel">
-        {codingProblem && (
-          <div className="aii-code-banner">
-            <div className="aii-code-banner__info">
-              <Code2 size="16" />
-              <span>Coding Challenge: <strong>{codingProblem.title}</strong> ({codingProblem.difficulty})</span>
+      {/* Interview Room Main Body */}
+      <div className={`aii-room__body ${showCodeEditor ? 'aii-room__body--split' : ''}`}>
+        {/* Left Side: Avatar, Subtitles, Chat, Controls */}
+        <div className="aii-room__left">
+          <div className="aii-room__stage">
+            <ObiAvatar state={avatarState} lipLevel={lipLevel} audioLevel={audioLevel} statusText={stageStatusText} />
+            <div className="aii-subtitle-card">
+              <div className="aii-subtitle-card__header">
+                <div className="aii-subtitle-card__label"><Volume2 size="12" /> Live subtitle</div>
+                {subtitleText && phase === 'interviewing' && (
+                  <button
+                    className="aii-repeat-btn"
+                    onClick={() => speakText(subtitleText)}
+                    disabled={isSpeaking || isThinking}
+                    title="Repeat Jack's question"
+                  >
+                    <RotateCcw size="12" /> Repeat
+                  </button>
+                )}
+              </div>
+              <p className="aii-subtitle-card__text">{subtitleText || 'Jack will speak here once the interview begins.'}</p>
             </div>
-            <button
-              className="aii-repeat-btn"
-              onClick={() => setShowCodeEditor((prev) => !prev)}
-            >
-              {showCodeEditor ? 'Hide Code Editor' : 'Open Code Editor'}
-            </button>
           </div>
-        )}
 
-        {phase === 'initializing' && (
-          <div className="aii-init-message">
-            <ObiAvatar compact state="connecting" />
-            <div className="aii-spinner aii-spinner--sm" />
-            <p>{statusMessage || 'Jack is reading your resume and preparing your interview…'}</p>
+          <div className="aii-room__panel">
+            {phase === 'initializing' && (
+              <div className="aii-init-message">
+                <ObiAvatar compact state="connecting" />
+                <div className="aii-spinner aii-spinner--sm" />
+                <p>{statusMessage || 'Jack is reading your resume and preparing your interview…'}</p>
+              </div>
+            )}
+
+            <div className="aii-chat">
+              {messages.map((msg) => (
+                <MessageBubble key={msg.id || `${msg.role}-${msg.ts}`} message={msg} />
+              ))}
+              {isThinking && <ThinkingIndicator />}
+              <div ref={messagesEndRef} />
+            </div>
           </div>
-        )}
 
-        <div className="aii-chat">
-          {messages.map((msg) => (
-            <MessageBubble key={msg.id || `${msg.role}-${msg.ts}`} message={msg} />
-          ))}
+          {/* Input Area inside Left Side */}
+          {phase === 'interviewing' && (
+            <div className="aii-input-area aii-room__controls">
+              <div className="aii-voice-controls">
+                <div className="aii-voice-row">
+                  <div className="aii-mic-wrap">
+                    <button
+                      className={`aii-mic-btn ${isRecording ? 'aii-mic-btn--recording' : ''}`}
+                      onClick={() => {
+                        if (isRecording) {
+                          stopRecording();
+                        } else {
+                          startRecording();
+                        }
+                      }}
+                      disabled={isThinking || isSpeaking}
+                      title={isRecording ? 'Click to stop & send answer' : 'Click to start speaking'}
+                      aria-label={isRecording ? 'Click to stop & send answer' : 'Click to start speaking'}
+                    >
+                      <Mic size="24" />
+                    </button>
+                    <span className="aii-mic-label">{isRecording ? 'Click to send' : 'Click to talk'}</span>
+                  </div>
 
-          {isThinking && <ThinkingIndicator />}
+                  <div className="aii-voice-meta">
+                    <WaveformVisualizer isActive={isRecording || isSpeaking} color={isRecording ? '#f87171' : '#818cf8'} />
+                    <div className={`aii-voice-status aii-voice-status--${isRecording ? 'rec' : isSpeaking ? 'speak' : isThinking ? 'think' : 'idle'}`}>
+                      {isRecording
+                        ? <><span className="aii-voice-status__dot" /> Recording…</>
+                        : isSpeaking
+                          ? <><Volume2 size="14" /> Jack speaking…</>
+                          : isThinking
+                            ? <><Loader2 size="14" className="aii-spin" /> Thinking…</>
+                            : <><Mic size="14" /> Ready to record</>}
+                    </div>
+                  </div>
+                </div>
 
-          <div ref={messagesEndRef} />
+                <div className="aii-text-row">
+                  <input
+                    ref={textInputRef}
+                    type="text"
+                    className="aii-text-input"
+                    placeholder="Or type your response to Jack…"
+                    onKeyDown={handleKeyDown}
+                    disabled={isThinking || isSpeaking}
+                    aria-label="Type your response"
+                  />
+                  <button
+                    className="aii-send-btn"
+                    onClick={submitTypedAnswer}
+                    disabled={isThinking || isSpeaking}
+                    title="Send message"
+                    aria-label="Send message"
+                  >
+                    <Send size="16" />
+                  </button>
+                </div>
+              </div>
+            </div>
+          )}
         </div>
 
+        {/* Right Side: Full IDE Workspace */}
         {showCodeEditor && (
-          <div className="aii-code-popover">
+          <div className="aii-room__right aii-code-workspace">
             <CodingPanel
               problem={codingProblem}
               language={language}
-              onLanguageChange={setLanguage}
+              onLanguageChange={handleLanguageChange}
               code={code}
               onCodeChange={setCode}
               stdin={stdin}
@@ -1338,75 +1542,12 @@ export default function AIInterviewer({ sessionId, token, role, company, resume,
               onSend={() => {
                 const submission = `Here is my code solution in ${language}:\n\`\`\`${language}\n${code}\n\`\`\`\nExecution Output:\n${runOutput || '(Code executed)'}`;
                 sendAnswer(submission);
-                setShowCodeEditor(false);
               }}
               languageOptions={LANGUAGE_OPTIONS}
             />
           </div>
         )}
       </div>
-
-      {/* Input Area */}
-      {phase === 'interviewing' && (
-        <div className="aii-input-area aii-room__controls">
-          <div className="aii-voice-controls">
-            <div className="aii-voice-row">
-              <div className="aii-mic-wrap">
-                <button
-                  className={`aii-mic-btn ${isRecording ? 'aii-mic-btn--recording' : ''}`}
-                  onClick={() => {
-                    if (isRecording) {
-                      stopRecording();
-                    } else {
-                      startRecording();
-                    }
-                  }}
-                  disabled={isThinking || isSpeaking}
-                  title={isRecording ? 'Click to stop & send answer' : 'Click to start speaking'}
-                  aria-label={isRecording ? 'Click to stop & send answer' : 'Click to start speaking'}
-                >
-                  <Mic size="26" />
-                </button>
-                <span className="aii-mic-label">{isRecording ? 'Click to send' : 'Click to talk'}</span>
-              </div>
-
-              <div className="aii-voice-meta">
-                <WaveformVisualizer isActive={isRecording || isSpeaking} color={isRecording ? '#f87171' : '#818cf8'} />
-                <div className={`aii-voice-status aii-voice-status--${isRecording ? 'rec' : isSpeaking ? 'speak' : isThinking ? 'think' : 'idle'}`}>
-                  {isRecording
-                    ? <><span className="aii-voice-status__dot" /> Recording — click mic to send answer</>
-                    : isSpeaking
-                      ? <><Volume2 size="15" /> Jack is speaking</>
-                      : isThinking
-                        ? <><Loader2 size="15" className="aii-spin" /> Jack is thinking…</>
-                        : <><Mic size="15" /> Ready — click mic button to record answer</>}
-                </div>
-              </div>
-            </div>
-
-            <div className="aii-text-row">
-              <input
-                ref={textInputRef}
-                type="text"
-                className="aii-text-input"
-                placeholder="Or type your response to Jack…"
-                onKeyDown={handleKeyDown}
-                disabled={isThinking || isSpeaking}
-                aria-label="Type your response"
-              />
-              <button
-                className="aii-send-btn"
-                onClick={submitTypedAnswer}
-                disabled={isThinking || isSpeaking}
-                title="Send message"
-                aria-label="Send message"
-              >
-                <Send size="18" />
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
 
       {phase === 'completing' && (
         <div className="aii-completing">

@@ -161,6 +161,17 @@ export const ScoreGauge = ({ label, score, color }) => {
 // ── Chat bubbles ─────────────────────────────────────────────────────────────
 export const MessageBubble = ({ message }) => {
   const isInterviewer = message.role === 'interviewer';
+
+  const formatTimestamp = () => {
+    if (message.timestamp && typeof message.timestamp === 'string') {
+      return message.timestamp;
+    }
+    if (message.ts && !isNaN(Number(message.ts))) {
+      return new Date(Number(message.ts) * 1000).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+    }
+    return new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+  };
+
   return (
     <div className={`aii-bubble ${isInterviewer ? 'aii-bubble--ai' : 'aii-bubble--user'}`}>
       {isInterviewer && (
@@ -186,7 +197,7 @@ export const MessageBubble = ({ message }) => {
         )}
         <RichText text={message.text} />
         <span className="aii-bubble__time">
-          {new Date(message.ts * 1000).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+          {formatTimestamp()}
         </span>
       </div>
       {!isInterviewer && (

@@ -279,10 +279,11 @@ class TestJudgeSubmissionScenarios:
         assert r["results"][0]["status"] == "timeout"
 
     async def test_missing_runtime_reports_error(self):
-        r = await judge_submission("csharp", CORRECT_SOLUTION, VISIBLE_CASES)
+        r = await judge_submission("unsupported_lang", CORRECT_SOLUTION, VISIBLE_CASES)
         assert r["ok"] is False
-        assert r["error"] and "runtime" in r["error"].lower()
+        assert r["error"] and ("runtime" in r["error"].lower() or "not supported" in r["error"].lower())
         assert r["score"] == 0
+
 
     async def test_whitespace_normalization_on_output(self):
         noisy = CORRECT_SOLUTION.replace('print(cand)', 'print("  ", cand, "  ")')

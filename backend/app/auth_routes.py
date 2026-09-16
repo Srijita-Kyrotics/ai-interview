@@ -107,6 +107,29 @@ def get_captcha():
     return {"token": captcha["token"], "question": captcha["question"]}
 
 
+@router.post("/auth/guest")
+def guest_login():
+    """Quick guest user authentication for instant interview access."""
+    guest_email = f"guest_{secrets.token_hex(4)}@candidate.com"
+    role = "candidate"
+    name = "Guest Candidate"
+    try:
+        if not user_exists(guest_email):
+            save_user(guest_email, name, "", "", role)
+    except Exception:
+        pass
+    token = create_token(guest_email, role)
+    return {
+        "ok": True,
+        "name": name,
+        "email": guest_email,
+        "role": role,
+        "token": token,
+        "access_token": token,
+    }
+
+
+
 @router.post("/auth/send-otp")
 def send_otp(payload: SendOtpRequest, request: Request):
     email = payload.email.strip().lower()

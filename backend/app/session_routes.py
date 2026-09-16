@@ -481,13 +481,13 @@ async def _run_judge0_test_cases(
     passed = 0
     api_usable = True
 
-    judge0_host = settings.judge0_host
     language_ids = settings.judge0_language_ids
-    headers = {
-        "x-rapidapi-key": settings.judge0_api_key,
-        "x-rapidapi-host": judge0_host,
-        "Content-Type": "application/json",
-    }
+    headers = {"Content-Type": "application/json"}
+    if settings.judge0_api_key:
+        headers["x-rapidapi-key"] = settings.judge0_api_key
+        headers["x-rapidapi-host"] = settings.judge0_host
+
+    url = f"{settings.judge0_url.rstrip('/')}/submissions?base64_encoded=false&wait=true"
 
     async with httpx.AsyncClient() as client:
         for case in test_cases:
@@ -501,7 +501,7 @@ async def _run_judge0_test_cases(
 
             try:
                 response = await client.post(
-                    f"https://{judge0_host}/submissions?base64_encoded=false&wait=true",
+                    url,
                     json=payload,
                     headers=headers,
                     timeout=settings.judge0_timeout,
@@ -516,7 +516,7 @@ async def _run_judge0_test_cases(
                 })
                 continue
 
-            if response.status_code != 200:
+            if response.status_code not in (200, 201):
                 api_usable = False
                 results.append({
                     "input": case.get("input"),
@@ -556,13 +556,15 @@ async def simulate_code_run(question_id: int, language: str, code: str) -> dict[
 
     test_cases = question.get("testCases", [])
 
-    use_judge0 = bool(settings.judge0_api_key) and language in settings.judge0_language_ids
+    lang_key = (language or "").lower().strip()
+    use_judge0 = bool(settings.judge0_url or settings.judge0_api_key) and lang_key in settings.judge0_language_ids
     if use_judge0:
-        results, passed, api_usable = await _run_judge0_test_cases(language, code, test_cases)
+        results, passed, api_usable = await _run_judge0_test_cases(lang_key, code, test_cases)
         if not api_usable:
-            results, passed = await _run_local_test_cases(language, code, test_cases)
+            results, passed = await _run_local_test_cases(lang_key, code, test_cases)
     else:
-        results, passed = await _run_local_test_cases(language, code, test_cases)
+        results, passed = await _run_local_test_cases(lang_key, code, test_cases)
+
 
     score = round((passed / len(test_cases)) * 100) if test_cases else 0
     return {

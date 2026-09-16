@@ -42,21 +42,30 @@ export function ProctoringModal({ modal, onClose }) {
   if (!modal) return null
 
   const isTerminated = modal.type === 'terminated'
-  const isWarning    = modal.type === 'warning'
 
   return (
-    <div
-      className={`proctoring-toast ${isTerminated ? 'proctoring-toast--terminated' : 'proctoring-toast--warning'}`}
-      role="alert"
-      aria-live="assertive"
-    >
-      <h3>{isTerminated ? '⚠ TEST TERMINATED' : `⚠ Malpractice Warning ${modal.warning}/3`}</h3>
-      <p>{modal.reason}</p>
-      {!isTerminated && (
-        <button className="proctoring-toast-dismiss" onClick={onClose}>
-          I understand
-        </button>
-      )}
+    <div className="proctoring-modal-overlay">
+      <div
+        className={`proctoring-toast ${isTerminated ? 'proctoring-toast--terminated' : 'proctoring-toast--warning'}`}
+        role="alert"
+        aria-live="assertive"
+      >
+        <div className="proctoring-toast-header">
+          <span className="proctoring-toast-icon">{isTerminated ? '⛔' : '⚠️'}</span>
+          <h3>{isTerminated ? 'TEST TERMINATED' : `PROCTORING WARNING (${modal.warning}/3)`}</h3>
+        </div>
+        <p className="proctoring-toast-body">{modal.reason}</p>
+        {!isTerminated && (
+          <p className="proctoring-toast-subtext">
+            Please face the camera and remain focused on the assessment window. 3 total warnings will terminate your interview.
+          </p>
+        )}
+        {!isTerminated && (
+          <button className="proctoring-toast-dismiss" onClick={onClose}>
+            I Understand & Resume Test
+          </button>
+        )}
+      </div>
     </div>
   )
 }

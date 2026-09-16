@@ -58,11 +58,33 @@ class Settings(BaseSettings):
     openai_base_url: str = Field("https://api.openai.com/v1", alias="OPENAI_BASE_URL")
     judge0_api_key: str = Field("", alias="JUDGE0_API_KEY")
     judge0_host: str = Field("judge0-ce.p.rapidapi.com", alias="JUDGE0_HOST")
+    judge0_url: str = Field("https://judge.bhasantar.com/judge0", alias="JUDGE0_URL")
     judge0_timeout: float = Field(10.0, alias="JUDGE0_TIMEOUT")
     judge0_language_ids: dict[str, int] = Field(
-        {"python": 71, "javascript": 63, "java": 62, "c": 50, "csharp": 51},
+        {
+            "python": 71,
+            "py": 71,
+            "javascript": 63,
+            "js": 63,
+            "c": 50,
+            "cpp": 54,
+            "c++": 54,
+            "java": 62,
+            "csharp": 51,
+            "cs": 51,
+            "go": 60,
+            "rust": 73,
+            "typescript": 74,
+            "ts": 74,
+            "php": 68,
+            "ruby": 72,
+            "kotlin": 78,
+            "swift": 83,
+            "sql": 82,
+        },
         alias="JUDGE0_LANGUAGE_IDS",
     )
+
 
     # ── AI Interviewer: Voice Pipeline ────────────────────────────────────
     deepgram_api_key: str = Field("", alias="DEEPGRAM_API_KEY")

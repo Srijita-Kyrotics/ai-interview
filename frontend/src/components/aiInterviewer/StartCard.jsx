@@ -1,5 +1,5 @@
 import React from 'react';
-import { ArrowRight, CheckCircle2, Clock, ListChecks, Loader2, Mic, Target, XCircle } from 'lucide-react';
+import { ArrowRight, CheckCircle2, Clock, Code2, ListChecks, Loader2, Mic, Target, XCircle } from 'lucide-react';
 import { ROLE_MAPPINGS } from '../../constants';
 
 // Idle / start screen shown before the voice interview begins.
@@ -21,6 +21,7 @@ const StartCard = ({
   onResumeFileChange,
   onClearResumeFile,
   onBegin,
+  onStartCodingDemo,
 }) => {
   const roles = Object.keys(ROLE_MAPPINGS);
 
@@ -155,17 +156,41 @@ const StartCard = ({
         <button
           className="aii-start-btn aii-start-btn--ghost"
           onClick={() => onBegin(true)}
+          style={{ marginBottom: '12px' }}
         >
           <span>Resume Interview</span>
           <ArrowRight size="18" />
         </button>
       )}
 
-      <button className="aii-start-btn" onClick={() => onBegin(false)}>
-        <Mic size="18" />
-        <span>{resumableSession ? 'Start New Interview' : 'Begin Interview'}</span>
-        <ArrowRight size="18" />
-      </button>
+      <div style={{ display: 'flex', gap: '12px', width: '100%', flexWrap: 'wrap' }}>
+        <button
+          type="button"
+          className="aii-start-btn"
+          onClick={() => onBegin(false)}
+          style={{ flex: '1 1 200px' }}
+        >
+          <Mic size="18" />
+          <span>{resumableSession ? 'Start New Interview' : 'Begin Full Interview'}</span>
+          <ArrowRight size="18" />
+        </button>
+
+        <button
+          type="button"
+          className="aii-start-btn"
+          onClick={onStartCodingDemo}
+          style={{
+            flex: '1 1 200px',
+            background: 'linear-gradient(135deg, #4f46e5 0%, #7c3aed 100%)',
+            borderColor: '#6366f1',
+            color: '#ffffff',
+            boxShadow: '0 4px 14px rgba(99, 102, 241, 0.35)',
+          }}
+        >
+          <Code2 size="18" />
+          <span>Test Code Editor (Direct IDE)</span>
+        </button>
+      </div>
       <p className="aii-start-card__footnote">Make sure your microphone is allowed in the browser.</p>
     </div>
   );

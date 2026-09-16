@@ -19,6 +19,7 @@ Nodes do not know which LLM provider is being used.
 
 from __future__ import annotations
 
+import asyncio
 import json
 import logging
 import time
@@ -282,13 +283,37 @@ async def interview_planner_node(state: InterviewState) -> dict:
 
     result = await _call_llm_json(INTERVIEW_PLANNER_SYSTEM, prompt)
 
-    # Normalize stages — the model must return stages, no silent fallback
+    # Normalize stages — guarantee Stage 1 is 2 questions and Stage 2 is Live Coding
     raw_stages = result.get("stages", [])
     stages: list[InterviewStage] = []
-    for s in raw_stages:
+    
+    # Stage 1: Technical & Resume Exploration (2 questions)
+    stage1_raw = raw_stages[0] if raw_stages else {}
+    stages.append(InterviewStage(
+        id="stage_1_technical",
+        name=stage1_raw.get("name", "Technical Fundamentals & Resume"),
+        description=stage1_raw.get("description", "Core experience and technical fundamentals"),
+        topics=stage1_raw.get("topics", ["python", "software_engineering"]),
+        target_questions=2,
+        completed=False,
+    ))
+
+    # Stage 2: Live Coding Challenge
+    stage2_raw = raw_stages[1] if len(raw_stages) > 1 else {}
+    stages.append(InterviewStage(
+        id="stage_2_coding",
+        name="Live Coding Challenge",
+        description="Hands-on live coding and algorithm problem solving",
+        topics=stage2_raw.get("topics", ["coding", "algorithms", "problem_solving"]),
+        target_questions=1,
+        completed=False,
+    ))
+
+    # Append any remaining stages
+    for idx, s in enumerate(raw_stages[2:], start=3):
         stages.append(InterviewStage(
-            id=s.get("id", str(uuid.uuid4())[:8]),
-            name=s.get("name", "Stage"),
+            id=s.get("id", f"stage_{idx}"),
+            name=s.get("name", f"Stage {idx}"),
             description=s.get("description", ""),
             topics=s.get("topics", []),
             target_questions=int(s.get("target_questions", 2)),
@@ -400,51 +425,7 @@ async def question_generator_node(state: InterviewState) -> dict:
     if strong_topics:
         mastery_context += f"HIGH MASTERY (can go deeper or move on): {', '.join(strong_topics)}. "
 
-    prompt = QUESTION_GENERATOR_PROMPT.format(
-        candidate_name=analysis.get("candidate_name", "the candidate"),
-        role=state["role"],
-        current_stage=current_stage.get("name", "General"),
-        stage_topics=", ".join(current_stage.get("topics", [])),
-        questions_asked=state["main_questions_asked"],
-        max_questions=state["max_questions"],
-        resume_summary=resume_summary,
-        conversation_history=conversation_history,
-        topics_covered=", ".join(mem_summary["topics_covered"]),
-        topics_pending=", ".join(mem_summary["topics_pending"]),
-        strengths="; ".join(mem_summary["strengths"]),
-        weaknesses="; ".join(mem_summary["weaknesses"]),
-        unresolved_claims="; ".join(mem_summary["unresolved_claims"]),
-        last_answer=last_answer_text[:500] if last_answer_text else "N/A",
-        last_technical_score=last_eval.get("technical_accuracy", "N/A"),
-        last_depth_score=last_eval.get("depth", "N/A"),
-        last_missing_points=", ".join(last_eval.get("missing_points", [])),
-    )
-
-    # Append difficulty and mastery guidance to prompt
-    prompt += f"\n\nDIFFICULTY GUIDANCE (current level: {current_diff}):\n{difficulty_hint}"
-    if mastery_context:
-        prompt += f"\n\nTOPIC MASTERY:\n{mastery_context}"
-
-    # ── Feature 7: System design mode detection ───────────────────────────
-    is_system_design = state.get("is_system_design_mode", False)
-    if is_system_design:
-        prompt += (
-            "\n\nSYSTEM DESIGN MODE ACTIVE: This question should be a system design "
-            "question. Ask the candidate to design a system related to their experience "
-            "or the target role. Focus on architecture, scalability, tradeoffs."
-        )
-
-    result = await _call_llm_json(QUESTION_GENERATOR_SYSTEM, prompt, model=_fast_model())
-
     question_id = str(uuid.uuid4())
-    question_record = QuestionRecord(
-        id=question_id,
-        question=result.get("question_text", ""),
-        stage=current_stage.get("id", "general"),
-        topic=result.get("topic", "general"),
-        asked_at=time.time(),
-        intent=result.get("intent", "technical"),
-    )
 
     # ── Feature 9: In a coding stage, the question is the live-coding problem ──
     problem_updates: dict = {}
@@ -453,20 +434,108 @@ async def question_generator_node(state: InterviewState) -> dict:
         if not (active_problem and active_problem.get("description")):
             problem_updates = await coding_problem_generator_node(state)
             active_problem = problem_updates.get("active_coding_problem")
-        if active_problem and active_problem.get("description"):
-            problem_title = active_problem.get("title", "Coding Challenge")
-            question_record = QuestionRecord(
-                id=question_id,
-                question=(
-                    f"Please solve the following coding problem: {problem_title}\n\n"
-                    f"{active_problem.get('description', '')}"
+
+        # Fallback if problem generation returned empty
+        if not (active_problem and active_problem.get("description")):
+            active_problem = {
+                "id": "smallest_dup",
+                "title": "Smallest Repeated Number",
+                "difficulty": "easy",
+                "topic": "Arrays & Hashing",
+                "description": (
+                    "Given an array of integers `nums`, find the smallest integer that appears more than once in the array. "
+                    "If no number appears more than once, return -1.\n\n"
+                    "Example 1:\nInput: nums = [3, 1, 4, 3, 2, 1]\nOutput: 1\n\n"
+                    "Example 2:\nInput: nums = [1, 2, 3]\nOutput: -1"
                 ),
-                stage=current_stage.get("id", "general"),
-                topic=f"coding:{active_problem.get('topic', 'algorithms')}",
-                asked_at=time.time(),
-                intent="coding",
+                "constraints": ["1 <= nums.length <= 10^5", "-10^9 <= nums[i] <= 10^9"],
+                "examples": [
+                    {"input": "nums = [3, 1, 4, 3, 2, 1]", "output": "1", "explanation": "1 is repeated and smaller than 3."},
+                    {"input": "nums = [1, 2, 3]", "output": "-1", "explanation": "No duplicate numbers."}
+                ],
+                "starter_code": {
+                    "python": "def find_smallest_repeated(nums):\n    # Write your solution here\n    seen = set()\n    duplicates = set()\n    for x in nums:\n        if x in seen:\n            duplicates.add(x)\n        else:\n            seen.add(x)\n    return min(duplicates) if duplicates else -1\n\n# Quick test\nprint(find_smallest_repeated([3, 1, 4, 3, 2, 1]))\n",
+                    "javascript": "function findSmallestRepeated(nums) {\n    const seen = new Set();\n    const duplicates = new Set();\n    for (const x of nums) {\n        if (seen.has(x)) duplicates.add(x);\n        else seen.add(x);\n    }\n    if (duplicates.size === 0) return -1;\n    return Math.min(...duplicates);\n}\nconsole.log(findSmallestRepeated([3, 1, 4, 3, 2, 1]));\n"
+                },
+                "visible_test_cases": [
+                    {"input": "[3, 1, 4, 3, 2, 1]", "expected": "1"},
+                    {"input": "[1, 2, 3]", "expected": "-1"}
+                ],
+            }
+            problem_updates["active_coding_problem"] = active_problem
+
+        problem_title = active_problem.get("title", "Coding Challenge")
+        question_record = QuestionRecord(
+            id=question_id,
+            question=(
+                f"Great work on the technical questions! Now let's move on to the Live Coding Challenge: {problem_title}.\n\n"
+                f"I've loaded the problem statement, starter code, and test cases into the Code Editor on your right. "
+                f"Please review the problem details, write your solution in the editor, and run or submit your code when ready!"
+            ),
+            stage=current_stage.get("id", "general"),
+            topic=f"coding:{active_problem.get('topic', 'algorithms')}",
+            asked_at=time.time(),
+            intent="coding",
+        )
+        result = {
+            "question_text": question_record["question"],
+            "topic": question_record["topic"],
+            "intent": "coding",
+            "difficulty": active_problem.get("difficulty", "easy"),
+        }
+    else:
+        prompt = QUESTION_GENERATOR_PROMPT.format(
+            candidate_name=analysis.get("candidate_name", "the candidate"),
+            role=state["role"],
+            current_stage=current_stage.get("name", "General"),
+            stage_topics=", ".join(current_stage.get("topics", [])),
+            questions_asked=state["main_questions_asked"],
+            max_questions=state["max_questions"],
+            resume_summary=resume_summary,
+            conversation_history=conversation_history,
+            topics_covered=", ".join(mem_summary["topics_covered"]),
+            topics_pending=", ".join(mem_summary["topics_pending"]),
+            strengths="; ".join(mem_summary["strengths"]),
+            weaknesses="; ".join(mem_summary["weaknesses"]),
+            unresolved_claims="; ".join(mem_summary["unresolved_claims"]),
+            last_answer=last_answer_text[:500] if last_answer_text else "N/A",
+            last_technical_score=last_eval.get("technical_accuracy", "N/A"),
+            last_depth_score=last_eval.get("depth", "N/A"),
+            last_missing_points=", ".join(last_eval.get("missing_points", [])),
+        )
+
+        # Append difficulty and mastery guidance to prompt
+        prompt += f"\n\nDIFFICULTY GUIDANCE (current level: {current_diff}):\n{difficulty_hint}"
+        if mastery_context:
+            prompt += f"\n\nTOPIC MASTERY:\n{mastery_context}"
+
+        if state.get("_skip_requested", False):
+            prompt += (
+                "\n\nIMPORTANT: The candidate explicitly skipped or requested to move to the next question. "
+                "Address them warmly with a brief acknowledgment ('No problem at all! Let's move on to the next topic.') "
+                "and ask a brand-new technical question on a completely different topic. "
+                "DO NOT grill them or ask follow-ups on the skipped question."
             )
-            result["topic"] = question_record["topic"]
+
+        # ── Feature 7: System design mode detection ───────────────────────────
+        is_system_design = state.get("is_system_design_mode", False)
+        if is_system_design:
+            prompt += (
+                "\n\nSYSTEM DESIGN MODE ACTIVE: This question should be a system design "
+                "question. Ask the candidate to design a system related to their experience "
+                "or the target role. Focus on architecture, scalability, tradeoffs."
+            )
+
+        result = await _call_llm_json(QUESTION_GENERATOR_SYSTEM, prompt, model=_fast_model())
+
+        question_record = QuestionRecord(
+            id=question_id,
+            question=result.get("question_text", ""),
+            stage=current_stage.get("id", "general"),
+            topic=result.get("topic", "general"),
+            asked_at=time.time(),
+            intent=result.get("intent", "technical"),
+        )
 
     # Update memory
     mem_mgr.mark_question_asked(question_id, result.get("topic", "general"))
@@ -503,6 +572,19 @@ async def question_generator_node(state: InterviewState) -> dict:
         "last_activity_at": time.time(),
         "active_coding_problem": problem_updates.get("active_coding_problem"),
     }
+
+
+def _is_skip_or_dont_know(answer_text: str) -> bool:
+    if not answer_text:
+        return False
+    text = answer_text.lower().strip()
+    skip_phrases = [
+        "don't know", "dont know", "do not know", "no idea", "not sure",
+        "skip", "pass", "next question", "move on", "forgot", "don't remember",
+        "dont remember", "can't recall", "cant recall", "no clue", "ask next",
+        "ask another", "next topic", "don't understand"
+    ]
+    return any(p in text for p in skip_phrases)
 
 
 # ══════════════════════════════════════════════════════════════════════════════
@@ -607,7 +689,24 @@ async def answer_analyzer_node(state: InterviewState) -> dict:
         )
         prompt += f"\n\n{test_context}"
 
-    result = await _call_llm_json(ANSWER_ANALYZER_SYSTEM, prompt, model=_fast_model())
+    # ── Feature 3: Prepare contradiction detection prompt for parallel execution ──
+    existing_facts = state.get("candidate_facts", [])
+    facts_for_check = [
+        {"fact_id": f["fact_id"], "statement": f["statement"], "topic": f["topic"]}
+        for f in existing_facts
+    ]
+
+    contradiction_prompt = CONTRADICTION_DETECTOR_PROMPT.format(
+        latest_question=current_question.get("question", ""),
+        latest_answer=current_answer.get("answer_text", ""),
+        existing_facts=json.dumps(facts_for_check[:20], indent=2) if facts_for_check else "No previous facts recorded.",
+    )
+
+    # Run answer evaluation and contradiction detection in parallel to eliminate sequential latency
+    analyzer_task = _call_llm_json(ANSWER_ANALYZER_SYSTEM, prompt, model=_fast_model())
+    contradiction_task = _call_llm_json(CONTRADICTION_DETECTOR_SYSTEM, contradiction_prompt)
+
+    result, contradiction_result = await asyncio.gather(analyzer_task, contradiction_task)
 
     # ── Blend LLM communication score with objective metrics ─────────────
     llm_comm = int(result.get("communication_quality", 5))
@@ -641,9 +740,6 @@ async def answer_analyzer_node(state: InterviewState) -> dict:
     }
 
     # ── Feature 9: Coding quality grade ──────────────────────────────────
-    # The grade is grounded in the judge's objective test score when available
-    # (60% objective, 40% LLM impression) so a broken solution can never be
-    # scored highly because the LLM was optimistic.
     coding_quality: int | None = None
     if active_problem and code_snapshot:
         llm_quality = (
@@ -677,30 +773,16 @@ async def answer_analyzer_node(state: InterviewState) -> dict:
 
     updated_evaluations = list(state.get("evaluations_history", [])) + [evaluation]
 
-    # Signal whether a follow-up is needed
-    should_follow_up = (
+    # Check for skip / don't know request from candidate
+    answer_text = current_answer.get("answer_text", "")
+    is_skip = _is_skip_or_dont_know(answer_text)
+
+    # Signal whether a follow-up is needed (never force follow-up if candidate skipped)
+    should_follow_up = not is_skip and (
         result.get("should_dig_deeper", False) or
         evaluation["depth"] < 6 or
         len(evaluation["red_flags"]) > 0 or
         len(evaluation["missing_points"]) > 1
-    )
-
-    # ── Feature 3: Contradiction detection ────────────────────────────────
-    existing_facts = state.get("candidate_facts", [])
-    facts_for_check = [
-        {"fact_id": f["fact_id"], "statement": f["statement"], "topic": f["topic"]}
-        for f in existing_facts
-    ]
-
-    contradiction_prompt = CONTRADICTION_DETECTOR_PROMPT.format(
-        latest_question=current_question.get("question", ""),
-        latest_answer=current_answer.get("answer_text", ""),
-        existing_facts=json.dumps(facts_for_check[:20], indent=2) if facts_for_check else "No previous facts recorded.",
-    )
-
-    contradiction_result = await _call_llm_json(
-        CONTRADICTION_DETECTOR_SYSTEM,
-        contradiction_prompt,
     )
 
     # Process new facts
@@ -776,6 +858,7 @@ async def answer_analyzer_node(state: InterviewState) -> dict:
         "difficulty_level": mem_mgr.difficulty_level,
         "coding_submissions": coding_submissions,
         "_should_follow_up": should_follow_up,  # routing signal
+        "_skip_requested": is_skip,
         "_dig_deeper_angle": result.get("dig_deeper_angle", ""),
         "last_activity_at": time.time(),
     }

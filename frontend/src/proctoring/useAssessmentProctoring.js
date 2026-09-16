@@ -3,13 +3,13 @@ import { VIOLATION_PENALTIES } from './proctoringState'
 import * as faceapi from 'face-api.js'
 import { API, getAuthToken } from '../api.js'
 
-const COOLDOWN_MS = 5000
-const NO_FACE_LIMIT_MS = 2000
+const COOLDOWN_MS = 6000
+const NO_FACE_LIMIT_MS = 6000
 const DEVTOOLS_THRESHOLD = 160
 const FACE_DETECT_INTERVAL_MS = 400
 const MODEL_RETRY_DELAY_MS = 5000
 const MODEL_MAX_RETRIES = 3
-const GRACE_PERIOD_MS = 15000
+const GRACE_PERIOD_MS = 20000
 
 // Objects COCO-SSD flags as suspicious. `laptop` is deliberately excluded:
 // candidates are using a laptop to take the interview, so it is in the webcam

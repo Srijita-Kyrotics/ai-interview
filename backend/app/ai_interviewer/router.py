@@ -81,7 +81,7 @@ from app.ai_interviewer.nodes import LLMUnavailableError
 from app.ai_interviewer.state import make_initial_state
 from app.ai_interviewer.state_store import InterviewStateStore, get_state_store
 from app.ai_interviewer.voice import VoicePipeline
-from app.code_executor import execute_local
+from app.code_executor import execute_code, execute_local
 from app.config import settings
 from app.db import check_rate_limit, load_session, load_user, save_session
 from app.helpers import create_token, decode_token, default_scores
@@ -107,6 +107,8 @@ def _public_coding_problem(problem: dict | None) -> dict | None:
     if not problem:
         return None
     public = dict(problem)
+    public.pop("hidden_test_cases", None)
+    return public
 
 
 # ── Role Inference from Resume ─────────────────────────────────────────────
@@ -153,8 +155,7 @@ def _infer_role_from_resume(resume_parsed: dict | None) -> str | None:
             return str(first_role).strip()
 
     return None
-    public.pop("hidden_test_cases", None)
-    return public
+
 
 
 # ── Request/Response Models ──────────────────────────────────────────────────
@@ -442,7 +443,7 @@ async def run_interview_code(
     if not check_rate_limit(f"code:{user.get('email', '')}", settings.code_rate_limit, settings.code_rate_window):
         raise HTTPException(status_code=429, detail="Too many code execution requests. Please wait.")
 
-    result = await execute_local(request.language, request.code, request.stdin)
+    result = await execute_code(request.language, request.code, request.stdin)
     logger.info(
         "AI interview code run",
         extra={"email": user.get("email"), "language": request.language, "timed_out": result.get("timed_out")},
@@ -1066,7 +1067,7 @@ def _is_placeholder_name(name: str) -> bool:
 
 
 def _resolve_candidate_name(state: dict) -> str:
-    """Best-effort real first name for the greeting: resume name → account name → email."""
+    """Best-effort real candidate name for the greeting: resume name → account name → email."""
     parsed = state.get("resume_parsed") or {}
     name = (parsed.get("name") or "").strip()
     if _is_placeholder_name(name):
@@ -1076,9 +1077,8 @@ def _resolve_candidate_name(state: dict) -> str:
     if not name:
         email = state.get("candidate_email") or ""
         name = email.split("@")[0] if email else ""
-    full = name or "there"
-    # Extract first name only (e.g. "Srijita" from "Srijita Ghorai")
-    return full.strip().split()[0]
+    return name or "there"
+
 
 
 def _build_instant_greeting(state: dict) -> str:
@@ -1103,7 +1103,7 @@ def _build_instant_greeting(state: dict) -> str:
 _SENTENCE_SPLIT_RE = re.compile(r"(?<=[.!?])\s+")
 _MIN_CHUNK_CHARS = 60
 _MAX_CHUNK_CHARS = 180
-_MAX_TTS_CONCURRENCY = 2
+_MAX_TTS_CONCURRENCY = 3
 
 
 def _split_speech_chunks(text: str) -> list[str]:
@@ -1215,15 +1215,20 @@ async def voice_interview_websocket(
     if not runner:
         await websocket.send_json({"type": "error", "message": "Interview session not found"})
         await websocket.close(code=4002)
-        return
-
     # Get or create voice pipeline
     pipeline = VoicePipeline.from_settings()
 
+    async def _send_coding_problem_if_active() -> None:
+        """Deliver the live-coding problem over WS whenever active."""
+        problem = runner.state.get("active_coding_problem")
+        if problem and problem.get("description"):
+            await websocket.send_json({
+                "type": "coding_problem",
+                "problem": _public_coding_problem(problem),
+                "timestamp": time.time(),
+            })
+
     try:
-        # Initialize if needed. LLM analysis (resume → plan → opening) can take
-        # 20-60s, so Obi greets the candidate IMMEDIATELY with a static greeting
-        # (no LLM dependency) and prepares questions in the background.
         if not runner._initialized:
             await websocket.send_json({
                 "type": "progress",
@@ -1310,6 +1315,7 @@ async def voice_interview_websocket(
                     "text": first_q,
                     "question_id": current_q.get("id", ""),
                 })
+                await _send_coding_problem_if_active()
                 with contextlib.suppress(Exception):
                     await _stream_tts(pipeline, websocket, first_q)
             else:
@@ -1412,6 +1418,7 @@ async def voice_interview_websocket(
                         "stage_index": state.get("current_stage_index", 0),
                         "total_stages": len(state.get("interview_plan", {}).get("stages", [])) or 1,
                     })
+                    await _send_coding_problem_if_active()
 
                     await _stream_tts(pipeline, websocket, response_text)
                     continue
@@ -1482,6 +1489,7 @@ async def voice_interview_websocket(
                         "stage_index": state.get("current_stage_index", 0),
                         "total_stages": len(state.get("interview_plan", {}).get("stages", [])) or 1,
                     })
+                    await _send_coding_problem_if_active()
 
                     # TTS (streamed so audio starts before the full text is generated)
                     await _stream_tts(pipeline, websocket, response_text)
