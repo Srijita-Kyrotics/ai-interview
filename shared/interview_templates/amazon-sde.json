@@ -1,0 +1,62 @@
+{
+  "id": "amazon-sde",
+  "name": "Amazon SDE (LP Focused)",
+  "description": "Amazon interview with heavy Leadership Principles focus",
+  "role": "Software Development Engineer",
+  "companies": [
+    "Amazon"
+  ],
+  "max_questions": 12,
+  "voice_enabled": true,
+  "stages": [
+    {
+      "id": "lp_behavioral",
+      "name": "Leadership Principles Deep Dive",
+      "topics": [
+        "Customer Obsession",
+        "Ownership",
+        "Bias for Action",
+        "Dive Deep"
+      ],
+      "target_questions": 4
+    },
+    {
+      "id": "coding",
+      "name": "Coding Challenge",
+      "topics": [
+        "Trees/Graphs",
+        "Dynamic Programming",
+        "System Design (Light)"
+      ],
+      "target_questions": 3
+    },
+    {
+      "id": "system_design",
+      "name": "System Design",
+      "topics": [
+        "High Availability",
+        "Data Consistency",
+        "Operational Excellence"
+      ],
+      "target_questions": 3
+    },
+    {
+      "id": "bar_raiser",
+      "name": "Bar Raiser Round",
+      "topics": [
+        "Hiring Bar",
+        "Mentorship",
+        "Innovation"
+      ],
+      "target_questions": 2
+    }
+  ],
+  "focus_areas": [
+    "Leadership Principles",
+    "Operational Excellence",
+    "Customer Obsession"
+  ],
+  "created_by": "system",
+  "created_at": 0.0,
+  "is_system": true
+}

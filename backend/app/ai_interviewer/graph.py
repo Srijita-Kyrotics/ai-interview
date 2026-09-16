@@ -87,6 +87,7 @@ from app.ai_interviewer.nodes import (
     scoring_node,
     stage_advance_node,
     system_design_evaluator_node,
+    system_design_question_generator_node,
 )
 from app.ai_interviewer.state import InterviewState
 
@@ -123,14 +124,39 @@ def route_after_answer_analysis(state: InterviewState) -> Literal[
 
 
 def route_after_stage_advance(state: InterviewState) -> Literal[
-    "question_generator", "closing"
+    "question_generator", "system_design_question_generator", "closing"
 ]:
-    """After advancing a stage, either continue with next question or close."""
+    """After advancing a stage, either continue with next question, enter system design, or close."""
     if state.get("should_end", False):
         return "closing"
     if state.get("questions_asked", 0) >= state.get("max_turns", state.get("max_questions", 12) * 2):
         return "closing"
+    
+    # Check if we should enter system design stage
+    current_stage = state.get("current_stage", {})
+    if current_stage.get("id") == "system_design" or current_stage.get("name", "").lower() == "system design":
+        return "system_design_question_generator"
+    
     return "question_generator"
+
+
+def route_after_system_design_answer(state: InterviewState) -> Literal[
+    "system_design_question_generator", "stage_advance", "closing"
+]:
+    """Route after system design answer analysis."""
+    should_end = state.get("should_end", False)
+    questions_asked = state.get("questions_asked", 0)
+    max_turns = state.get("max_turns", state.get("max_questions", 12) * 2)
+    
+    if should_end or questions_asked >= max_turns:
+        return "closing"
+    
+    # Count system design questions asked
+    sd_questions = [q for q in state.get("questions_history", []) if q.get("intent") == "system_design"]
+    if len(sd_questions) >= 7:  # All 7 dimensions covered
+        return "stage_advance"
+    
+    return "system_design_question_generator"
 
 
 def route_after_follow_up(state: InterviewState) -> Literal[
@@ -192,9 +218,11 @@ def build_interview_graph(checkpointer=None):
     graph.add_node("scoring", scoring_node)
     graph.add_node("report_generator", report_generator_node)
     graph.add_node("error_node", error_node)
+    # System Design Stage nodes
+    graph.add_node("system_design_question_generator", system_design_question_generator_node)
+    graph.add_node("system_design_evaluator", system_design_evaluator_node)
     # Feature 1: Claim verification (called inline in process_answer, not a graph node)
     # Feature 6: Replanner (called inline in process_answer every N questions)
-    # Feature 7: System design evaluator (called inline for system design questions)
 
     # ── Add Edges ─────────────────────────────────────────────────────────
 
@@ -243,12 +271,28 @@ def build_interview_graph(checkpointer=None):
         }
     )
 
-    # Stage Advance → Question Generator or Closing
+    # Stage Advance → Question Generator, System Design, or Closing
     graph.add_conditional_edges(
         "stage_advance",
         route_after_stage_advance,
         {
             "question_generator": "question_generator",
+            "system_design_question_generator": "system_design_question_generator",
+            "closing": "closing",
+        }
+    )
+
+    # System Design Question Generator → System Design Evaluator (for automated test mode)
+    # In event-driven mode: WebSocket injects answer and calls system_design_evaluator directly
+    graph.add_edge("system_design_question_generator", "system_design_evaluator")
+
+    # System Design Evaluator → Next System Design Question or Stage Advance
+    graph.add_conditional_edges(
+        "system_design_evaluator",
+        route_after_system_design_answer,
+        {
+            "system_design_question_generator": "system_design_question_generator",
+            "stage_advance": "stage_advance",
             "closing": "closing",
         }
     )
@@ -635,8 +679,19 @@ class InterviewGraphRunner:
         if self.state.get("should_end", False) or self.state.get("questions_asked", 0) >= max_turns:
             return await self._finalize()
 
-        # Generate next question
-        q_result = await question_generator_node(self.state)
+        # Generate next question based on current stage
+        current_stage = self.state.get("current_stage", {})
+        is_system_design_stage = (
+            current_stage.get("id") == "system_design" or 
+            current_stage.get("name", "").lower() == "system design" or
+            self.state.get("is_system_design_mode", False)
+        )
+        
+        if is_system_design_stage:
+            q_result = await system_design_question_generator_node(self.state)
+        else:
+            q_result = await question_generator_node(self.state)
+        
         self.state.update(q_result)
         self._last_question_id = self.state.get("current_question", {}).get("id")
         self._checkpoint()

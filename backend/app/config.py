@@ -60,6 +60,7 @@ class Settings(BaseSettings):
     judge0_host: str = Field("judge0-ce.p.rapidapi.com", alias="JUDGE0_HOST")
     judge0_url: str = Field("https://judge.bhasantar.com/judge0", alias="JUDGE0_URL")
     judge0_timeout: float = Field(10.0, alias="JUDGE0_TIMEOUT")
+    judge0_use_rapidapi_headers: bool = Field(True, alias="JUDGE0_USE_RAPIDAPI_HEADERS")
     judge0_language_ids: dict[str, int] = Field(
         {
             "python": 71,

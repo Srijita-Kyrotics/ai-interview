@@ -1,0 +1,59 @@
+{
+  "id": "startup-fullstack",
+  "name": "Startup Full-Stack Engineer",
+  "description": "Pragmatic startup interview: shipping features, breadth over depth",
+  "role": "Full Stack Engineer",
+  "companies": [],
+  "max_questions": 10,
+  "voice_enabled": false,
+  "stages": [
+    {
+      "id": "experience",
+      "name": "Project Deep Dive",
+      "topics": [
+        "Recent Projects",
+        "Tech Choices",
+        "Trade-offs"
+      ],
+      "target_questions": 3
+    },
+    {
+      "id": "coding",
+      "name": "Practical Coding",
+      "topics": [
+        "API Design",
+        "Database",
+        "Frontend Integration"
+      ],
+      "target_questions": 3
+    },
+    {
+      "id": "architecture",
+      "name": "Architecture & Decisions",
+      "topics": [
+        "Scaling",
+        "Tech Debt",
+        "Monitoring"
+      ],
+      "target_questions": 2
+    },
+    {
+      "id": "culture",
+      "name": "Culture & Ownership",
+      "topics": [
+        "Autonomy",
+        "Learning",
+        "Prioritization"
+      ],
+      "target_questions": 2
+    }
+  ],
+  "focus_areas": [
+    "Shipping",
+    "Pragmatism",
+    "End-to-End Ownership"
+  ],
+  "created_by": "system",
+  "created_at": 0.0,
+  "is_system": true
+}
