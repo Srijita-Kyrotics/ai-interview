@@ -431,7 +431,11 @@ async def question_generator_node(state: InterviewState) -> dict:
 
     # ── Feature 9: In a coding stage, or if intent is coding_challenge, pop live-coding ──
     problem_updates: dict = {}
-    if _is_coding_stage(current_stage) or result.get("intent") == "coding_challenge":
+    # The LLM result is created in the non-coding branch below. Referencing it
+    # here before assignment crashes the first question on a normal stage.
+    # Coding stages are already selected by the interview plan, so use that
+    # state boundary to enter the live-coding path.
+    if _is_coding_stage(current_stage):
         active_problem = state.get("active_coding_problem")
         if not (active_problem and active_problem.get("description")):
             problem_updates = await coding_problem_generator_node(state)
@@ -1415,7 +1419,14 @@ async def stage_advance_node(state: InterviewState) -> dict:
     # Mark current stage complete
     next_idx = current_idx + 1
     if next_idx >= len(stages):
-        return {"should_end": True}  # All stages done
+        # A resumed/older session may contain fewer stages than the global
+        # interview cap. Keep asking in the current stage until that cap is
+        # reached instead of ending after the stage's first target question.
+        max_questions = state.get("max_questions", 12)
+        max_turns = state.get("max_turns", max_questions * 2)
+        if state.get("questions_asked", 0) < max_turns:
+            return {}
+        return {"should_end": True}
 
     next_stage = stages[next_idx]
 

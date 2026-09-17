@@ -57,6 +57,41 @@ const LANGUAGE_OPTIONS = [
   { key: 'typescript', label: 'TypeScript' },
 ];
 
+const DEFAULT_DIRECT_PROBLEM = {
+  id: 'demo-two-sum',
+  title: 'Two Sum',
+  topic: 'Arrays & Hashing',
+  difficulty: 'easy',
+  description: 'Given an integer array and a target, return the indices of two values that add up to the target.',
+  starter_code: {
+    python: 'import sys\n\nnums = list(map(int, sys.stdin.readline().split()))\ntarget = int(sys.stdin.readline())\n\n# Write your solution here\nprint("0 1")\n',
+    javascript: 'const fs = require("fs");\nconst lines = fs.readFileSync(0, "utf8").trim().split(/\\r?\\n/);\nconst nums = lines[0].split(/\\s+/).map(Number);\nconst target = Number(lines[1]);\n\n// Write your solution here\nconsole.log("0 1");\n',
+  },
+  visible_test_cases: [
+    { input: '2 7 11 15\n9', expected_output: '0 1' },
+    { input: '3 2 4\n6', expected_output: '1 2' },
+  ],
+};
+
+function normalizeDirectProblem(problem) {
+  if (!problem) return DEFAULT_DIRECT_PROBLEM;
+  const testCases = problem.visible_test_cases || problem.testCases || [];
+  const starterCode = problem.starter_code || problem.starter || {};
+  return {
+    ...problem,
+    id: problem.id ?? `direct-${problem.title || 'problem'}`,
+    title: problem.title || 'Coding Challenge',
+    topic: problem.topic || 'Algorithms',
+    difficulty: problem.difficulty || 'medium',
+    description: problem.description || problem.statement || '',
+    starter_code: starterCode,
+    visible_test_cases: testCases.map((test) => ({
+      input: test.input || '',
+      expected_output: test.expected_output ?? test.expected ?? '',
+    })),
+  };
+}
+
 
 // Infer the target role from resume skills, experience, summary, and title.
 function inferRoleFromResume(resume) {
@@ -85,7 +120,7 @@ function inferRoleFromResume(resume) {
   return bestRole;
 }
 
-export default function AIInterviewer({ sessionId, token, role, company, resume, onComplete, proctoring, setProctoring, proctoringEnabled = true }) {
+export default function AIInterviewer({ sessionId, token, role, company, resume, codingQuestions = [], onComplete, proctoring, setProctoring, proctoringEnabled = true }) {
   const navigate = useNavigate();
 
   // ── State ───────────────────────────────────────────────────────────
@@ -99,6 +134,8 @@ export default function AIInterviewer({ sessionId, token, role, company, resume,
   const [isSpeaking, setIsSpeaking] = useState(false);
   const [statusMessage, setStatusMessage] = useState('Preparing your interview...');
   const [subtitleText, setSubtitleText] = useState('');
+  const [activeQuestionId, setActiveQuestionId] = useState(null);
+  const activeQuestionIdRef = useRef(null);
   const [lipLevel, setLipLevel] = useState(0);
   const [audioLevel, setAudioLevel] = useState(0);
   const lipSyncIntervalRef = useRef(null);
@@ -139,7 +176,10 @@ export default function AIInterviewer({ sessionId, token, role, company, resume,
   const [isRunning, setIsRunning] = useState(false);
   const [testResults, setTestResults] = useState(null);
   const [isTesting, setIsTesting] = useState(false);
+  const [isSubmitting, setIsSubmitting] = useState(false);
   const [codingProblem, setCodingProblem] = useState(null);
+  const [submissionResult, setSubmissionResult] = useState(null);
+  const [directQuestionIndex, setDirectQuestionIndex] = useState(0);
   const languageRef = useRef('python');
   useEffect(() => { languageRef.current = language; }, [language]);
   const codeRef = useRef('');
@@ -250,6 +290,7 @@ export default function AIInterviewer({ sessionId, token, role, company, resume,
   const audioAwaitingRef = useRef(false);
   const fallbackTtsTimeoutRef = useRef(null);
   const wsRef = useRef(null);
+  const startInProgressRef = useRef(false);
   const reconnectTimerRef = useRef(null);
   const mediaRecorderRef = useRef(null);
   const audioChunksRef = useRef([]);
@@ -278,8 +319,7 @@ export default function AIInterviewer({ sessionId, token, role, company, resume,
       await navigator.mediaDevices.getUserMedia({ audio: true });
       return true;
     } catch (err) {
-      setError('Microphone access is required to continue. Please enable microphone permissions and refresh the page.');
-      setPhase('error');
+      console.warn('[AIInterviewer] Microphone unavailable; typed chat remains enabled.', err);
       return false;
     }
   }, []);
@@ -336,37 +376,6 @@ export default function AIInterviewer({ sessionId, token, role, company, resume,
     };
     tick();
   }, [stopAudioLevelMonitor]);
-
-  useEffect(() => {
-    const checkResumable = async () => {
-      if (!sessionId || !token) return;
-      try {
-        const res = await fetch(`${API_BASE}/ai-interview/start`, {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            Authorization: `Bearer ${token}`,
-          },
-          body: JSON.stringify({
-            session_id: sessionId,
-            role: inferRoleFromResume(resume) || role || DEFAULT_ROLE,
-            company: company || 'the company',
-            max_questions: MAX_QUESTIONS,
-            voice_enabled: true,
-          }),
-        });
-        if (res.ok) {
-          const data = await res.json();
-          if (data.status === 'resumable') {
-            setResumableSession(data.interview_session_id);
-          }
-        }
-      } catch {
-        // Ignore — will start fresh
-      }
-    };
-    checkResumable();
-  }, [sessionId, token, role, company, resume]);
 
   // ── Token Refresh ───────────────────────────────────────────────────
   const refreshToken = useCallback(async () => {
@@ -452,17 +461,23 @@ export default function AIInterviewer({ sessionId, token, role, company, resume,
   }, [finishAiResponse, startLipSync, clearLipSync, stopAudioLevelMonitor, pickNaturalVoice]);
 
   const addMessage = (msg) => {
-    setMessages(prev => [...prev, { id: Date.now() + Math.random(), ...msg }]);
+    const text = typeof msg?.text === 'string' ? msg.text.trim() : '';
+    if (!text) return;
+    setMessages(prev => {
+      const recent = prev.slice(-6);
+      const duplicate = recent.some(existing => existing.role === msg.role && String(existing.text).trim() === text);
+      if (duplicate) return prev;
+      return [...prev, { id: Date.now() + Math.random(), ...msg }];
+    });
   };
 
   const addCandidateMessage = useCallback((text) => {
     if (!text || !text.trim()) return;
     const cleanText = text.trim();
     setMessages((prev) => {
-      const lastMsg = prev[prev.length - 1];
-      if (lastMsg && lastMsg.role === 'candidate' && lastMsg.text.trim() === cleanText) {
-        return prev; // Prevent duplicate message
-      }
+      const recent = prev.slice(-6);
+      const duplicate = recent.some(msg => msg.role === 'candidate' && String(msg.text).trim() === cleanText);
+      if (duplicate) return prev;
       return [...prev, { id: Date.now() + Math.random(), role: 'candidate', text: cleanText, ts: Date.now() / 1000 }];
     });
   }, []);
@@ -483,10 +498,9 @@ export default function AIInterviewer({ sessionId, token, role, company, resume,
     if (message && message.trim()) {
       const cleanText = message.trim();
       setMessages((prev) => {
-        const lastMsg = prev[prev.length - 1];
-        if (lastMsg && lastMsg.role === 'interviewer' && lastMsg.text.trim() === cleanText) {
-          return prev;
-        }
+        const recent = prev.slice(-6);
+        const duplicate = recent.some(msg => msg.role === 'interviewer' && String(msg.text).trim() === cleanText);
+        if (duplicate) return prev;
         return [...prev, { id: Date.now() + Math.random(), role: 'interviewer', text: cleanText, ts: Date.now() / 1000 }];
       });
     }
@@ -571,6 +585,13 @@ export default function AIInterviewer({ sessionId, token, role, company, resume,
       }
 
       case 'question':
+        if (msg.question_id && msg.question_id === activeQuestionIdRef.current) {
+          break;
+        }
+        if (msg.question_id) {
+          activeQuestionIdRef.current = msg.question_id;
+          setActiveQuestionId(msg.question_id);
+        }
         setIsThinking(false);
         setPhase('interviewing');
         setCurrentStage(msg.stage || '');
@@ -636,6 +657,12 @@ export default function AIInterviewer({ sessionId, token, role, company, resume,
         }
         break;
       }
+
+      case 'coding_submission_result':
+        setIsSubmitting(false);
+        setIsThinking(false);
+        setSubmissionResult(msg);
+        break;
 
       case 'interview_complete':
         setIsThinking(false);
@@ -844,6 +871,8 @@ export default function AIInterviewer({ sessionId, token, role, company, resume,
 
   // ── Start Interview ──────────────────────────────────────────────────
   const startInterview = useCallback(async (resumeExisting = true) => {
+    if (startInProgressRef.current || wsRef.current) return;
+    startInProgressRef.current = true;
     setPhase('initializing');
     setStatusMessage('Preparing your interview...');
     setError(null);
@@ -949,6 +978,8 @@ export default function AIInterviewer({ sessionId, token, role, company, resume,
       console.error('[AIInterviewer] Start failed', err);
       setError(err.message);
       setPhase('error');
+    } finally {
+      startInProgressRef.current = false;
     }
   }, [sessionId, token, effectiveRole, company, resumeText, resumableSession, uploadedSessionId]);
 
@@ -991,10 +1022,15 @@ export default function AIInterviewer({ sessionId, token, role, company, resume,
       ],
     };
 
+    const bankProblem = codingQuestions.length > 0
+      ? codingQuestions[directQuestionIndex % codingQuestions.length]
+      : null;
+    const selectedProblem = normalizeDirectProblem(bankProblem || demoProblem);
+
     setIsDirectCodeMode(true);
-    setCodingProblem(demoProblem);
+    setCodingProblem(selectedProblem);
     const initialLang = language || 'python';
-    setCode(demoProblem.starter_code[initialLang] || demoProblem.starter_code.python);
+    setCode(selectedProblem.starter_code[initialLang] || selectedProblem.starter_code.python || '');
     setShowCodeEditor(true);
     setCurrentStage('Live Coding Challenge');
     setPhase('interviewing');
@@ -1006,13 +1042,29 @@ export default function AIInterviewer({ sessionId, token, role, company, resume,
         timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
       },
     ]);
-  }, [language]);
+  }, [codingQuestions, directQuestionIndex, language]);
+
+  const nextDirectProblem = useCallback(() => {
+    if (!codingQuestions.length) return;
+    const nextIndex = (directQuestionIndex + 1) % codingQuestions.length;
+    const nextProblem = normalizeDirectProblem(codingQuestions[nextIndex]);
+    setDirectQuestionIndex(nextIndex);
+    setCodingProblem(nextProblem);
+    setCode(nextProblem.starter_code?.[language] || nextProblem.starter_code?.python || '');
+    setRunOutput('');
+    setRunStatus('');
+    setTestResults(null);
+  }, [codingQuestions, directQuestionIndex, language]);
 
   const handleLanguageChange = useCallback((newLang) => {
     setLanguage(newLang);
     if (codingProblem?.starter_code?.[newLang]) {
       setCode(codingProblem.starter_code[newLang]);
     }
+    setRunOutput('');
+    setRunStatus('');
+    setTestResults(null);
+    setSubmissionResult(null);
   }, [codingProblem]);
 
   // ── Explicit start (Begin button) ────────────────────────────────────
@@ -1021,11 +1073,7 @@ export default function AIInterviewer({ sessionId, token, role, company, resume,
   const beginInterview = useCallback(async (resumeExisting = true) => {
     setIsDirectCodeMode(false);
     const allowed = await requestMicPermission();
-    if (!allowed) {
-      setError('Microphone permission is required to start the voice interview.');
-      setPhase('idle');
-      return;
-    }
+    if (!allowed) setStatusMessage('Microphone unavailable. You can answer by typing.');
     await requestCameraPermission(); // optional — never blocks the interview
     startInterview(resumeExisting);
   }, [requestMicPermission, requestCameraPermission, startInterview]);
@@ -1033,9 +1081,13 @@ export default function AIInterviewer({ sessionId, token, role, company, resume,
   // ── Send Text Answer ─────────────────────────────────────────────────
   const sendAnswer = useCallback((text) => {
     if (!text) return;
-    addCandidateMessage(text);
 
-    if (isDirectCodeMode || !wsRef.current || wsRef.current.readyState !== WebSocket.OPEN) {
+    if (isDirectCodeMode) {
+      return;
+    }
+
+    if (!wsRef.current || wsRef.current.readyState !== WebSocket.OPEN) {
+      addCandidateMessage(text);
       setIsThinking(true);
       setTimeout(() => {
         setIsThinking(false);
@@ -1064,18 +1116,21 @@ export default function AIInterviewer({ sessionId, token, role, company, resume,
 
   // ── Run Code ───────────────────────────────────────────────────────
   const runCode = useCallback(async () => {
-    if (!code.trim() || isRunning) return;
+    const cases = codingProblem?.visible_test_cases || [];
+    if (!code.trim() || isRunning || isTesting || cases.length === 0) return;
     setIsRunning(true);
-    setRunStatus('Running…');
+    setIsTesting(true);
+    setRunStatus('Running public test cases…');
     setRunOutput('');
+    setTestResults(null);
     try {
-      const res = await fetch(`${API_BASE}/ai-interview/run-code`, {
+      const res = await fetch(`${API_BASE}/ai-interview/judge`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
           Authorization: `Bearer ${token}`,
         },
-        body: JSON.stringify({ language, code, stdin }),
+        body: JSON.stringify({ language, code, test_cases: cases }),
       });
       const data = await res.json();
       if (!res.ok) {
@@ -1083,20 +1138,34 @@ export default function AIInterviewer({ sessionId, token, role, company, resume,
         setRunOutput(data.error || '');
         return;
       }
-      if (!data.ok) {
-        setRunStatus(data.error || 'Could not run code.');
-        return;
-      }
-      setRunStatus(data.timed_out ? 'Execution timed out.' : 'Ran successfully.');
-      const out = [data.stdout, data.stderr].filter(Boolean).join('\n');
-      setRunOutput(out || '(no output)');
+      setTestResults(data);
+      const timedOut = (data.results || []).some((result) => result.status === 'timeout');
+      setRunStatus(timedOut ? 'Time limit exceeded.' : `${data.passed || 0}/${data.total || cases.length} public cases checked.`);
     } catch (err) {
       setRunStatus('Could not contact run service.');
       setRunOutput(err.message || '');
     } finally {
       setIsRunning(false);
+      setIsTesting(false);
     }
-  }, [code, language, stdin, token, isRunning]);
+  }, [code, language, token, codingProblem, isRunning, isTesting]);
+
+  const submitCode = useCallback(() => {
+    if (!code.trim() || isSubmitting || isDirectCodeMode) return;
+    if (!wsRef.current || wsRef.current.readyState !== WebSocket.OPEN) {
+      setRunStatus('Interview connection is not available.');
+      return;
+    }
+    setIsSubmitting(true);
+    setSubmissionResult(null);
+    setIsThinking(true);
+    wsRef.current.send(JSON.stringify({
+      type: 'answer',
+      text: `Submitted ${language} solution for ${codingProblem?.title || 'the coding challenge'}.`,
+      code,
+      language,
+    }));
+  }, [code, language, codingProblem, isSubmitting, isDirectCodeMode]);
 
   // ── Run Tests (visible test cases) ───────────────────────────────────
   const runTests = useCallback(async () => {
@@ -1303,6 +1372,7 @@ export default function AIInterviewer({ sessionId, token, role, company, resume,
           onResumeFileChange={handleResumeFile}
           onClearResumeFile={clearUploadedResume}
           onBegin={beginInterview}
+          onStartCodingDemo={startCodingDemo}
         />
       </div>
     );
@@ -1423,7 +1493,7 @@ export default function AIInterviewer({ sessionId, token, role, company, resume,
             <ObiAvatar state={avatarState} lipLevel={lipLevel} audioLevel={audioLevel} statusText={stageStatusText} />
             <div className="aii-subtitle-card">
               <div className="aii-subtitle-card__header">
-                <div className="aii-subtitle-card__label"><Volume2 size="12" /> Live subtitle</div>
+                <div className="aii-subtitle-card__label"><Volume2 size="12" /> Current prompt</div>
                 {subtitleText && phase === 'interviewing' && (
                   <button
                     className="aii-repeat-btn"
@@ -1448,8 +1518,11 @@ export default function AIInterviewer({ sessionId, token, role, company, resume,
               </div>
             )}
 
+            <div className="aii-chat__heading">Conversation history</div>
             <div className="aii-chat">
-              {messages.map((msg) => (
+              {messages.filter((msg) => (
+                msg.role !== 'interviewer' || String(msg.text).trim() !== String(subtitleText).trim()
+              )).map((msg) => (
                 <MessageBubble key={msg.id || `${msg.role}-${msg.ts}`} message={msg} />
               ))}
               {isThinking && <ThinkingIndicator />}
@@ -1535,14 +1608,23 @@ export default function AIInterviewer({ sessionId, token, role, company, resume,
               runOutput={runOutput}
               isRunning={isRunning}
               isTesting={isTesting}
+              isSubmitting={isSubmitting}
               isThinking={isThinking}
               testResults={testResults}
+              submissionResult={submissionResult}
               onRun={runCode}
               onTest={runTests}
-              onSend={() => {
-                const submission = `Here is my code solution in ${language}:\n\`\`\`${language}\n${code}\n\`\`\`\nExecution Output:\n${runOutput || '(Code executed)'}`;
-                sendAnswer(submission);
+              onSubmit={submitCode}
+              onReset={() => {
+                const starter = codingProblem?.starter_code?.[language] || codingProblem?.starterCode?.[language] || '';
+                setCode(starter);
+                setRunOutput('');
+                setRunStatus('');
+                setTestResults(null);
+                setSubmissionResult(null);
               }}
+              onNextProblem={isDirectCodeMode ? nextDirectProblem : undefined}
+              isDirectMode={isDirectCodeMode}
               languageOptions={LANGUAGE_OPTIONS}
             />
           </div>

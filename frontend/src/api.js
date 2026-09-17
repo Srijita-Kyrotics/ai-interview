@@ -85,6 +85,10 @@ async function request(method, path, body, isForm = false) {
     throw err
   }
 
+  if (Array.isArray(data)) {
+    return data
+  }
+
   if (data && typeof data === 'object') {
     return { ...data, ok: data.ok ?? true }
   }

@@ -191,7 +191,7 @@ const StartCard = ({
           <span>Test Code Editor (Direct IDE)</span>
         </button>
       </div>
-      <p className="aii-start-card__footnote">Make sure your microphone is allowed in the browser.</p>
+      <p className="aii-start-card__footnote">Microphone is optional. You can answer Jack by typing in chat.</p>
     </div>
   );
 };

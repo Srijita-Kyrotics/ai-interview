@@ -37,6 +37,7 @@ function AiInterviewRoute({ state, setState, user, proctoring, setProctoring }) 
         resume={state.resume}
         role={undefined}
         company={state.company || 'the company'}
+        codingQuestions={state.datasets.coding}
         proctoring={proctoring}
         setProctoring={setProctoring}
         onComplete={(report) => {

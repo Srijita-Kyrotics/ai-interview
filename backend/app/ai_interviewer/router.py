@@ -1218,6 +1218,31 @@ async def ai_interview_websocket(
 
             result = await runner.process_answer(answer_text, code_snapshot=code_snapshot)
 
+            if code_snapshot:
+                coding_result = runner.get_state().get("code_test_results")
+                if coding_result:
+                    statuses = [item.get("status") for item in coding_result.get("results", [])]
+                    if any(status == "timeout" for status in statuses):
+                        submission_status = "time_limit_exceeded"
+                    elif any(status in ("runtime_error", "error") for status in statuses):
+                        submission_status = "runtime_error"
+                    elif coding_result.get("compile_error"):
+                        submission_status = "compilation_error"
+                    elif coding_result.get("passed", 0) == coding_result.get("total", 0):
+                        submission_status = "accepted"
+                    else:
+                        submission_status = "wrong_answer"
+                    await websocket.send_json({
+                        "type": "coding_submission_result",
+                        "status": submission_status,
+                        "passed": coding_result.get("passed", 0),
+                        "total": coding_result.get("total", 0),
+                        "results": coding_result.get("results", []),
+                        "time_ms": coding_result.get("time_ms", 0),
+                        "compile_error": coding_result.get("compile_error", ""),
+                        "timestamp": time.time(),
+                    })
+
             if result.get("should_end"):
                 # Save and send final report
                 await _save_interview_result(session_id, interview_session_id, runner)

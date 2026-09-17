@@ -6377,6 +6377,15 @@ label {
   scrollbar-color: rgba(255, 255, 255, 0.1) transparent;
 }
 
+.aii-chat__heading {
+  padding: 0.55rem 1.25rem 0;
+  color: rgba(165, 180, 252, 0.8);
+  font-size: 0.65rem;
+  font-weight: 800;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+}
+
 .aii-chat--hidden {
   display: none;
 }

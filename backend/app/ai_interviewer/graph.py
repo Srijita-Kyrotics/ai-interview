@@ -440,6 +440,13 @@ class InterviewGraphRunner:
 
     async def generate_first_question(self) -> str:
         """Generate and return the first interview question."""
+        # Reconnects or duplicate startup events must reuse the active
+        # question instead of asking the model to generate another one.
+        existing_question = self.state.get("current_question")
+        if existing_question and existing_question.get("question"):
+            self._last_question_id = existing_question.get("id")
+            return existing_question["question"]
+
         result = await question_generator_node(self.state)
         self.state.update(result)
         self._last_question_id = self.state.get("current_question", {}).get("id")

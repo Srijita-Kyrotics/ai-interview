@@ -246,11 +246,10 @@ async def _run_process(
 
 
 def normalize_output(text: str | None) -> str:
-    """Normalize output for comparison: strip line trailing whitespace and blank tail lines."""
-    lines = [ln.rstrip() for ln in (text or "").splitlines()]
-    while lines and not lines[-1]:
-        lines.pop()
-    return "\n".join(lines)
+    """Normalize output for comparison by collapsing whitespace and trimming blank lines."""
+    if text is None:
+        return ""
+    return " ".join(str(text).split())
 
 
 async def execute_local(

@@ -184,7 +184,23 @@ async def _run_judge0(
         stderr = run.get("stderr", "")
         status_id = run.get("status_id")
 
-        if run.get("timed_out") or status_id == 5:
+        if not run.get("ok"):
+            error_msg = run.get("error") or stderr or "Code execution failed."
+            if run.get("missing_runtime") or "not supported" in error_msg.lower():
+                return {
+                    "ok": False,
+                    "compile_error": "",
+                    "results": [],
+                    "passed": 0,
+                    "total": len(test_cases),
+                    "score": 0,
+                    "error": error_msg,
+                    "time_ms": 0,
+                }
+            status = "error"
+            output = error_msg
+            error = error_msg
+        elif run.get("timed_out") or status_id == 5:
             status = "timeout"
             output = stderr or "Execution timed out."
             error = ""
@@ -289,13 +305,36 @@ async def judge_submission(
             "time_ms": 0,
         }
 
+    lang_key = (language or "").lower().strip()
+    supported = lang_key in settings.judge0_language_ids or lang_key in {"python", "javascript", "c", "c++", "cpp", "java"}
+    if not supported:
+        return {
+            "ok": False,
+            "compile_error": "",
+            "results": [],
+            "passed": 0,
+            "total": len(test_cases),
+            "score": 0,
+            "error": f"Language '{language}' is not supported by the code runner.",
+            "time_ms": 0,
+        }
+
     # Try Judge0 first
     try:
         result = await _run_judge0(language, code, test_cases, timeout)
         if result.get("ok"):
             return result
     except Exception as e:
-        pass  # Fall through to error
+        return {
+            "ok": False,
+            "compile_error": "",
+            "results": [],
+            "passed": 0,
+            "total": len(test_cases),
+            "score": 0,
+            "error": f"Judge0 unavailable: {e}",
+            "time_ms": 0,
+        }
 
     # Judge0 failed - return error (no local fallback)
     return {
@@ -305,6 +344,6 @@ async def judge_submission(
         "passed": 0,
         "total": len(test_cases),
         "score": 0,
-        "error": f"Judge0 unavailable: {e}",
+        "error": "Judge0 unavailable.",
         "time_ms": 0,
     }
