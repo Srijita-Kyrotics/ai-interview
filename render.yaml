@@ -23,6 +23,8 @@ services:
           property: connectionString
       - key: ENVIRONMENT
         value: production
+      - key: JWT_SECRET
+        generateWithLength: 32
 
   - type: web
     name: ai-interview-frontend

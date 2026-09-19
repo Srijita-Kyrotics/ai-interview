@@ -8,7 +8,10 @@ from pathlib import Path
 from pydantic import Field, field_validator
 from pydantic_settings import BaseSettings
 
-BASE_DIR = Path(__file__).resolve().parents[2]
+APP_DIR = Path(__file__).resolve().parent
+BACKEND_DIR = Path(__file__).resolve().parents[1]
+BASE_DIR = BACKEND_DIR.parent if (BACKEND_DIR.parent / "backend").exists() else BACKEND_DIR
+
 
 
 class Settings(BaseSettings):
@@ -181,7 +184,7 @@ class Settings(BaseSettings):
     def shared_dir_path(self) -> Path:
         if self.shared_dir:
             return Path(self.shared_dir)
-        return BASE_DIR / "shared"
+        return BACKEND_DIR / "shared"
 
     @property
     def frontend_questions_dir_path(self) -> Path:
@@ -202,19 +205,26 @@ class Settings(BaseSettings):
     def resolved_jwt_secret(self) -> str:
         if self.jwt_secret:
             return self.jwt_secret
-        secret_file = BASE_DIR / "backend" / ".jwt_secret"
+        secret_file = BACKEND_DIR / ".jwt_secret"
         if secret_file.exists():
-            return secret_file.read_text(encoding="utf-8").strip()
+            try:
+                return secret_file.read_text(encoding="utf-8").strip()
+            except Exception:
+                pass
         secret = secrets.token_hex(32)
-        secret_file.parent.mkdir(parents=True, exist_ok=True)
-        secret_file.write_text(secret, encoding="utf-8")
+        try:
+            secret_file.parent.mkdir(parents=True, exist_ok=True)
+            secret_file.write_text(secret, encoding="utf-8")
+        except Exception:
+            pass
         return secret
 
     model_config = {
-        "env_file": [str(BASE_DIR / "backend" / ".env"), str(BASE_DIR / ".env")],
+        "env_file": [str(BACKEND_DIR / ".env"), str(BASE_DIR / ".env")],
         "env_file_encoding": "utf-8",
         "extra": "ignore",
     }
+
 
 
 settings = Settings()
