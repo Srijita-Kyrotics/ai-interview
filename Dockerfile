@@ -16,6 +16,7 @@ COPY backend/ ./
 COPY --from=frontend /app/dist ./static
 
 RUN adduser --disabled-password --gecos "" appuser
+RUN chown -R appuser:appuser /app
 USER appuser
 
 ENV PYTHONUNBUFFERED=1
