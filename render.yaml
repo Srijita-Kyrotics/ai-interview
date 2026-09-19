@@ -2,6 +2,7 @@ services:
   - type: keyvalue
     name: ai-interview-redis
     plan: free
+    ipAllowList: []
 
   - type: web
     name: ai-interview-backend
@@ -46,5 +47,4 @@ services:
 databases:
   - name: ai-interview-db
     databaseName: ai_interview
-    user: postgres
     plan: free
