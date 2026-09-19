@@ -1,4 +1,8 @@
 services:
+  - type: keyvalue
+    name: ai-interview-redis
+    plan: free
+
   - type: web
     name: ai-interview-backend
     env: docker
@@ -11,7 +15,7 @@ services:
           property: connectionString
       - key: REDIS_URL
         fromService:
-          type: redis
+          type: keyvalue
           name: ai-interview-redis
           property: connectionString
       - key: ENVIRONMENT
@@ -43,8 +47,4 @@ databases:
   - name: ai-interview-db
     databaseName: ai_interview
     user: postgres
-    plan: free
-
-  - type: redis
-    name: ai-interview-redis
     plan: free
