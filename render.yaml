@@ -1,8 +1,10 @@
 services:
-  - type: keyvalue
+  - type: redis
     name: ai-interview-redis
     plan: free
-    ipAllowList: []
+    ipAllowList:
+      - source: 0.0.0.0/0
+        description: everywhere
 
   - type: web
     name: ai-interview-backend
@@ -16,16 +18,14 @@ services:
           property: connectionString
       - key: REDIS_URL
         fromService:
-          type: keyvalue
+          type: redis
           name: ai-interview-redis
           property: connectionString
       - key: ENVIRONMENT
         value: production
 
-  - type: web
+  - type: static
     name: ai-interview-frontend
-    env: static
-    plan: free
     buildCommand: cd frontend && npm install && npm run build
     staticPublishPath: ./frontend/dist
     envVars:
@@ -47,4 +47,5 @@ services:
 databases:
   - name: ai-interview-db
     databaseName: ai_interview
+    user: ai_interview_user
     plan: free
