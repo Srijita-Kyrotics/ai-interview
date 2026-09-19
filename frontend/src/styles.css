@@ -6398,52 +6398,48 @@ label {
 
 .aii-bubble {
   display: flex;
-  gap: 0.75rem;
+  gap: 0;
   animation: aii-fadein 0.3s ease;
-  max-width: 85%;
+  width: 100%;
+  max-width: 100%;
 }
 
-.aii-bubble--ai { align-self: flex-start; }
+.aii-bubble--ai,
 .aii-bubble--user {
-  align-self: flex-end;
-  flex-direction: row-reverse;
+  align-self: flex-start;
+  flex-direction: row;
 }
 
 .aii-bubble__avatar {
-  width: 36px;
-  height: 36px;
-  border-radius: 50%;
-  background: linear-gradient(135deg, #6366f1, #8b5cf6);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  font-weight: 800;
-  font-size: 0.75rem;
-  color: white;
-  flex-shrink: 0;
-  align-self: flex-end;
-}
-
-.aii-bubble__avatar--user {
-  background: linear-gradient(135deg, #0ea5e9, #06b6d4);
-  font-size: 0.65rem;
+  display: none;
 }
 
 .aii-bubble__content {
-  background: rgba(255, 255, 255, 0.07);
-  border: 1px solid rgba(255, 255, 255, 0.1);
-  border-radius: 16px 16px 16px 4px;
-  padding: 0.875rem 1rem;
+  background: transparent;
+  border: none;
+  border-radius: 0;
+  padding: 0 0 0.75rem 0;
   color: rgba(255, 255, 255, 0.9);
-  line-height: 1.6;
-  font-size: 0.9rem;
+  line-height: 1.65;
+  font-size: 0.95rem;
+  font-weight: 400;
 }
 
 .aii-bubble--user .aii-bubble__content {
-  background: rgba(99, 102, 241, 0.2);
-  border-color: rgba(99, 102, 241, 0.3);
-  border-radius: 16px 16px 4px 16px;
-  color: white;
+  background: transparent;
+  border: none;
+  border-radius: 0;
+  color: rgba(255, 255, 255, 0.95);
+  padding: 0 0 0.5rem 1rem;
+  border-left: 2px solid rgba(99, 102, 241, 0.5);
+}
+
+.aii-transcript-status {
+  font-size: 0.8rem;
+  color: rgba(255, 255, 255, 0.6);
+  font-style: italic;
+  padding-left: 1rem;
+  animation: pulse 2s infinite ease-in-out;
 }
 
 .aii-bubble__content p { margin: 0.25rem 0 0; }

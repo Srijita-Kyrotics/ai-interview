@@ -263,6 +263,72 @@ async def claim_extractor_node(state: InterviewState) -> dict:
 
 
 # ══════════════════════════════════════════════════════════════════════════════
+# Role Classification Helper
+# ══════════════════════════════════════════════════════════════════════════════
+
+# Roles where a live coding / algorithm problem round is appropriate.
+_TECHNICAL_ROLE_KEYWORDS = frozenset([
+    # Engineering / development
+    "software", "developer", "engineer", "programmer", "coding", "backend",
+    "frontend", "full stack", "fullstack", "devops", "sre", "platform",
+    "infrastructure", "cloud", "mobile", "android", "ios", "embedded",
+    "firmware", "systems", "kernel", "compiler", "database", "dba",
+    # Data / ML / AI
+    "data scientist", "data engineer", "machine learning", "ml engineer",
+    "ai engineer", "deep learning", "nlp", "computer vision", "analyst",
+    "data analyst", "business intelligence", "bi developer",
+    # Security / QA
+    "security engineer", "qa engineer", "test engineer", "automation engineer",
+    "penetration", "devsecops",
+    # Blockchain / emerging
+    "blockchain", "smart contract", "web3",
+])
+
+# Roles that are explicitly non-technical — no coding stage.
+_NON_TECHNICAL_ROLE_KEYWORDS = frozenset([
+    "product manager", "project manager", "program manager",
+    "scrum master", "agile coach",
+    "hr", "human resource", "recruiter", "talent acquisition",
+    "marketing", "brand", "content", "seo", "growth hacker",
+    "sales", "account executive", "business development",
+    "finance", "accounting", "auditor", "actuary",
+    "operations", "supply chain", "logistics",
+    "ux designer", "ui designer", "graphic designer", "visual designer",
+    "business analyst",  # non-tech BA (not data analyst)
+    "management consultant", "strategy",
+    "customer success", "customer support",
+    "legal", "compliance",
+    "public relations", "communications",
+])
+
+
+def _is_technical_role(role: str) -> bool:
+    """
+    Return True if the role warrants a live coding / algorithm round.
+
+    Logic:
+    1. If the role name matches any non-technical keyword → False
+    2. If the role name matches any technical keyword    → True
+    3. Default → True (safe for most engineering-adjacent roles)
+    """
+    normalized = role.lower().strip()
+
+    # Explicit non-tech check takes priority
+    for kw in _NON_TECHNICAL_ROLE_KEYWORDS:
+        if kw in normalized:
+            return False
+
+    # Explicit tech check
+    for kw in _TECHNICAL_ROLE_KEYWORDS:
+        if kw in normalized:
+            return True
+
+    # Fall back to True so unknown roles get the coding round
+    # (better to show a coding stage than silently skip it for a tech role)
+    return True
+
+
+# ══════════════════════════════════════════════════════════════════════════════
 # NODE 2: Interview Planner
 # ══════════════════════════════════════════════════════════════════════════════
 
@@ -270,49 +336,74 @@ async def interview_planner_node(state: InterviewState) -> dict:
     """
     Creates the interview roadmap based on the resume analysis.
     Defines stages, focus areas, and the overall interview strategy.
+
+    For non-technical roles the coding stage is skipped entirely and
+    ``coding_enabled`` is set to False so the UI can hide the editor.
     """
     logger.info("Executing interview_planner_node", extra={"session": state["session_id"]})
 
     analysis = state.get("resume_analysis", {})
     analysis_json = json.dumps(analysis, indent=2)[:4000]
 
+    role = state["role"]
+    is_technical = _is_technical_role(role)
+
     prompt = INTERVIEW_PLANNER_PROMPT.format(
         resume_analysis=analysis_json,
-        role=state["role"],
+        role=role,
         company=state["company"],
         max_questions=state["max_questions"],
     )
 
     result = await _call_llm_json(INTERVIEW_PLANNER_SYSTEM, prompt)
 
-    # Normalize stages — guarantee Stage 1 is 2 questions and Stage 2 is Live Coding
     raw_stages = result.get("stages", [])
     stages: list[InterviewStage] = []
-    
-    # Stage 1: Technical & Resume Exploration (2 questions)
+
+    # Stage 1: Experience & Domain Knowledge (always present)
     stage1_raw = raw_stages[0] if raw_stages else {}
+    default_topics = (
+        ["python", "software_engineering"] if is_technical
+        else ["communication", "domain_knowledge", "behavioral"]
+    )
     stages.append(InterviewStage(
         id="stage_1_technical",
-        name=stage1_raw.get("name", "Technical Fundamentals & Resume"),
-        description=stage1_raw.get("description", "Core experience and technical fundamentals"),
-        topics=stage1_raw.get("topics", ["python", "software_engineering"]),
+        name=stage1_raw.get("name", "Technical Fundamentals & Resume" if is_technical else "Experience & Role Fit"),
+        description=stage1_raw.get("description", "Core experience and domain fundamentals"),
+        topics=stage1_raw.get("topics", default_topics),
         target_questions=2,
         completed=False,
     ))
 
-    # Stage 2: Live Coding Challenge
-    stage2_raw = raw_stages[1] if len(raw_stages) > 1 else {}
-    stages.append(InterviewStage(
-        id="stage_2_coding",
-        name="Live Coding Challenge",
-        description="Hands-on live coding and algorithm problem solving",
-        topics=stage2_raw.get("topics", ["coding", "algorithms", "problem_solving"]),
-        target_questions=1,
-        completed=False,
-    ))
+    # Stage 2: Live Coding Challenge — only for technical roles
+    if is_technical:
+        stage2_raw = raw_stages[1] if len(raw_stages) > 1 else {}
+        stages.append(InterviewStage(
+            id="stage_2_coding",
+            name="Live Coding Challenge",
+            description="Hands-on live coding and algorithm problem solving",
+            topics=stage2_raw.get("topics", ["coding", "algorithms", "problem_solving"]),
+            target_questions=1,
+            completed=False,
+        ))
+        remaining_raw = raw_stages[2:]
+        remaining_start_idx = 3
+    else:
+        # Non-technical: add a Behavioral / Situational stage instead
+        stage2_raw = raw_stages[1] if len(raw_stages) > 1 else {}
+        stages.append(InterviewStage(
+            id="stage_2_behavioral",
+            name=stage2_raw.get("name", "Behavioral & Situational"),
+            description=stage2_raw.get("description", "Behavioral and situational questions"),
+            topics=stage2_raw.get("topics", ["behavioral", "leadership", "communication"]),
+            target_questions=2,
+            completed=False,
+        ))
+        remaining_raw = raw_stages[2:]
+        remaining_start_idx = 3
 
-    # Append any remaining stages
-    for idx, s in enumerate(raw_stages[2:], start=3):
+    # Append any additional stages from the LLM plan
+    for idx, s in enumerate(remaining_raw, start=remaining_start_idx):
         stages.append(InterviewStage(
             id=s.get("id", f"stage_{idx}"),
             name=s.get("name", f"Stage {idx}"),
@@ -345,6 +436,8 @@ async def interview_planner_node(state: InterviewState) -> dict:
             "stages": len(stages),
             "total_questions": plan["total_questions"],
             "focus_areas": plan["focus_areas"],
+            "coding_enabled": is_technical,
+            "role": role,
         }
     )
 
@@ -354,6 +447,7 @@ async def interview_planner_node(state: InterviewState) -> dict:
         "current_stage_index": 0,
         "memory": updated_memory,
         "phase": "interviewing",
+        "coding_enabled": is_technical,
     }
 
 

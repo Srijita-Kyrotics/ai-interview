@@ -313,6 +313,10 @@ class InterviewState(TypedDict):
     current_code_snapshot_language: NotRequired[str]
 
     # ── Feature 9: Live Coding Round ─────────────────────────────────────
+    # coding_enabled is set by the interview planner based on the role.
+    # Non-technical roles (PM, HR, Marketing, etc.) have it set to False,
+    # which suppresses the coding stage and the code editor in the UI.
+    coding_enabled: NotRequired[bool]
     active_coding_problem: NotRequired[CodingProblem]
     coding_submissions: NotRequired[list[CodingSubmission]]
 
@@ -404,6 +408,7 @@ def make_initial_state(
         ),
         code_history=[],
         coding_submissions=[],
+        coding_enabled=True,   # overridden to False for non-technical roles by interview_planner_node
         replan_count=0,
         replan_topics_added=[],
         is_system_design_mode=False,

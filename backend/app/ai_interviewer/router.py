@@ -1144,6 +1144,7 @@ async def ai_interview_websocket(
                 "type": "session_ready",
                 "opening_text": opening_text,
                 "session_id": interview_session_id,
+                "coding_enabled": runner.state.get("coding_enabled", True),
                 "timestamp": time.time(),
             })
 
@@ -1158,6 +1159,7 @@ async def ai_interview_websocket(
                 "question_id": current_q.get("id", ""),
                 "stage": state.get("current_stage", {}).get("name", ""),
                 "is_follow_up": False,
+                "coding_enabled": state.get("coding_enabled", True),
                 "timestamp": time.time(),
             })
         else:
@@ -1174,6 +1176,7 @@ async def ai_interview_websocket(
                 "stage_index": state.get("current_stage_index", 0),
                 "total_stages": len(state.get("interview_plan", {}).get("stages", [])) or 1,
                 "current_stage": state.get("current_stage", {}).get("name", ""),
+                "coding_enabled": state.get("coding_enabled", True),
                 "timestamp": time.time(),
             })
             # Re-send the last question
@@ -1666,6 +1669,7 @@ async def voice_interview_websocket(
                 "type": "session_ready",
                 "opening_text": greeting,
                 "session_id": interview_session_id,
+                "coding_enabled": (state or {}).get("coding_enabled", True),
                 "phase": "greeting",
             })
             greeting_task: asyncio.Task | None = None

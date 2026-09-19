@@ -245,46 +245,104 @@ const COMPANY_GROUPS = [
 ]
 
 const ROLE_MAPPINGS = {
+  // ── Technical roles (coding stage enabled) ─────────────────────────────
   'Frontend Developer': {
     keywords: ['react', 'vue', 'angular', 'html', 'css', 'javascript', 'tailwind', 'bootstrap', 'next', 'frontend'],
     difficulty: 'medium',
-    techStack: ['React', 'TypeScript', 'CSS', 'Webpack', 'REST APIs']
+    techStack: ['React', 'TypeScript', 'CSS', 'Webpack', 'REST APIs'],
+    technical: true,
   },
   'Backend Developer': {
     keywords: ['node', 'express', 'python', 'django', 'java', 'spring', 'sql', 'mongodb', 'backend', 'api'],
     difficulty: 'medium',
-    techStack: ['Node.js', 'SQL', 'REST APIs', 'Docker', 'Redis']
+    techStack: ['Node.js', 'SQL', 'REST APIs', 'Docker', 'Redis'],
+    technical: true,
   },
   'Full Stack Developer': {
     keywords: ['react', 'node', 'mongodb', 'express', 'javascript', 'python', 'django', 'full stack'],
     difficulty: 'hard',
-    techStack: ['React', 'Node.js', 'MongoDB', 'Express', 'GraphQL']
+    techStack: ['React', 'Node.js', 'MongoDB', 'Express', 'GraphQL'],
+    technical: true,
   },
   'Machine Learning Engineer': {
     keywords: ['python', 'tensorflow', 'pytorch', 'scikit', 'ml', 'data science', 'keras', 'machine learning'],
     difficulty: 'hard',
-    techStack: ['Python', 'TensorFlow', 'PyTorch', 'Pandas', 'scikit-learn']
+    techStack: ['Python', 'TensorFlow', 'PyTorch', 'Pandas', 'scikit-learn'],
+    technical: true,
   },
   'Data Analyst': {
     keywords: ['sql', 'excel', 'power bi', 'tableau', 'python', 'r', 'data analysis', 'pandas'],
     difficulty: 'easy',
-    techStack: ['SQL', 'Power BI', 'Tableau', 'Python', 'Excel']
+    techStack: ['SQL', 'Power BI', 'Tableau', 'Python', 'Excel'],
+    technical: true,
   },
   'DevOps Engineer': {
     keywords: ['docker', 'kubernetes', 'aws', 'ci/cd', 'jenkins', 'linux', 'cloud', 'devops'],
     difficulty: 'hard',
-    techStack: ['Docker', 'Kubernetes', 'AWS', 'Terraform', 'Jenkins']
+    techStack: ['Docker', 'Kubernetes', 'AWS', 'Terraform', 'Jenkins'],
+    technical: true,
   },
   'AI Engineer': {
     keywords: ['llm', 'openai', 'langchain', 'nlp', 'transformers', 'huggingface', 'ai', 'prompt'],
     difficulty: 'hard',
-    techStack: ['LangChain', 'OpenAI API', 'HuggingFace', 'Python', 'Vector DBs']
+    techStack: ['LangChain', 'OpenAI API', 'HuggingFace', 'Python', 'Vector DBs'],
+    technical: true,
   },
   'Cloud Engineer': {
     keywords: ['aws', 'azure', 'gcp', 'cloud', 'lambda', 's3', 'terraform', 'serverless'],
     difficulty: 'medium',
-    techStack: ['AWS', 'Terraform', 'Kubernetes', 'Azure', 'GCP']
-  }
+    techStack: ['AWS', 'Terraform', 'Kubernetes', 'Azure', 'GCP'],
+    technical: true,
+  },
+  'Mobile Developer': {
+    keywords: ['swift', 'kotlin', 'flutter', 'react native', 'android', 'ios', 'dart', 'mobile'],
+    difficulty: 'medium',
+    techStack: ['Swift', 'Kotlin', 'Flutter', 'React Native', 'Dart'],
+    technical: true,
+  },
+  'QA Engineer': {
+    keywords: ['testing', 'selenium', 'jest', 'cypress', 'qa', 'automation testing', 'test case', 'playwright'],
+    difficulty: 'medium',
+    techStack: ['Selenium', 'Cypress', 'Jest', 'Playwright', 'Postman'],
+    technical: true,
+  },
+  // ── Non-technical roles (no coding stage) ──────────────────────────────
+  'Product Manager': {
+    keywords: ['product', 'roadmap', 'stakeholder', 'user stories', 'agile', 'scrum', 'product manager'],
+    difficulty: 'medium',
+    techStack: ['Jira', 'Confluence', 'Figma', 'Analytics', 'A/B Testing'],
+    technical: false,
+  },
+  'Business Analyst': {
+    keywords: ['business analyst', 'requirements', 'stakeholder', 'brd', 'use case', 'process mapping'],
+    difficulty: 'easy',
+    techStack: ['Excel', 'SQL', 'Visio', 'Jira', 'Confluence'],
+    technical: false,
+  },
+  'UX Designer': {
+    keywords: ['ux', 'ui', 'figma', 'user research', 'wireframe', 'prototyping', 'design thinking'],
+    difficulty: 'easy',
+    techStack: ['Figma', 'Sketch', 'Adobe XD', 'InVision', 'Zeplin'],
+    technical: false,
+  },
+  'HR Manager': {
+    keywords: ['hr', 'human resource', 'recruitment', 'talent', 'payroll', 'performance management'],
+    difficulty: 'easy',
+    techStack: ['HRMS', 'SAP HR', 'BambooHR', 'Workday', 'LinkedIn Recruiter'],
+    technical: false,
+  },
+  'Marketing Manager': {
+    keywords: ['marketing', 'seo', 'sem', 'social media', 'brand', 'content', 'campaigns', 'analytics'],
+    difficulty: 'easy',
+    techStack: ['Google Analytics', 'HubSpot', 'Mailchimp', 'SEMrush', 'Canva'],
+    technical: false,
+  },
+  'Sales Executive': {
+    keywords: ['sales', 'account executive', 'business development', 'crm', 'lead generation', 'revenue'],
+    difficulty: 'easy',
+    techStack: ['Salesforce', 'HubSpot CRM', 'LinkedIn Sales Navigator', 'Outreach', 'ZoomInfo'],
+    technical: false,
+  },
 }
 
 export { steps, roundDurations, interviewQuestionDuration, COMPANY_META, COMPANY_GROUPS, ROLE_MAPPINGS }

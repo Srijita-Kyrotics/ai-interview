@@ -31,9 +31,14 @@ import StartCard from './aiInterviewer/StartCard';
 import CodingPanel from './aiInterviewer/CodingPanel';
 
 const API_BASE = import.meta.env.VITE_API_URL || '/api';
-const getWsBase = () =>
-  import.meta.env.VITE_WS_URL ||
-  `${window.location.protocol === 'https:' ? 'wss' : 'ws'}://${window.location.host}/api`;
+const getWsBase = () => {
+  let url = import.meta.env.VITE_WS_URL || import.meta.env.VITE_API_URL || '';
+  if (url) {
+    url = url.replace(/^http:\/\//i, 'ws://').replace(/^https:\/\//i, 'wss://');
+    return url;
+  }
+  return `${window.location.protocol === 'https:' ? 'wss' : 'ws'}://${window.location.host}/api`;
+};
 
 // Obi asks at most MAX_QUESTIONS questions (follow-ups count toward the cap).
 // The estimate assumes ~2.5 minutes per question including reading + answering.
@@ -128,6 +133,11 @@ export default function AIInterviewer({ sessionId, token, role, company, resume,
   // idle → initializing → opening → interviewing → completing → completed | error
 
   const [messages, setMessages] = useState([]);
+  const messagesRef = useRef([]);
+  const candidateTurnStartRef = useRef(null);
+  useEffect(() => {
+    messagesRef.current = messages;
+  }, [messages]);
   const [isThinking, setIsThinking] = useState(false);
   const [isProcessing, setIsProcessing] = useState(false);
   const [isRecording, setIsRecording] = useState(false);
@@ -170,6 +180,10 @@ export default function AIInterviewer({ sessionId, token, role, company, resume,
   const [selectedRole, setSelectedRole] = useState(null);
   const [showCodeEditor, setShowCodeEditor] = useState(false);
   const [isDirectCodeMode, setIsDirectCodeMode] = useState(false);
+  const [codingEnabled, setCodingEnabled] = useState(() => {
+    if (!selectedRole) return true;
+    return ROLE_MAPPINGS[selectedRole]?.technical !== false;
+  });
   const [stdin, setStdin] = useState('');
   const [runOutput, setRunOutput] = useState('');
   const [runStatus, setRunStatus] = useState('');
@@ -184,6 +198,14 @@ export default function AIInterviewer({ sessionId, token, role, company, resume,
   useEffect(() => { languageRef.current = language; }, [language]);
   const codeRef = useRef('');
   useEffect(() => { codeRef.current = code; }, [code]);
+
+  useEffect(() => {
+    if (selectedRole) {
+      const isTech = ROLE_MAPPINGS[selectedRole]?.technical !== false;
+      setCodingEnabled(isTech);
+      if (!isTech) setShowCodeEditor(false);
+    }
+  }, [selectedRole]);
 
   const formatElapsed = (sec) => {
     const m = Math.floor(sec / 60).toString().padStart(2, '0');
@@ -412,6 +434,7 @@ export default function AIInterviewer({ sessionId, token, role, company, resume,
     setIsThinking(false);
     setIsProcessing(false);
     audioAwaitingRef.current = false;
+    setActiveSubtitleId(null);
   }, []);
 
   // ── Speech Synthesis Helper for Jack (Male Voice) ─────────────────────
@@ -478,9 +501,17 @@ export default function AIInterviewer({ sessionId, token, role, company, resume,
       const recent = prev.slice(-6);
       const duplicate = recent.some(msg => msg.role === 'candidate' && String(msg.text).trim() === cleanText);
       if (duplicate) return prev;
-      return [...prev, { id: Date.now() + Math.random(), role: 'candidate', text: cleanText, ts: Date.now() / 1000 }];
+      const candidateMessage = { id: Date.now() + Math.random(), role: 'candidate', text: cleanText, ts: Date.now() / 1000 };
+      const insertionIndex = candidateTurnStartRef.current;
+      candidateTurnStartRef.current = null;
+      if (insertionIndex === null) return [...prev, candidateMessage];
+      const next = [...prev];
+      next.splice(Math.min(insertionIndex, next.length), 0, candidateMessage);
+      return next;
     });
   }, []);
+
+  const [activeSubtitleId, setActiveSubtitleId] = useState(null);
 
   const queueAiMessage = useCallback((message, options = {}) => {
     stopAudioLevelMonitor();
@@ -497,11 +528,13 @@ export default function AIInterviewer({ sessionId, token, role, company, resume,
 
     if (message && message.trim()) {
       const cleanText = message.trim();
+      const newId = Date.now() + Math.random();
+      setActiveSubtitleId(newId);
       setMessages((prev) => {
         const recent = prev.slice(-6);
         const duplicate = recent.some(msg => msg.role === 'interviewer' && String(msg.text).trim() === cleanText);
         if (duplicate) return prev;
-        return [...prev, { id: Date.now() + Math.random(), role: 'interviewer', text: cleanText, ts: Date.now() / 1000 }];
+        return [...prev, { id: newId, role: 'interviewer', text: cleanText, ts: Date.now() / 1000 }];
       });
     }
 
@@ -559,6 +592,12 @@ export default function AIInterviewer({ sessionId, token, role, company, resume,
         setPhase('interviewing');
         setIsThinking(false);
         setIsProcessing(false);
+        if (msg.coding_enabled === false) {
+          setCodingEnabled(false);
+          setShowCodeEditor(false);
+        } else {
+          setCodingEnabled(true);
+        }
         queueAiMessage(msg.opening_text || openingIntro, {
           status: 'Jack is joining the interview…',
           phase: 'interviewing',
@@ -574,6 +613,12 @@ export default function AIInterviewer({ sessionId, token, role, company, resume,
           total: msg.total_stages || 1,
         });
         setCurrentStage(msg.current_stage || '');
+        if (msg.coding_enabled === false) {
+          setCodingEnabled(false);
+          setShowCodeEditor(false);
+        } else {
+          setCodingEnabled(true);
+        }
         const restoredProgress = msg.main_questions_asked ?? msg.questions_asked ?? 0;
         const restoreMsg = `Session restored. Continuing from question ${restoredProgress}...`;
         queueAiMessage(restoreMsg, {
@@ -601,11 +646,13 @@ export default function AIInterviewer({ sessionId, token, role, company, resume,
             total: msg.total_stages || 1,
           });
         }
-        
+
         // Auto-detect coding question or coding stage → show code editor & construct fallback problem if needed
-        const isCodingQuestion = (msg.stage || '').toLowerCase().includes('coding') ||
-                                 (msg.text || '').toLowerCase().includes('coding problem') ||
-                                 (msg.text || '').toLowerCase().includes('please solve');
+        const isCodingQuestion = codingEnabled && (
+          (msg.stage || '').toLowerCase().includes('coding') ||
+          (msg.text || '').toLowerCase().includes('coding problem') ||
+          (msg.text || '').toLowerCase().includes('please solve')
+        );
         if (isCodingQuestion) {
           setShowCodeEditor(true);
           setCodingProblem((prev) => {
@@ -910,12 +957,12 @@ export default function AIInterviewer({ sessionId, token, role, company, resume,
       const body = shouldResume
         ? JSON.stringify({ interview_session_id: resumableSession, session_id: activeSessionId })
         : JSON.stringify({
-            session_id: activeSessionId,
-            role: effectiveRole,
-            company: company || 'the company',
-            max_questions: MAX_QUESTIONS,
-            voice_enabled: true,
-          });
+          session_id: activeSessionId,
+          role: effectiveRole,
+          company: company || 'the company',
+          max_questions: MAX_QUESTIONS,
+          voice_enabled: true,
+        });
       const res = await fetch(url, {
         method: 'POST',
         headers: {
@@ -1104,6 +1151,7 @@ export default function AIInterviewer({ sessionId, token, role, company, resume,
       return;
     }
 
+    addCandidateMessage(text);
     setIsThinking(true);
 
     wsRef.current.send(JSON.stringify({
@@ -1219,6 +1267,7 @@ export default function AIInterviewer({ sessionId, token, role, company, resume,
   const startRecording = useCallback(async () => {
     try {
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      candidateTurnStartRef.current = messagesRef.current.length;
       const recorder = new MediaRecorder(stream, { mimeType: 'audio/webm;codecs=opus' });
       mediaRecorderRef.current = recorder;
       audioChunksRef.current = [];
@@ -1453,14 +1502,16 @@ export default function AIInterviewer({ sessionId, token, role, company, resume,
           )}
 
           {/* Code Editor toggle button */}
-          <button
-            className="aii-repeat-btn"
-            onClick={() => setShowCodeEditor((prev) => !prev)}
-            title="Toggle Live Code Editor"
-            style={{ background: 'rgba(99, 102, 241, 0.25)', borderColor: 'rgba(129, 140, 248, 0.5)' }}
-          >
-            <Code2 size="14" /> {showCodeEditor ? 'Close Code Editor' : 'Code Editor'}
-          </button>
+          {codingEnabled && (
+            <button
+              className="aii-repeat-btn"
+              onClick={() => setShowCodeEditor((prev) => !prev)}
+              title="Toggle Live Code Editor"
+              style={{ background: 'rgba(99, 102, 241, 0.25)', borderColor: 'rgba(129, 140, 248, 0.5)' }}
+            >
+              <Code2 size="14" /> {showCodeEditor ? 'Close Code Editor' : 'Code Editor'}
+            </button>
+          )}
 
           {/* Candidate webcam feed card — top right header placement */}
           <CandidateWebcamCard videoRef={videoRef} userStream={userStream} proctoringActive={isProctoringEnabled} />
@@ -1518,14 +1569,12 @@ export default function AIInterviewer({ sessionId, token, role, company, resume,
               </div>
             )}
 
-            <div className="aii-chat__heading">Conversation history</div>
+            <div className="aii-chat__heading">Your Live Transcript</div>
             <div className="aii-chat">
-              {messages.filter((msg) => (
-                msg.role !== 'interviewer' || String(msg.text).trim() !== String(subtitleText).trim()
-              )).map((msg) => (
+              {messages.filter(msg => msg.role !== 'interviewer').map((msg) => (
                 <MessageBubble key={msg.id || `${msg.role}-${msg.ts}`} message={msg} />
               ))}
-              {isThinking && <ThinkingIndicator />}
+              {isProcessing && <div className="aii-transcript-status">Transcribing your speech...</div>}
               <div ref={messagesEndRef} />
             </div>
           </div>

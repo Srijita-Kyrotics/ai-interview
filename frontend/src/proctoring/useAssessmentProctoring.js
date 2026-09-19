@@ -29,8 +29,8 @@ const HALF_FACE_SUSTAINED_MS = 2500
 const DEVTOOLS_SUSTAINED_MS = 3000
 const DEVTOOLS_BASELINE_GRACE_MS = 4000
 // Background-voice: speech-band (250–3400 Hz) average level and sustain time.
-const BACKGROUND_VOICE_THRESHOLD = 30
-const BACKGROUND_VOICE_SUSTAINED_MS = 6000
+const BACKGROUND_VOICE_THRESHOLD = 35
+const BACKGROUND_VOICE_SUSTAINED_MS = 12000
 const VOICE_BAND_START_HZ = 250
 const VOICE_BAND_END_HZ = 3400
 
@@ -207,9 +207,8 @@ export function useAssessmentProctoring({
         violations: [...current.violations, violation],
         snapshots: snapshot ? [...current.snapshots.slice(-4), snapshot] : current.snapshots
       }
-      // 3-strike system: 1st and 2nd warnings are warnings only; the 3rd ends
-      // the interview. The user is never logged out.
-      const terminating = nextWarnings >= 3
+      // Relaxed strike system: 10 warnings before termination.
+      const terminating = nextWarnings >= 10
       const nextState = terminating
         ? terminate(`Interview ended after ${nextWarnings} warnings: ${reason}`, baseState)
         : baseState
@@ -566,10 +565,11 @@ export function useAssessmentProctoring({
                 y: (leftEye.y + rightEye.y) / 2
               }
               const horizontalRatio = (noseTip.x - eyeCenter.x) / width
-              if (Math.abs(horizontalRatio) > 0.18) {
+              // Relaxed head turn tolerance
+              if (Math.abs(horizontalRatio) > 0.25) {
                 if (headTurnSinceRef.current === null) {
                   headTurnSinceRef.current = Date.now()
-                } else if (Date.now() - headTurnSinceRef.current > 3000) {
+                } else if (Date.now() - headTurnSinceRef.current > 4000) {
                   registerViolation('head_turn', 'Head turned away from camera.')
                   headTurnSinceRef.current = null
                 }
@@ -578,10 +578,11 @@ export function useAssessmentProctoring({
               }
 
               const verticalRatio = (noseTip.y - forehead.y) / (chin.y - forehead.y)
-              if (verticalRatio < 0.35 || verticalRatio > 0.65) {
+              // Relaxed looking away tolerance
+              if (verticalRatio < 0.25 || verticalRatio > 0.75) {
                 if (lookingAwaySinceRef.current === null) {
                   lookingAwaySinceRef.current = Date.now()
-                } else if (Date.now() - lookingAwaySinceRef.current > 4000) {
+                } else if (Date.now() - lookingAwaySinceRef.current > 5000) {
                   registerViolation('looking_away', 'Looking away from screen.')
                   lookingAwaySinceRef.current = null
                 }
