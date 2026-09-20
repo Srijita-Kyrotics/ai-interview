@@ -96,6 +96,13 @@ app.include_router(ai_interviewer_router)
 app.include_router(auth_router)
 app.include_router(session_router)
 
+from fastapi import APIRouter
+api_router = APIRouter(prefix="/api")
+api_router.include_router(ai_interviewer_router)
+api_router.include_router(auth_router)
+api_router.include_router(session_router)
+app.include_router(api_router)
+
 # Add observability middleware (must be first to capture all requests)
 app.add_middleware(ObservabilityMiddleware)
 
