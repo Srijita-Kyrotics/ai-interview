@@ -119,7 +119,7 @@ const StartCard = ({
             ref={resumeFileInputRef}
             type="file"
             id="aii-resume-file"
-            accept=".pdf,.txt"
+            accept=".pdf,.txt,.docx"
             onChange={onResumeFileChange}
             disabled={uploadingResume}
           />

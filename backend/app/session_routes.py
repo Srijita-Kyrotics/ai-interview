@@ -28,7 +28,7 @@ from app.db import (
     update_user_role,
 )
 from app.helpers import default_scores, sanitize_for_ai
-from app.resume_parser import extract_text_from_pdf_content, parse_resume_text
+from app.resume_parser import extract_text_from_pdf_content, extract_text_from_docx_content, parse_resume_text
 
 router = APIRouter()
 
@@ -270,10 +270,15 @@ async def upload_resume(file: UploadFile = File(...), user: dict[str, Any] = Dep
             text = extract_text_from_pdf_content(content)
         except ValueError as e:
             raise HTTPException(status_code=400, detail=str(e)) from e
+    elif filename.endswith(".docx"):
+        try:
+            text = extract_text_from_docx_content(content)
+        except ValueError as e:
+            raise HTTPException(status_code=400, detail=str(e)) from e
     elif filename.endswith(".txt"):
         text = content.decode("utf-8", errors="ignore")
     else:
-        raise HTTPException(status_code=400, detail="Only PDF and TXT files are supported")
+        raise HTTPException(status_code=400, detail="Only PDF, DOCX, and TXT files are supported")
 
     session_id = str(uuid.uuid4())
 

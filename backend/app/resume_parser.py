@@ -23,6 +23,17 @@ def extract_text_from_pdf_content(content: bytes) -> str:
         doc.close()
 
 
+def extract_text_from_docx_content(content: bytes) -> str:
+    """Extract text from DOCX bytes."""
+    import docx
+    from io import BytesIO
+    try:
+        doc = docx.Document(BytesIO(content))
+        return "\n".join([para.text for para in doc.paragraphs])
+    except Exception as e:
+        raise ValueError(f"Invalid or corrupted DOCX file: {e}") from e
+
+
 def normalize_skill_text(value: str) -> str:
     value = value.strip().lower()
     value = re.sub(r'[\u2010-\u2015]', '-', value)

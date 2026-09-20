@@ -93,15 +93,15 @@ function ResumePage({ state, setState, setProctoring }) {
             <p className="muted">Upload your resume and let our AI analyze your profile, extracting structured information from your education, experience, projects, certifications, and skills.</p>
           </div>
           <div className="resume-action">
-            <span className="resume-file-label">Supported: TXT, text-readable PDF</span>
+            <span className="resume-file-label">Supported: TXT, DOCX, text-readable PDF</span>
           </div>
         </div>
 
         <label className="upload-zone">
-          <input type="file" accept=".pdf,.txt" onChange={onFile} />
+          <input type="file" accept=".pdf,.txt,.docx" onChange={onFile} />
           <span className="upload-icon">+</span>
           <b>{isParsing ? 'Parsing resume...' : 'Drop or choose a resume file'}</b>
-          <small>Use a text-readable PDF or TXT resume for the most accurate extraction.</small>
+          <small>Use a text-readable PDF, DOCX, or TXT resume for the most accurate extraction.</small>
         </label>
         {error ? <div className="notice danger">{error}</div> : null}
 
