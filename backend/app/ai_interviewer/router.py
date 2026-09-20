@@ -323,9 +323,6 @@ async def upload_ai_interview_resume(
     ext = Path(filename).suffix.lower()
     content_type = getattr(file, "content_type", "") or ""
 
-    if ext not in (".pdf", ".txt", ".docx") and content_type not in ("application/pdf", "text/plain", "application/vnd.openxmlformats-officedocument.wordprocessingml.document"):
-        raise HTTPException(status_code=400, detail="Only PDF, DOCX, and TXT files are supported")
-
     content = await file.read()
     if len(content) > settings.max_upload_bytes:
         raise HTTPException(
@@ -333,19 +330,21 @@ async def upload_ai_interview_resume(
             detail=f"File too large. Maximum size is {settings.max_upload_bytes // (1024 * 1024)} MB.",
         )
 
-    if ext == ".pdf" or content_type == "application/pdf":
-        try:
-            text = extract_text_from_pdf_content(content)
-        except ValueError as e:
-            raise HTTPException(status_code=400, detail=str(e)) from e
-    elif ext == ".docx" or content_type == "application/vnd.openxmlformats-officedocument.wordprocessingml.document":
+    text = ""
+    # Try PDF first
+    try:
+        text = extract_text_from_pdf_content(content)
+    except Exception:
+        # Try DOCX second
         try:
             from app.resume_parser import extract_text_from_docx_content
             text = extract_text_from_docx_content(content)
-        except ValueError as e:
-            raise HTTPException(status_code=400, detail=str(e)) from e
-    else:
-        text = content.decode("utf-8", errors="ignore")
+        except Exception:
+            # Fallback to plain text
+            try:
+                text = content.decode("utf-8")
+            except UnicodeDecodeError:
+                raise HTTPException(status_code=400, detail="Could not read file. Only PDF, DOCX, and TXT files are supported.")
 
     return _create_direct_session(text, user)
 

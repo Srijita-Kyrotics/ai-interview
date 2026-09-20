@@ -260,27 +260,26 @@ def get_companies():
 @router.post("/upload-resume")
 async def upload_resume(file: UploadFile = File(...), user: dict[str, Any] = Depends(require_candidate)):
     content = await file.read()
-    if len(content) > MAX_UPLOAD_BYTES:
-        raise HTTPException(status_code=413, detail=f"File too large. Maximum size is {MAX_UPLOAD_BYTES // (1024*1024)} MB.")
+    if len(content) > settings.max_upload_bytes:
+        raise HTTPException(
+            status_code=413,
+            detail=f"File too large. Maximum size is {settings.max_upload_bytes // (1024 * 1024)} MB.",
+        )
 
-    filename = file.filename.lower()
-
-    content_type = getattr(file, "content_type", "") or ""
-
-    if filename.endswith(".pdf") or content_type == "application/pdf":
-        try:
-            text = extract_text_from_pdf_content(content)
-        except ValueError as e:
-            raise HTTPException(status_code=400, detail=str(e)) from e
-    elif filename.endswith(".docx") or content_type == "application/vnd.openxmlformats-officedocument.wordprocessingml.document":
+    text = ""
+    # Try PDF first
+    try:
+        text = extract_text_from_pdf_content(content)
+    except Exception:
+        # Try DOCX second
         try:
             text = extract_text_from_docx_content(content)
-        except ValueError as e:
-            raise HTTPException(status_code=400, detail=str(e)) from e
-    elif filename.endswith(".txt") or content_type.startswith("text/plain"):
-        text = content.decode("utf-8", errors="ignore")
-    else:
-        raise HTTPException(status_code=400, detail="Only PDF, DOCX, and TXT files are supported")
+        except Exception:
+            # Fallback to plain text
+            try:
+                text = content.decode("utf-8")
+            except UnicodeDecodeError:
+                raise HTTPException(status_code=400, detail="Could not read file. Only PDF, DOCX, and TXT files are supported.")
 
     session_id = str(uuid.uuid4())
 
