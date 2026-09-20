@@ -1,4 +1,4 @@
-﻿from __future__ import annotations
+from __future__ import annotations
 
 import logging
 from contextlib import asynccontextmanager
@@ -167,3 +167,27 @@ async def health_detailed():
 async def metrics():
     """Prometheus metrics endpoint."""
     return Response(content=await get_metrics(), media_type="text/plain")
+
+
+import os
+from fastapi.staticfiles import StaticFiles
+from fastapi.responses import FileResponse
+
+static_dir = os.path.join(settings.base_dir, "static")
+if not os.path.exists(static_dir):
+    static_dir = os.path.join(os.getcwd(), "static")
+
+if os.path.exists(static_dir):
+    assets_dir = os.path.join(static_dir, "assets")
+    if os.path.exists(assets_dir):
+        app.mount("/assets", StaticFiles(directory=assets_dir), name="assets")
+    
+    @app.get("/{full_path:path}")
+    async def serve_frontend(full_path: str):
+        path = os.path.join(static_dir, full_path)
+        if full_path and os.path.isfile(path):
+            return FileResponse(path)
+        index_file = os.path.join(static_dir, "index.html")
+        if os.path.isfile(index_file):
+            return FileResponse(index_file)
+        return JSONResponse(status_code=404, content={"message": "Frontend not found"})
