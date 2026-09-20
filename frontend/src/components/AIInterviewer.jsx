@@ -869,7 +869,11 @@ export default function AIInterviewer({ sessionId, token, role, company, resume,
     const file = e.target.files?.[0];
     if (!file) return;
     const ext = file.name.split('.').pop().toLowerCase();
-    if (!['pdf', 'txt', 'docx'].includes(ext)) {
+    const type = file.type;
+    const isValidExt = ['pdf', 'txt', 'docx'].includes(ext);
+    const isValidType = ['application/pdf', 'text/plain', 'application/vnd.openxmlformats-officedocument.wordprocessingml.document'].includes(type);
+    
+    if (!isValidExt && !isValidType) {
       setResumeUploadError('Only PDF, DOCX, or TXT files are supported.');
       return;
     }

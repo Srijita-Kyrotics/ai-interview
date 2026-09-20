@@ -265,17 +265,19 @@ async def upload_resume(file: UploadFile = File(...), user: dict[str, Any] = Dep
 
     filename = file.filename.lower()
 
-    if filename.endswith(".pdf"):
+    content_type = getattr(file, "content_type", "") or ""
+
+    if filename.endswith(".pdf") or content_type == "application/pdf":
         try:
             text = extract_text_from_pdf_content(content)
         except ValueError as e:
             raise HTTPException(status_code=400, detail=str(e)) from e
-    elif filename.endswith(".docx"):
+    elif filename.endswith(".docx") or content_type == "application/vnd.openxmlformats-officedocument.wordprocessingml.document":
         try:
             text = extract_text_from_docx_content(content)
         except ValueError as e:
             raise HTTPException(status_code=400, detail=str(e)) from e
-    elif filename.endswith(".txt"):
+    elif filename.endswith(".txt") or content_type.startswith("text/plain"):
         text = content.decode("utf-8", errors="ignore")
     else:
         raise HTTPException(status_code=400, detail="Only PDF, DOCX, and TXT files are supported")
