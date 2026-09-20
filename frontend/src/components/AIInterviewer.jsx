@@ -30,11 +30,12 @@ import {
 import StartCard from './aiInterviewer/StartCard';
 import CodingPanel from './aiInterviewer/CodingPanel';
 
-const API_BASE = import.meta.env.VITE_API_URL || '/api';
+let rawApiBase = import.meta.env.VITE_API_URL || '/api';
+const API_BASE = rawApiBase.replace(/\/+$/, '');
 const getWsBase = () => {
   let url = import.meta.env.VITE_WS_URL || import.meta.env.VITE_API_URL || '';
   if (url) {
-    url = url.replace(/^http:\/\//i, 'ws://').replace(/^https:\/\//i, 'wss://');
+    url = url.replace(/^http:\/\//i, 'ws://').replace(/^https:\/\//i, 'wss://').replace(/\/+$/, '');
     return url;
   }
   return `${window.location.protocol === 'https:' ? 'wss' : 'ws'}://${window.location.host}/api`;
