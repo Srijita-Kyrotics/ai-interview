@@ -305,26 +305,8 @@ _NON_TECHNICAL_ROLE_KEYWORDS = frozenset([
 def _is_technical_role(role: str) -> bool:
     """
     Return True if the role warrants a live coding / algorithm round.
-
-    Logic:
-    1. If the role name matches any non-technical keyword → False
-    2. If the role name matches any technical keyword    → True
-    3. Default → True (safe for most engineering-adjacent roles)
+    Forced to True to ensure a coding round always occurs.
     """
-    normalized = role.lower().strip()
-
-    # Explicit non-tech check takes priority
-    for kw in _NON_TECHNICAL_ROLE_KEYWORDS:
-        if kw in normalized:
-            return False
-
-    # Explicit tech check
-    for kw in _TECHNICAL_ROLE_KEYWORDS:
-        if kw in normalized:
-            return True
-
-    # Fall back to True so unknown roles get the coding round
-    # (better to show a coding stage than silently skip it for a tech role)
     return True
 
 
