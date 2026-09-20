@@ -14,7 +14,7 @@ COPY backend/requirements.txt ./
 RUN pip install --no-cache-dir -r requirements.txt
 COPY backend/ ./
 COPY shared/ ./shared/
-COPY frontend/public/questions/ ./static/questions/
+COPY frontend/public/questions/ ./frontend/public/questions/
 COPY --from=frontend /app/dist ./static
 
 RUN adduser --disabled-password --gecos "" appuser
