@@ -8,10 +8,10 @@ RUN npm run build
 FROM python:3.12-slim AS backend
 WORKDIR /app
 RUN apt-get update && apt-get install -y --no-install-recommends \
-    libpq-dev gcc nodejs npm \
+    curl \
     && rm -rf /var/lib/apt/lists/*
 COPY backend/requirements.txt ./
-RUN pip install --no-cache-dir -r requirements.txt
+RUN pip install -r requirements.txt
 COPY backend/ ./
 COPY shared/ ./shared/
 COPY frontend/public/questions/ ./frontend/public/questions/
