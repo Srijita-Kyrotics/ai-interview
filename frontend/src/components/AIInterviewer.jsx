@@ -736,6 +736,11 @@ export default function AIInterviewer({ sessionId, token, role, company, resume,
         }
         break;
 
+      case 'tts_fallback':
+        speakText(msg.text);
+        break;
+        break;
+
       case 'ai_response_text':
         queueAiMessage(msg.text, {
           status: 'Sarah is speaking…',
@@ -1299,7 +1304,7 @@ export default function AIInterviewer({ sessionId, token, role, company, resume,
           console.warn('[AIInterviewer] Browser STT error:', event.error);
         };
         recognition.onend = () => {
-          // Only fire once the mic has actually been released.
+          // Send audio end ONLY if we didn't already send it instantly in onstop
           if (!audioEndSentRef.current && mediaRecorderRef.current?.state !== 'recording') {
             sendAudioEnd();
           }
@@ -1313,15 +1318,15 @@ export default function AIInterviewer({ sessionId, token, role, company, resume,
       recorder.onstop = async () => {
         const blob = new Blob(audioChunksRef.current, { type: 'audio/webm' });
         pendingAudioRef.current = await blob.arrayBuffer();
+        
+        // Immediately send to backend, don't wait for SpeechRecognition's onend latency
+        if (!audioEndSentRef.current) {
+          sendAudioEnd();
+        }
+
         const sr = speechRecognitionRef.current;
         if (sr) {
           try { sr.stop(); } catch (err) { /* already stopped */ }
-          // Safety net: never block the answer on the browser STT.
-          audioEndTimerRef.current = setTimeout(() => {
-            if (!audioEndSentRef.current) sendAudioEnd();
-          }, 3000);
-        } else {
-          sendAudioEnd();
         }
         stream.getTracks().forEach(t => t.stop());
       };

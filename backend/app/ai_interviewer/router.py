@@ -1595,7 +1595,7 @@ async def _stream_tts(pipeline: VoicePipeline, websocket: WebSocket, text: str) 
 
     tasks = [asyncio.create_task(_synthesize(chunk)) for chunk in chunks]
     try:
-        for task in tasks:
+        for task, chunk in zip(tasks, chunks):
             try:
                 audio = await task
             except Exception as exc:  # noqa: BLE001
@@ -1603,6 +1603,9 @@ async def _stream_tts(pipeline: VoicePipeline, websocket: WebSocket, text: str) 
                 audio = b""
             if audio:
                 await websocket.send_bytes(audio)
+            else:
+                with contextlib.suppress(Exception):
+                    await websocket.send_json({"type": "tts_fallback", "text": chunk})
     finally:
         for task in tasks:
             if not task.done():
