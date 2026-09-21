@@ -816,7 +816,6 @@ export default function AIInterviewer({ sessionId, token, role, company, resume,
       case 'tts_fallback':
         speakText(msg.text);
         break;
-        break;
 
       case 'ai_response_text':
         queueAiMessage(msg.text, {
