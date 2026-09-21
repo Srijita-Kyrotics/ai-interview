@@ -652,7 +652,7 @@ async def question_generator_node(state: InterviewState) -> dict:
         "questions_asked": state["questions_asked"] + 1,
         "main_questions_asked": state["main_questions_asked"] + 1,
         "last_activity_at": time.time(),
-        "active_coding_problem": problem_updates.get("active_coding_problem"),
+        "active_coding_problem": problem_updates.get("active_coding_problem") or state.get("active_coding_problem"),
     }
 
 
@@ -664,7 +664,12 @@ def _is_skip_or_dont_know(answer_text: str) -> bool:
         "don't know", "dont know", "do not know", "no idea", "not sure",
         "skip", "pass", "next question", "move on", "forgot", "don't remember",
         "dont remember", "can't recall", "cant recall", "no clue", "ask next",
-        "ask another", "next topic", "don't understand"
+        "ask another", "next topic", "don't understand",
+        "where is the question", "what was the question", "what is the question",
+        "can you repeat", "could you repeat", "repeat that", "say that again",
+        "didn't hear", "didn't catch", "did not hear", "couldn't hear",
+        "what did you say", "can you say that again", "i can't hear",
+        "cant hear", "could not hear", "no audio",
     ]
     return any(p in text for p in skip_phrases)
 
@@ -795,14 +800,28 @@ async def answer_analyzer_node(state: InterviewState) -> dict:
     blended_comm = round(0.5 * llm_comm + 0.5 * comm.overall_score)
     blended_comm = max(0, min(10, blended_comm))
 
-    # Fold objective signals into the sign lists (deduplicated, capped)
+    # Fold objective signals into the sign lists (deduplicated, capped).
+    # Communication concerns only escalate into red flags when the answer was
+    # substantively weak — prosody jitter alone should never force a follow-up
+    # on an otherwise strong answer (that would make the interviewer probe
+    # every response instead of advancing when the candidate is doing well).
     positive_signals = list(result.get("positive_signals", []))
     red_flags = list(result.get("red_flags", []))
+    substantive_weakness = (
+        result.get("should_dig_deeper", False)
+        or int(result.get("depth", 5)) < 6
+        or bool(result.get("red_flags"))
+        or len(result.get("missing_points", [])) > 1
+    )
     for strength in comm.strengths:
         if strength not in positive_signals and len(positive_signals) < 5:
             positive_signals.append(f"(communication) {strength}")
     for concern in comm.concerns:
-        if concern not in red_flags and len(red_flags) < 5:
+        if (
+            substantive_weakness
+            and concern not in red_flags
+            and len(red_flags) < 5
+        ):
             red_flags.append(f"(communication) {concern}")
 
     evaluation: AnswerEvaluation = {

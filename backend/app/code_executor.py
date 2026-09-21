@@ -246,10 +246,15 @@ async def _run_process(
 
 
 def normalize_output(text: str | None) -> str:
-    """Normalize output for comparison by collapsing whitespace and trimming blank lines."""
+    """Normalize insignificant trailing whitespace without changing output shape.
+
+    Keeping leading indentation and line boundaries intact makes the displayed
+    result match what the candidate's program actually produced, while still
+    accepting the usual final newline/line-ending differences.
+    """
     if text is None:
         return ""
-    return " ".join(str(text).split())
+    return "\n".join(line.rstrip() for line in str(text).splitlines()).rstrip("\n")
 
 
 async def execute_local(
@@ -307,11 +312,14 @@ async def execute_local(
             return await _run_process([node, str(script)], str(work), stdin_data, timeout)
 
         if lang in ("c", "c++", "cpp"):
-            compiler = _find("gcc") or _find("g++")
+            # C++ must be compiled as C++.  Using gcc first treats a .c file
+            # as C and fails on standard C++ headers/classes even when g++ is
+            # installed.
+            compiler = (_find("g++") or _find("gcc")) if lang in ("c++", "cpp") else (_find("gcc") or _find("g++"))
             if not compiler:
                 return _missing_runtime("gcc/g++", lang)
 
-            src = work / "main.c"
+            src = work / ("main.cpp" if lang in ("c++", "cpp") else "main.c")
             src.write_text(source, encoding="utf-8")
             exe = work / ("main.exe" if os.name == "nt" else "main")
 

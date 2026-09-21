@@ -1272,8 +1272,13 @@ async def ai_interview_websocket(
                     "text": result.get("text", ""),
                     "timestamp": time.time(),
                 })
-                # After transition, immediately send next question
+                # A stage advance only returns the transition copy.  It does
+                # not create a question, so emitting ``ai_response_text``
+                # here re-sent the transition under the old question id and
+                # left the client waiting forever for the real next question.
+                # Generate it before reading the state used in the payload.
                 await websocket.send_json({"type": "thinking", "timestamp": time.time()})
+                await runner.generate_next_question()
                 state = runner.get_state()
                 current_q = state.get("current_question", {})
                 await websocket.send_json({
@@ -1620,6 +1625,7 @@ async def voice_interview_websocket(
     token: str = Query(default=""),
     interview_session_id: str = Query(default=""),
     session_id: str = Query(default=""),
+    client_tts: bool = Query(default=False),
 ):
     """
     Real-time voice interview via WebSocket.
@@ -1654,8 +1660,14 @@ async def voice_interview_websocket(
     if not runner:
         await websocket.send_json({"type": "error", "message": "Interview session not found"})
         await websocket.close(code=4002)
+        return
     # Get or create voice pipeline
     pipeline = VoicePipeline.from_settings()
+
+    async def _speak(text: str) -> None:
+        """Use server audio only when browser speech is unavailable."""
+        if not client_tts:
+            await _stream_tts(pipeline, websocket, text)
 
     async def _send_coding_problem_if_active() -> None:
         """Deliver the live-coding problem over WS whenever active."""
@@ -1684,7 +1696,7 @@ async def voice_interview_websocket(
             })
             greeting_task: asyncio.Task | None = None
             try:
-                greeting_task = asyncio.create_task(_stream_tts(pipeline, websocket, greeting))
+                greeting_task = asyncio.create_task(_speak(greeting))
             except Exception as exc:
                 logger.warning("Greeting TTS failed (voice)", extra={"error": str(exc)})
 
@@ -1757,7 +1769,7 @@ async def voice_interview_websocket(
                 })
                 await _send_coding_problem_if_active()
                 with contextlib.suppress(Exception):
-                    await _stream_tts(pipeline, websocket, first_q)
+                    await _speak(first_q)
             else:
                 await websocket.send_json({
                     "type": "error",
@@ -1780,11 +1792,7 @@ async def voice_interview_websocket(
                     "question_id": current_q.get("id", ""),
                 })
                 with contextlib.suppress(Exception):
-                    await _stream_tts(
-                        pipeline,
-                        websocket,
-                        f"Welcome back. Let's continue. {current_q.get('question', '')}",
-                    )
+                    await _speak(f"Welcome back. Let's continue. {current_q.get('question', '')}")
 
         # Main voice loop
         audio_buffer = bytearray()
@@ -1844,6 +1852,37 @@ async def voice_interview_websocket(
                         })
                         break
 
+                    if result.get("is_transition"):
+                        # Stage transition: speak the transition, then immediately
+                        # generate and deliver the next question of the new stage.
+                        transition_text = result.get("text", "")
+                        await websocket.send_json({
+                            "type": "transition",
+                            "text": transition_text,
+                            "timestamp": time.time(),
+                        })
+                        await _speak(transition_text)
+
+                        await websocket.send_json({"type": "thinking", "timestamp": time.time()})
+                        next_q = await runner.generate_next_question()
+                        state = runner.get_state()
+                        current_q = state.get("current_question", {})
+                        await websocket.send_json({
+                            "type": "question",
+                            "text": next_q,
+                            "question_id": current_q.get("id", ""),
+                            "stage": state.get("current_stage", {}).get("name", ""),
+                            "is_follow_up": False,
+                            "main_questions_asked": state.get("main_questions_asked", 0),
+                            "max_questions": state.get("max_questions", 12),
+                            "stage_index": state.get("current_stage_index", 0),
+                            "total_stages": len(state.get("interview_plan", {}).get("stages", [])) or 1,
+                            "timestamp": time.time(),
+                        })
+                        await _send_coding_problem_if_active()
+                        await _speak(next_q)
+                        continue
+
                     # Send next question with full stage/progress metadata
                     state = runner.get_state()
                     current_q = state.get("current_question", {})
@@ -1860,7 +1899,7 @@ async def voice_interview_websocket(
                     })
                     await _send_coding_problem_if_active()
 
-                    await _stream_tts(pipeline, websocket, response_text)
+                    await _speak(response_text)
                     continue
 
                 if msg_type == "audio_end":
@@ -1885,10 +1924,8 @@ async def voice_interview_websocket(
                             "text": "",
                             "is_final": True,
                         })
-                        retry_audio = await pipeline.tts.synthesize(retry_text)
                         await websocket.send_json({"type": "ai_response_text", "text": retry_text})
-                        if retry_audio:
-                            await websocket.send_bytes(retry_audio)
+                        await _speak(retry_text)
                         continue
 
                     await websocket.send_json({
@@ -1915,6 +1952,37 @@ async def voice_interview_websocket(
                         })
                         break
 
+                    if result.get("is_transition"):
+                        # Stage transition: speak the transition, then immediately
+                        # generate and deliver the next question of the new stage.
+                        transition_text = result.get("text", "")
+                        await websocket.send_json({
+                            "type": "transition",
+                            "text": transition_text,
+                            "timestamp": time.time(),
+                        })
+                        await _speak(transition_text)
+
+                        await websocket.send_json({"type": "thinking", "timestamp": time.time()})
+                        next_q = await runner.generate_next_question()
+                        state = runner.get_state()
+                        current_q = state.get("current_question", {})
+                        await websocket.send_json({
+                            "type": "question",
+                            "text": next_q,
+                            "question_id": current_q.get("id", ""),
+                            "stage": state.get("current_stage", {}).get("name", ""),
+                            "is_follow_up": False,
+                            "main_questions_asked": state.get("main_questions_asked", 0),
+                            "max_questions": state.get("max_questions", 12),
+                            "stage_index": state.get("current_stage_index", 0),
+                            "total_stages": len(state.get("interview_plan", {}).get("stages", [])) or 1,
+                            "timestamp": time.time(),
+                        })
+                        await _send_coding_problem_if_active()
+                        await _speak(next_q)
+                        continue
+
                     # Send next question with full stage/progress metadata
                     state = runner.get_state()
                     current_q = state.get("current_question", {})
@@ -1932,7 +2000,7 @@ async def voice_interview_websocket(
                     await _send_coding_problem_if_active()
 
                     # TTS (streamed so audio starts before the full text is generated)
-                    await _stream_tts(pipeline, websocket, response_text)
+                    await _speak(response_text)
 
                 elif msg_type == "end_voice":
                     result = await runner._finalize()

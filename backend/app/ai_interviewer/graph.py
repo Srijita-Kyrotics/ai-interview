@@ -453,6 +453,31 @@ class InterviewGraphRunner:
         self._checkpoint()
         return self.state.get("ai_response_text", "")
 
+    async def generate_next_question(self) -> str:
+        """Generate the next question for the current stage.
+
+        Used right after a stage transition (``process_answer`` returns
+        ``is_transition=True`` before generating the next question) so the
+        caller can speak the transition message and then immediately follow
+        it with the actual question from the new stage.
+        """
+        current_stage = self.state.get("current_stage", {})
+        is_system_design_stage = (
+            current_stage.get("id") == "system_design"
+            or current_stage.get("name", "").lower() == "system design"
+            or self.state.get("is_system_design_mode", False)
+        )
+
+        if is_system_design_stage:
+            q_result = await system_design_question_generator_node(self.state)
+        else:
+            q_result = await question_generator_node(self.state)
+
+        self.state.update(q_result)
+        self._last_question_id = self.state.get("current_question", {}).get("id")
+        self._checkpoint()
+        return self.state.get("ai_response_text", "")
+
     async def process_answer(self, answer_text: str, code_snapshot: str = None) -> dict:
         """
         Process a candidate's answer and return the next AI action.
@@ -625,8 +650,14 @@ class InterviewGraphRunner:
 
         # Decide: follow-up or next question
         should_follow_up = self.state.get("_should_follow_up", False)
+        # Never follow-up twice in a row: if the question that was just
+        # answered was already a follow-up ("probe"), advance the interview
+        # instead of re-grilling the candidate on the same topic.
+        just_answered_intent = ""
+        if isinstance(current_question, dict):
+            just_answered_intent = current_question.get("intent", "")
 
-        if should_follow_up:
+        if should_follow_up and just_answered_intent != "probe":
             result = await follow_up_generator_node(self.state)
             self.state.update(result)
             self._checkpoint()
@@ -687,24 +718,10 @@ class InterviewGraphRunner:
             return await self._finalize()
 
         # Generate next question based on current stage
-        current_stage = self.state.get("current_stage", {})
-        is_system_design_stage = (
-            current_stage.get("id") == "system_design" or 
-            current_stage.get("name", "").lower() == "system design" or
-            self.state.get("is_system_design_mode", False)
-        )
-        
-        if is_system_design_stage:
-            q_result = await system_design_question_generator_node(self.state)
-        else:
-            q_result = await question_generator_node(self.state)
-        
-        self.state.update(q_result)
-        self._last_question_id = self.state.get("current_question", {}).get("id")
-        self._checkpoint()
+        next_question = await self.generate_next_question()
 
         return {
-            "text": self.state.get("ai_response_text", ""),
+            "text": next_question,
             "phase": "interviewing",
             "should_end": False,
             "is_follow_up": False,

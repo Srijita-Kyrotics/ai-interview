@@ -411,12 +411,25 @@ def _mock_coding_problem(prompt: str) -> dict:
 
 
 def _mock_follow_up(prompt: str) -> dict:
+    # Surface a topical follow-up driven by the analyzer's "Dig Deeper Angle"
+    # so the offline mock never repeats the same canned question verbatim.
+    angle = ""
+    marker = "Dig Deeper Angle:"
+    if marker in prompt:
+        tail = prompt.split(marker, 1)[1]
+        for end in ("Candidate's claimed expertise:", "Claimed Skills", "\n\n"):
+            if end and end in tail:
+                tail = tail.split(end, 1)[0]
+                break
+        angle = tail.strip(". \n")
+    if not angle:
+        angle = "a concrete example from your experience and the specific tradeoffs you considered"
     return {
         "follow_up_question": (
-            "That's a bit vague — can you give me a concrete example from your experience "
-            "and explain the specific tradeoffs you considered?"
+            f"Good, that's a useful step. Building on that, could you walk me through "
+            f"{angle} in a bit more detail?"
         ),
-        "why_this_question": "Probing for concrete detail behind a shallow answer.",
+        "why_this_question": "Probing for concrete detail behind the previous answer.",
         "escalation_level": 2,
         "is_challenging": True,
     }
@@ -528,7 +541,7 @@ _MOCK_ROUTERS: list[tuple[str, callable]] = [
     ("conducting a technical interview", _mock_question),
     ("analyzing interview responses", _mock_answer_analysis),
     ("competitive-programming problem setter", _mock_coding_problem),
-    ("relentlessly curious Senior Engineer", _mock_follow_up),
+    ("insightful Senior Technical Engineer", _mock_follow_up),
     ("writing a final hiring assessment report", _mock_report),
     ("transitioning between topics", _mock_transition),
     ("opening the interview", _mock_opening),
@@ -745,9 +758,11 @@ def get_llm_registry() -> LLMProviderRegistry:
     Get or create the singleton LLM provider registry.
 
     OpenAI (with the configured ``OPENAI_MODEL``, default ``gpt-5.6-luna``) is
-    the primary LLM provider powering Obi. The MockProvider is always registered
-    as a fallback so offline mode, API failures, 401s, or 429 rate limits seamlessly
-    fall back without crashing the candidate session.
+    the primary LLM provider powering Obi. The MockProvider is only registered
+    when no usable OpenAI key is present, so it never shadows a working API —
+    offline dev mode stays runnable without a key, but a real credential is
+    always preferred and API failures surface as provider errors instead of
+    silently substituting canned content.
     """
     global _registry
     if _registry is not None:
@@ -758,9 +773,8 @@ def get_llm_registry() -> LLMProviderRegistry:
     if _has_usable_api_key(settings.openai_api_key):
         _registry.register(OpenAIProvider(), priority=0)
         logger.info("Registered LLM provider: OpenAI (%s)", settings.openai_model)
-    
-    # Always register MockProvider as low-priority fallback
-    _registry.register(MockProvider(), priority=99)
-    logger.info("Registered fallback LLM provider: MockProvider")
+    else:
+        _registry.register(MockProvider(), priority=99)
+        logger.info("Registered LLM provider: MockProvider (offline — no usable OPENAI_API_KEY)")
 
     return _registry

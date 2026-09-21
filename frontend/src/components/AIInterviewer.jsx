@@ -40,6 +40,7 @@ const getWsBase = () => {
   }
   return `${window.location.protocol === 'https:' ? 'wss' : 'ws'}://${window.location.host}/api`;
 };
+const supportsBrowserTts = () => 'speechSynthesis' in window && 'SpeechSynthesisUtterance' in window;
 
 // Obi asks at most MAX_QUESTIONS questions (follow-ups count toward the cap).
 // The estimate assumes ~2.5 minutes per question including reading + answering.
@@ -62,6 +63,18 @@ const LANGUAGE_OPTIONS = [
   { key: 'rust', label: 'Rust' },
   { key: 'typescript', label: 'TypeScript' },
 ];
+
+const DEFAULT_STARTER_CODES = {
+  python: '# Write your solution here\ndef solution():\n    pass\n\nprint("Code runner ready.")\n',
+  javascript: '// Write your solution here\nfunction solution() {\n  \n}\n\nconsole.log("Code runner ready.");\n',
+  java: 'public class Main {\n    public static void main(String[] args) {\n        System.out.println("Code runner ready.");\n    }\n}\n',
+  cpp: '#include <iostream>\nusing namespace std;\n\nint main() {\n    cout << "Code runner ready." << endl;\n    return 0;\n}\n',
+  c: '#include <stdio.h>\n\nint main() {\n    printf("Code runner ready.\\n");\n    return 0;\n}\n',
+  csharp: 'using System;\n\nclass Program {\n    static void Main() {\n        Console.WriteLine("Code runner ready.");\n    }\n}\n',
+  go: 'package main\n\nimport "fmt"\n\nfunc main() {\n    fmt.Println("Code runner ready.")\n}\n',
+  rust: 'fn main() {\n    println!("Code runner ready.");\n}\n',
+  typescript: '// Write your solution here\nfunction solution(): void {\n  console.log("Code runner ready.");\n}\n\nsolution();\n',
+};
 
 const DEFAULT_DIRECT_PROBLEM = {
   id: 'demo-two-sum',
@@ -438,6 +451,19 @@ export default function AIInterviewer({ sessionId, token, role, company, resume,
     setActiveSubtitleId(null);
   }, []);
 
+  const speechQueueRef = useRef([]);
+  const isSpeakingSpeechRef = useRef(false);
+  // Questions may arrive while Jack is still reading a greeting or transition.
+  // Keep them out of the transcript until the current spoken message ends.
+  const pendingQuestionEventsRef = useRef([]);
+  const presentQuestionRef = useRef(null);
+
+  const flushPendingQuestion = useCallback(() => {
+    if (!presentQuestionRef.current || pendingQuestionEventsRef.current.length === 0) return false;
+    presentQuestionRef.current(pendingQuestionEventsRef.current.shift());
+    return true;
+  }, []);
+
   // ── Speech Synthesis Helper for Jack (Male Voice) ─────────────────────
   const pickNaturalVoice = useCallback(() => {
     if (!('speechSynthesis' in window)) return null;
@@ -449,40 +475,81 @@ export default function AIInterviewer({ sessionId, token, role, company, resume,
     return voices.find(v => /en/i.test(v.lang)) || null;
   }, []);
 
-  const speakText = useCallback((text) => {
-    if (!('speechSynthesis' in window) || !text) return;
-    try {
-      window.speechSynthesis.cancel();
-      const cleanText = text.replace(/[*#_`]/g, ''); // Strip markdown
-      const utterance = new SpeechSynthesisUtterance(cleanText);
-      const voice = pickNaturalVoice();
-      if (voice) utterance.voice = voice;
-      utterance.lang = 'en-US';
-      utterance.rate = 0.95;
-      utterance.pitch = 0.95;
-      setSubtitleText(cleanText);
-      setIsSpeaking(true);
-      startLipSync();
-      utterance.onend = () => {
-        stopAudioLevelMonitor();
-        setIsSpeaking(false);
-        clearLipSync();
-        finishAiResponse();
-      };
-      utterance.onerror = () => {
-        stopAudioLevelMonitor();
-        setIsSpeaking(false);
-        clearLipSync();
-        finishAiResponse();
-      };
-      window.speechSynthesis.speak(utterance);
-    } catch {
+  const processSpeechQueue = useCallback(() => {
+    if (isPlayingAudioRef.current) return;
+    if (speechQueueRef.current.length === 0) {
+      isSpeakingSpeechRef.current = false;
       stopAudioLevelMonitor();
       setIsSpeaking(false);
       clearLipSync();
       finishAiResponse();
+      if (flushPendingQuestion()) return;
+      setStatusMessage('Jack is ready');
+      return;
     }
-  }, [finishAiResponse, startLipSync, clearLipSync, stopAudioLevelMonitor, pickNaturalVoice]);
+
+    if (isSpeakingSpeechRef.current) return;
+
+    const nextItem = speechQueueRef.current.shift();
+    if (!nextItem || !nextItem.text) {
+      processSpeechQueue();
+      return;
+    }
+
+    const cleanText = nextItem.text.replace(/[*#_`]/g, '');
+    setSubtitleText(cleanText);
+    setStatusMessage(nextItem.status || 'Jack is speaking…');
+    setIsSpeaking(true);
+    isSpeakingSpeechRef.current = true;
+    startLipSync();
+
+    if ('speechSynthesis' in window) {
+      try {
+        window.speechSynthesis.cancel();
+        const utterance = new SpeechSynthesisUtterance(cleanText);
+        const voice = pickNaturalVoice();
+        if (voice) utterance.voice = voice;
+        utterance.lang = 'en-US';
+        utterance.rate = 0.95;
+        utterance.pitch = 0.95;
+
+        utterance.onend = () => {
+          isSpeakingSpeechRef.current = false;
+          processSpeechQueue();
+        };
+        utterance.onerror = () => {
+          isSpeakingSpeechRef.current = false;
+          processSpeechQueue();
+        };
+
+        window.speechSynthesis.speak(utterance);
+      } catch {
+        isSpeakingSpeechRef.current = false;
+        processSpeechQueue();
+      }
+    } else {
+      isSpeakingSpeechRef.current = false;
+      processSpeechQueue();
+    }
+  }, [finishAiResponse, startLipSync, clearLipSync, stopAudioLevelMonitor, pickNaturalVoice, flushPendingQuestion]);
+
+  const queueSpeech = useCallback((text, options = {}) => {
+    if (!text || !text.trim()) return;
+    speechQueueRef.current.push({ text: text.trim(), ...options });
+    if (!isSpeakingSpeechRef.current && !isPlayingAudioRef.current) {
+      processSpeechQueue();
+    }
+  }, [processSpeechQueue]);
+
+  const speakText = useCallback((text) => {
+    if (!text) return;
+    if ('speechSynthesis' in window) {
+      window.speechSynthesis.cancel();
+    }
+    isSpeakingSpeechRef.current = false;
+    speechQueueRef.current = [{ text, status: 'Jack is speaking…' }];
+    processSpeechQueue();
+  }, [processSpeechQueue]);
 
   const addMessage = (msg) => {
     const text = typeof msg?.text === 'string' ? msg.text.trim() : '';
@@ -518,14 +585,7 @@ export default function AIInterviewer({ sessionId, token, role, company, resume,
     stopAudioLevelMonitor();
     setIsThinking(false);
     setIsProcessing(false);
-    setStatusMessage(options.status || 'Jack is speaking...');
-
-    if (isPlayingAudioRef.current && subtitleText) {
-      pendingQuestionTextRef.current = message || '';
-    } else {
-      setSubtitleText(message || '');
-    }
-    audioAwaitingRef.current = true;
+    setStatusMessage(options.status || 'Jack is speaking…');
 
     if (message && message.trim()) {
       const cleanText = message.trim();
@@ -535,22 +595,23 @@ export default function AIInterviewer({ sessionId, token, role, company, resume,
         const recent = prev.slice(-6);
         const duplicate = recent.some(msg => msg.role === 'interviewer' && String(msg.text).trim() === cleanText);
         if (duplicate) return prev;
-        return [...prev, { id: newId, role: 'interviewer', text: cleanText, ts: Date.now() / 1000 }];
+        return [...prev, {
+          id: newId,
+          role: 'interviewer',
+          text: cleanText,
+          ts: Date.now() / 1000,
+          isFollowUp: options.isFollowUp,
+          isTransition: options.isTransition,
+        }];
       });
+
+      queueSpeech(cleanText, { status: options.status || 'Jack is speaking…' });
     }
 
     if (options.phase) {
       setPhase(options.phase);
     }
-
-    clearAudioFallbackTimer();
-    fallbackTtsTimeoutRef.current = setTimeout(() => {
-      if (!audioAwaitingRef.current && BROWSER_TTS_FALLBACK) return;
-      if ('speechSynthesis' in window && message) {
-        speakText(message);
-      }
-    }, 4000);
-  }, [clearAudioFallbackTimer, speakText, stopAudioLevelMonitor]);
+  }, [queueSpeech, stopAudioLevelMonitor]);
 
   // Role is derived from user selection or resume inference via ROLE_MAPPINGS.
   const effectiveRole = useMemo(() => {
@@ -567,6 +628,48 @@ export default function AIInterviewer({ sessionId, token, role, company, resume,
   const openingIntro = `Hi ${candidateFirstName}, I'm Jack, your interviewer. I've reviewed your resume and I'm tailoring the conversation to your background in ${effectiveRole || DEFAULT_ROLE}. We’ll start with your experience, dig into your projects, and then test your technical depth.`;
 
   // ── WebSocket Message Handler ────────────────────────────────────────
+  const presentQuestion = useCallback((msg) => {
+    setIsThinking(false);
+    setPhase('interviewing');
+    setCurrentStage(msg.stage || '');
+    if (msg.stage_index !== undefined) {
+      setProgress({ current: msg.stage_index + 1, total: msg.total_stages || 1 });
+    }
+
+    const isCodingQuestion = (msg.stage || '').toLowerCase().includes('coding') ||
+      (msg.text || '').toLowerCase().includes('coding problem') ||
+      (msg.text || '').toLowerCase().includes('please solve');
+    if (codingEnabled && isCodingQuestion) {
+      setShowCodeEditor(true);
+      const lang = languageRef.current || 'python';
+      setCode(prev => prev && prev.trim() ? prev : (DEFAULT_STARTER_CODES[lang] || ''));
+      setCodingProblem((prev) => {
+        if (prev && prev.description) return prev;
+        const lines = (msg.text || '').split('\n').map(line => line.trim()).filter(Boolean);
+        const titleMatch = (lines[0] || '').match(/coding problem:\s*(.+)$/i);
+        return {
+          id: 'coding-auto',
+          title: titleMatch ? titleMatch[1].trim() : 'Live Coding Challenge',
+          difficulty: 'medium',
+          topic: 'algorithms',
+          description: lines.length > 1 ? lines.slice(1).join('\n\n') : msg.text,
+          starter_code: DEFAULT_STARTER_CODES,
+          visible_test_cases: [],
+        };
+      });
+    }
+
+    queueAiMessage(msg.text, {
+      status: msg.is_follow_up ? 'Jack is asking a follow-up…' : 'Jack is asking the next question…',
+      phase: 'interviewing',
+      isFollowUp: msg.is_follow_up,
+    });
+  }, [codingEnabled, queueAiMessage]);
+
+  useEffect(() => {
+    presentQuestionRef.current = presentQuestion;
+  }, [presentQuestion]);
+
   const handleWsMessage = useCallback((msg) => {
     const { type } = msg;
 
@@ -589,7 +692,17 @@ export default function AIInterviewer({ sessionId, token, role, company, resume,
         }
         break;
 
-      case 'session_ready':
+      case 'progress':
+        // The voice endpoint emits progress while the resume and first
+        // question are being generated.  Previously these events were
+        // ignored, leaving the misleading "Jack is ready" status during a
+        // potentially long LLM request.
+        setIsThinking(true);
+        setIsProcessing(false);
+        setStatusMessage(msg.step || msg.message || 'Jack is preparing your next question…');
+        break;
+
+      case 'session_ready': {
         setPhase('interviewing');
         setIsThinking(false);
         setIsProcessing(false);
@@ -599,12 +712,13 @@ export default function AIInterviewer({ sessionId, token, role, company, resume,
         } else {
           setCodingEnabled(true);
         }
-        queueAiMessage(msg.opening_text || openingIntro, {
-          status: 'Jack is joining the interview…',
+        const opening = msg.opening_text || openingIntro;
+        queueAiMessage(opening, {
+          status: 'Jack is introducing the interview…',
           phase: 'interviewing',
-          isTransition: true,
         });
         break;
+      }
 
       case 'session_restored': {
         setPhase('interviewing');
@@ -638,48 +752,11 @@ export default function AIInterviewer({ sessionId, token, role, company, resume,
           activeQuestionIdRef.current = msg.question_id;
           setActiveQuestionId(msg.question_id);
         }
-        setIsThinking(false);
-        setPhase('interviewing');
-        setCurrentStage(msg.stage || '');
-        if (msg.stage_index !== undefined) {
-          setProgress({
-            current: msg.stage_index + 1,
-            total: msg.total_stages || 1,
-          });
-        }
-
-        // Auto-detect coding question or coding stage → show code editor & construct fallback problem if needed
-        const isCodingQuestion = codingEnabled && (
-          (msg.stage || '').toLowerCase().includes('coding') ||
-          (msg.text || '').toLowerCase().includes('coding problem') ||
-          (msg.text || '').toLowerCase().includes('please solve')
-        );
-        if (isCodingQuestion) {
-          setShowCodeEditor(true);
-          setCodingProblem((prev) => {
-            if (prev && prev.description) return prev;
-            const lines = (msg.text || '').split('\n').map(l => l.trim()).filter(Boolean);
-            const firstLine = lines[0] || '';
-            const titleMatch = firstLine.match(/coding problem:\s*(.+)$/i);
-            const title = titleMatch ? titleMatch[1].trim() : 'Live Coding Challenge';
-            const desc = lines.length > 1 ? lines.slice(1).join('\n\n') : msg.text;
-            return {
-              id: 'coding-auto',
-              title,
-              difficulty: 'medium',
-              topic: 'algorithms',
-              description: desc,
-              starter_code: { python: '# Write your solution here\n' },
-              visible_test_cases: [],
-            };
-          });
-        }
-
-        queueAiMessage(msg.text, {
-          status: 'Jack is asking the next question…',
-          phase: 'interviewing',
-          isFollowUp: msg.is_follow_up,
-        });
+        // Show the question as soon as it arrives. Speech remains serialized
+        // by queueSpeech(), so the greeting and question cannot overlap, but
+        // a delayed/unavailable speech-synthesis callback can no longer hide
+        // the first question and make the interview appear stuck.
+        presentQuestion(msg);
         break;
 
       case 'transition':
@@ -699,7 +776,7 @@ export default function AIInterviewer({ sessionId, token, role, company, resume,
           const lang = languageRef.current;
           setCode(prev => {
             if (prev && prev.trim()) return prev;
-            const starter = msg.problem.starter_code || {};
+            const starter = msg.problem.starter_code || DEFAULT_STARTER_CODES;
             return starter[lang] || '';
           });
         }
@@ -730,9 +807,9 @@ export default function AIInterviewer({ sessionId, token, role, company, resume,
         setIsProcessing(false);
         if (msg.is_final && msg.text) {
           addCandidateMessage(msg.text);
-          setStatusMessage('Sarah is thinking about your answer…');
+          setStatusMessage('Jack is thinking about your answer…');
         } else if (msg.stage === 'evaluation') {
-          setStatusMessage('Sarah is evaluating your response…');
+          setStatusMessage('Jack is evaluating your response…');
         }
         break;
 
@@ -743,7 +820,7 @@ export default function AIInterviewer({ sessionId, token, role, company, resume,
 
       case 'ai_response_text':
         queueAiMessage(msg.text, {
-          status: 'Sarah is speaking…',
+          status: 'Jack is speaking…',
           phase: 'interviewing',
         });
         break;
@@ -759,12 +836,11 @@ export default function AIInterviewer({ sessionId, token, role, company, resume,
       default:
         console.log('[AIInterviewer] Unknown message type:', type, msg);
     }
-  }, [queueAiMessage, speakText, openingIntro]);
+  }, [queueAiMessage, speakText, openingIntro, addCandidateMessage]);
 
   // ── Serialized Audio Playback Queue ─────────────────────────────────
   // The backend streams TTS as multiple MP3 chunks. Every binary message is
-  // queued here and played one at a time so chunks never overlap. The
-  // fallback timer / isAwaiting flag only reset once the whole queue drains.
+  // queued here and played one at a time so chunks never overlap.
   const playNextAudioChunk = useCallback(() => {
     const queue = audioQueueRef.current;
     if (!queue.length) {
@@ -777,6 +853,7 @@ export default function AIInterviewer({ sessionId, token, role, company, resume,
         setSubtitleText(pendingQuestionTextRef.current);
         pendingQuestionTextRef.current = null;
       }
+      flushPendingQuestion();
       return;
     }
     if (pendingQuestionTextRef.current) {
@@ -807,13 +884,17 @@ export default function AIInterviewer({ sessionId, token, role, company, resume,
       console.error('[AIInterviewer] Audio playback failed', err);
       playNextAudioChunk();
     });
-  }, [finishAiResponse, clearLipSync, startAudioLevelMonitor, stopAudioLevelMonitor]);
+  }, [finishAiResponse, clearLipSync, startAudioLevelMonitor, stopAudioLevelMonitor, flushPendingQuestion]);
 
   const handleAudioResponse = useCallback((arrayBuffer) => {
+    // Text messages are spoken in one ordered browser queue when available.
+    // Ignore delayed server audio so it cannot cancel or overlap that queue.
+    if (supportsBrowserTts()) return;
     clearAudioFallbackTimer();
     if ('speechSynthesis' in window) {
       window.speechSynthesis.cancel();
     }
+    isSpeakingSpeechRef.current = false;
     audioQueueRef.current.push(arrayBuffer);
     if (!isPlayingAudioRef.current) {
       isPlayingAudioRef.current = true;
@@ -833,7 +914,7 @@ export default function AIInterviewer({ sessionId, token, role, company, resume,
     setReconnectAttempts(prev => prev + 1);
     setPhase('opening');
 
-    const wsUrl = `${getWsBase()}/ai-interview/ws/voice?token=${token}&interview_session_id=${interviewSessionId}&session_id=${sessionId}`;
+    const wsUrl = `${getWsBase()}/ai-interview/ws/voice?token=${encodeURIComponent(token)}&interview_session_id=${encodeURIComponent(interviewSessionId)}&session_id=${encodeURIComponent(sessionId)}&client_tts=${supportsBrowserTts()}`;
     const ws = new WebSocket(wsUrl);
     wsRef.current = ws;
     ws.binaryType = 'arraybuffer';
@@ -845,9 +926,14 @@ export default function AIInterviewer({ sessionId, token, role, company, resume,
 
     ws.onmessage = (event) => {
       if (typeof event.data === 'string') {
-        handleWsMessage(JSON.parse(event.data));
+        try {
+          handleWsMessageRef.current(JSON.parse(event.data));
+        } catch {
+          setError('Received an invalid response from the interview service.');
+          setPhase('error');
+        }
       } else {
-        handleAudioResponse(event.data);
+        handleAudioResponseRef.current(event.data);
       }
     };
 
@@ -860,7 +946,18 @@ export default function AIInterviewer({ sessionId, token, role, company, resume,
         reconnectTimerRef.current = setTimeout(reconnectWs, 2000 * (reconnectAttempts + 1));
       }
     };
-  }, [interviewSessionId, token, sessionId, reconnectAttempts, handleWsMessage, handleAudioResponse]);
+  }, [interviewSessionId, token, sessionId, reconnectAttempts]);
+
+  // Refs that always hold the latest message handlers so the WS callbacks
+  // created in startInterview / reconnectWs never capture stale closures.
+  const handleWsMessageRef = useRef(handleWsMessage);
+  const handleAudioResponseRef = useRef(handleAudioResponse);
+  const reconnectWsRef = useRef(reconnectWs);
+  useEffect(() => {
+    handleWsMessageRef.current = handleWsMessage;
+    handleAudioResponseRef.current = handleAudioResponse;
+    reconnectWsRef.current = reconnectWs;
+  }, [handleWsMessage, handleAudioResponse, reconnectWs]);
 
   // Cleanup reconnect timer
   useEffect(() => {
@@ -984,7 +1081,8 @@ export default function AIInterviewer({ sessionId, token, role, company, resume,
 
       if (!res.ok) {
         if (res.status === 401) clearStoredUser();
-        throw new Error(`Failed to initialize interview: ${res.statusText}`);
+        const errorBody = await res.json().catch(() => ({}));
+        throw new Error(errorBody.detail || errorBody.message || `Failed to initialize interview (${res.status})`);
       }
 
       const data = await res.json();
@@ -994,7 +1092,7 @@ export default function AIInterviewer({ sessionId, token, role, company, resume,
         setResumableSession(ivSessionId);
       }
 
-      const wsUrl = `${getWsBase()}/ai-interview/ws/voice?token=${token}&interview_session_id=${ivSessionId}&session_id=${activeSessionId}`;
+      const wsUrl = `${getWsBase()}/ai-interview/ws/voice?token=${encodeURIComponent(token)}&interview_session_id=${encodeURIComponent(ivSessionId)}&session_id=${encodeURIComponent(activeSessionId)}&client_tts=${supportsBrowserTts()}`;
       const ws = new WebSocket(wsUrl);
       wsRef.current = ws;
       ws.binaryType = 'arraybuffer';
@@ -1007,10 +1105,14 @@ export default function AIInterviewer({ sessionId, token, role, company, resume,
 
       ws.onmessage = (event) => {
         if (typeof event.data === 'string') {
-          handleWsMessage(JSON.parse(event.data));
+          try {
+            handleWsMessageRef.current(JSON.parse(event.data));
+          } catch {
+            setError('Received an invalid response from the interview service.');
+            setPhase('error');
+          }
         } else {
-          // Binary: TTS audio
-          handleAudioResponse(event.data);
+          handleAudioResponseRef.current(event.data);
         }
       };
 
@@ -1025,7 +1127,7 @@ export default function AIInterviewer({ sessionId, token, role, company, resume,
         if (phaseRef.current !== 'completed' && phaseRef.current !== 'error') {
           reconnectTimerRef.current = setTimeout(() => {
             if (wsRef.current === ws) {
-              reconnectWs();
+              reconnectWsRef.current();
             }
           }, 2000);
         }
@@ -1115,9 +1217,8 @@ export default function AIInterviewer({ sessionId, token, role, company, resume,
 
   const handleLanguageChange = useCallback((newLang) => {
     setLanguage(newLang);
-    if (codingProblem?.starter_code?.[newLang]) {
-      setCode(codingProblem.starter_code[newLang]);
-    }
+    const starter = codingProblem?.starter_code?.[newLang] || DEFAULT_STARTER_CODES[newLang] || '';
+    setCode(starter);
     setRunOutput('');
     setRunStatus('');
     setTestResults(null);
@@ -1137,14 +1238,25 @@ export default function AIInterviewer({ sessionId, token, role, company, resume,
 
   // ── Send Text Answer ─────────────────────────────────────────────────
   const sendAnswer = useCallback((text) => {
-    if (!text) return;
+    if (!text || !text.trim()) return;
+    const cleanText = text.trim();
 
     if (isDirectCodeMode) {
       return;
     }
 
+    // Immediately add candidate message to the transcript
+    addCandidateMessage(cleanText);
+
+    if ('speechSynthesis' in window) {
+      window.speechSynthesis.cancel();
+    }
+    isSpeakingSpeechRef.current = false;
+    speechQueueRef.current = [];
+    setIsSpeaking(false);
+    clearLipSync();
+
     if (!wsRef.current || wsRef.current.readyState !== WebSocket.OPEN) {
-      addCandidateMessage(text);
       setIsThinking(true);
       setTimeout(() => {
         setIsThinking(false);
@@ -1153,7 +1265,7 @@ export default function AIInterviewer({ sessionId, token, role, company, resume,
           {
             id: Date.now(),
             role: 'interviewer',
-            text: `[Direct IDE Feedback] Solution received! Output: "${runOutput || 'Code submitted successfully.'}".`,
+            text: `[Offline Mode] Response received.`,
             timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
           }
         ]);
@@ -1163,50 +1275,83 @@ export default function AIInterviewer({ sessionId, token, role, company, resume,
 
     addCandidateMessage(text);
     setIsThinking(true);
+    setStatusMessage('Jack is thinking about your answer…');
 
     wsRef.current.send(JSON.stringify({
       type: 'answer',
-      text,
+      text: cleanText,
       code: code || undefined,
       language: code ? language : undefined,
     }));
-  }, [code, language, addCandidateMessage, isDirectCodeMode, runOutput]);
+  }, [code, language, addCandidateMessage, isDirectCodeMode, clearLipSync]);
 
   // ── Run Code ───────────────────────────────────────────────────────
   const runCode = useCallback(async () => {
+    if (!code.trim() || isRunning || isTesting) return;
     const cases = codingProblem?.visible_test_cases || [];
-    if (!code.trim() || isRunning || isTesting || cases.length === 0) return;
+
     setIsRunning(true);
     setIsTesting(true);
-    setRunStatus('Running public test cases…');
     setRunOutput('');
     setTestResults(null);
-    try {
-      const res = await fetch(`${API_BASE}/ai-interview/judge`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${token}`,
-        },
-        body: JSON.stringify({ language, code, test_cases: cases }),
-      });
-      const data = await res.json();
-      if (!res.ok) {
-        setRunStatus(data.detail || data.message || `Run failed (${res.status})`);
-        setRunOutput(data.error || '');
-        return;
+
+    if (cases.length > 0) {
+      setRunStatus('Running public test cases…');
+      try {
+        const res = await fetch(`${API_BASE}/ai-interview/judge`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            Authorization: `Bearer ${token}`,
+          },
+          body: JSON.stringify({ language, code, test_cases: cases }),
+        });
+        const data = await res.json();
+        if (!res.ok) {
+          setRunStatus(data.detail || data.message || `Run failed (${res.status})`);
+          setRunOutput(data.error || '');
+          return;
+        }
+        setTestResults(data);
+        const timedOut = (data.results || []).some((result) => result.status === 'timeout');
+        setRunStatus(timedOut ? 'Time limit exceeded.' : `${data.passed || 0}/${data.total || cases.length} public cases checked.`);
+      } catch (err) {
+        setRunStatus('Could not contact run service.');
+        setRunOutput(err.message || '');
+      } finally {
+        setIsRunning(false);
+        setIsTesting(false);
       }
-      setTestResults(data);
-      const timedOut = (data.results || []).some((result) => result.status === 'timeout');
-      setRunStatus(timedOut ? 'Time limit exceeded.' : `${data.passed || 0}/${data.total || cases.length} public cases checked.`);
-    } catch (err) {
-      setRunStatus('Could not contact run service.');
-      setRunOutput(err.message || '');
-    } finally {
-      setIsRunning(false);
-      setIsTesting(false);
+    } else {
+      // General code runner without predefined test cases (runs code via backend /run-code)
+      setRunStatus('Executing code…');
+      try {
+        const res = await fetch(`${API_BASE}/ai-interview/run-code`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            Authorization: `Bearer ${token}`,
+          },
+          body: JSON.stringify({ language, code, stdin: stdin || '' }),
+        });
+        const data = await res.json();
+        if (!res.ok) {
+          setRunStatus(data.detail || data.message || `Execution error (${res.status})`);
+          setRunOutput(data.error || data.detail || '');
+          return;
+        }
+        const output = data.stdout || data.stderr || data.error || '(Code executed with no output)';
+        setRunOutput(output);
+        setRunStatus(data.timed_out ? 'Execution timed out.' : (data.ok ? 'Execution successful.' : 'Execution finished with output.'));
+      } catch (err) {
+        setRunStatus('Could not contact run service.');
+        setRunOutput(err.message || '');
+      } finally {
+        setIsRunning(false);
+        setIsTesting(false);
+      }
     }
-  }, [code, language, token, codingProblem, isRunning, isTesting]);
+  }, [code, language, token, codingProblem, isRunning, isTesting, stdin]);
 
   const submitCode = useCallback(() => {
     if (!code.trim() || isSubmitting || isDirectCodeMode) return;
@@ -1217,13 +1362,15 @@ export default function AIInterviewer({ sessionId, token, role, company, resume,
     setIsSubmitting(true);
     setSubmissionResult(null);
     setIsThinking(true);
+    const summaryMsg = `Submitted ${language} solution for ${codingProblem?.title || 'the coding challenge'}.`;
+    addCandidateMessage(summaryMsg);
     wsRef.current.send(JSON.stringify({
       type: 'answer',
-      text: `Submitted ${language} solution for ${codingProblem?.title || 'the coding challenge'}.`,
+      text: summaryMsg,
       code,
       language,
     }));
-  }, [code, language, codingProblem, isSubmitting, isDirectCodeMode]);
+  }, [code, language, codingProblem, isSubmitting, isDirectCodeMode, addCandidateMessage]);
 
   // ── Run Tests (visible test cases) ───────────────────────────────────
   const runTests = useCallback(async () => {
@@ -1512,16 +1659,24 @@ export default function AIInterviewer({ sessionId, token, role, company, resume,
           )}
 
           {/* Code Editor toggle button */}
-          {codingEnabled && (
-            <button
-              className="aii-repeat-btn"
-              onClick={() => setShowCodeEditor((prev) => !prev)}
-              title="Toggle Live Code Editor"
-              style={{ background: 'rgba(99, 102, 241, 0.25)', borderColor: 'rgba(129, 140, 248, 0.5)' }}
-            >
-              <Code2 size="14" /> {showCodeEditor ? 'Close Code Editor' : 'Code Editor'}
-            </button>
-          )}
+          {codingEnabled && <button
+            className="aii-repeat-btn"
+            onClick={() => {
+              setShowCodeEditor((prev) => {
+                const next = !prev;
+                if (next && !codeRef.current.trim()) {
+                  const lang = languageRef.current || 'python';
+                  const starter = codingProblem?.starter_code?.[lang] || DEFAULT_STARTER_CODES[lang] || '';
+                  setCode(starter);
+                }
+                return next;
+              });
+            }}
+            title="Toggle Live Code Editor"
+            style={{ background: 'rgba(99, 102, 241, 0.25)', borderColor: 'rgba(129, 140, 248, 0.5)' }}
+          >
+            <Code2 size="14" /> {showCodeEditor ? 'Close Code Editor' : 'Code Editor'}
+          </button>}
 
           {/* Candidate webcam feed card — top right header placement */}
           <CandidateWebcamCard videoRef={videoRef} userStream={userStream} proctoringActive={isProctoringEnabled} />
@@ -1581,7 +1736,7 @@ export default function AIInterviewer({ sessionId, token, role, company, resume,
 
             <div className="aii-chat__heading">Your Live Transcript</div>
             <div className="aii-chat">
-              {messages.filter(msg => msg.role !== 'interviewer').map((msg) => (
+              {messages.map((msg) => (
                 <MessageBubble key={msg.id || `${msg.role}-${msg.ts}`} message={msg} />
               ))}
               {isProcessing && <div className="aii-transcript-status">Transcribing your speech...</div>}
