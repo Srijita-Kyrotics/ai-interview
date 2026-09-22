@@ -97,7 +97,7 @@ export default function CodeEditor({ value, onChange, language = 'python', start
       view.destroy();
       viewRef.current = null;
     };
-  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+  }, []);
 
   // Sync external value changes
   useEffect(() => {
