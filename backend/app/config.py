@@ -184,7 +184,10 @@ class Settings(BaseSettings):
     def shared_dir_path(self) -> Path:
         if self.shared_dir:
             return Path(self.shared_dir)
-        return BACKEND_DIR / "shared"
+        candidate = BACKEND_DIR / "shared"
+        if candidate.exists():
+            return candidate
+        return BASE_DIR / "shared"
 
     @property
     def frontend_questions_dir_path(self) -> Path:

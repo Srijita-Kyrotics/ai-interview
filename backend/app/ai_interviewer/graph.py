@@ -131,12 +131,12 @@ def route_after_stage_advance(state: InterviewState) -> Literal[
         return "closing"
     if state.get("questions_asked", 0) >= state.get("max_turns", state.get("max_questions", 12) * 2):
         return "closing"
-    
+
     # Check if we should enter system design stage
     current_stage = state.get("current_stage", {})
     if current_stage.get("id") == "system_design" or current_stage.get("name", "").lower() == "system design":
         return "system_design_question_generator"
-    
+
     return "question_generator"
 
 
@@ -147,15 +147,15 @@ def route_after_system_design_answer(state: InterviewState) -> Literal[
     should_end = state.get("should_end", False)
     questions_asked = state.get("questions_asked", 0)
     max_turns = state.get("max_turns", state.get("max_questions", 12) * 2)
-    
+
     if should_end or questions_asked >= max_turns:
         return "closing"
-    
+
     # Count system design questions asked
     sd_questions = [q for q in state.get("questions_history", []) if q.get("intent") == "system_design"]
     if len(sd_questions) >= 7:  # All 7 dimensions covered
         return "stage_advance"
-    
+
     return "system_design_question_generator"
 
 
@@ -438,12 +438,28 @@ class InterviewGraphRunner:
 
         return self.state.get("ai_response_text", "Hello! I'm Jack, let's begin the interview.")
 
+    def _should_reuse_active_question(self) -> bool:
+        """Return True only when the current question is still active and unanswered."""
+        current_question = self.state.get("current_question")
+        if not isinstance(current_question, dict) or not current_question.get("question"):
+            return False
+
+        current_answer = self.state.get("current_answer")
+        if isinstance(current_answer, dict):
+            answer_question_id = current_answer.get("question_id")
+            active_question_id = current_question.get("id")
+            if answer_question_id and active_question_id and answer_question_id == active_question_id:
+                return False
+
+        return True
+
     async def generate_first_question(self) -> str:
         """Generate and return the first interview question."""
-        # Reconnects or duplicate startup events must reuse the active
-        # question instead of asking the model to generate another one.
+        # Only reuse the active question on a reconnect when there is no
+        # answer already tied to it. If the previous question has been answered,
+        # generate a fresh one instead of repeating the same prompt.
         existing_question = self.state.get("current_question")
-        if existing_question and existing_question.get("question"):
+        if isinstance(existing_question, dict) and existing_question.get("question") and self._should_reuse_active_question():
             self._last_question_id = existing_question.get("id")
             return existing_question["question"]
 
@@ -467,6 +483,11 @@ class InterviewGraphRunner:
             or current_stage.get("name", "").lower() == "system design"
             or self.state.get("is_system_design_mode", False)
         )
+
+        existing_question = self.state.get("current_question")
+        if isinstance(existing_question, dict) and existing_question.get("question") and self._should_reuse_active_question():
+            self._last_question_id = existing_question.get("id")
+            return existing_question["question"]
 
         if is_system_design_stage:
             q_result = await system_design_question_generator_node(self.state)

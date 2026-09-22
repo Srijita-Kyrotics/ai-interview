@@ -1,8 +1,9 @@
 """Tests for Judge0 code execution engine and fallback system."""
 
 import asyncio
-from app.code_executor import execute_code, execute_judge0, normalize_output
+
 from app.ai_interviewer.coding_judge import judge_submission
+from app.code_executor import execute_code, execute_judge0, normalize_output
 
 
 def asyncio_run(coro):

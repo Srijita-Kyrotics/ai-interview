@@ -28,7 +28,7 @@ from app.db import (
     update_user_role,
 )
 from app.helpers import default_scores, sanitize_for_ai
-from app.resume_parser import extract_text_from_pdf_content, extract_text_from_docx_content, parse_resume_text
+from app.resume_parser import extract_text_from_docx_content, extract_text_from_pdf_content, parse_resume_text
 
 router = APIRouter()
 
@@ -278,8 +278,8 @@ async def upload_resume(file: UploadFile = File(...), user: dict[str, Any] = Dep
             # Fallback to plain text
             try:
                 text = content.decode("utf-8")
-            except UnicodeDecodeError:
-                raise HTTPException(status_code=400, detail="Could not read file. Only PDF, DOCX, and TXT files are supported.")
+            except UnicodeDecodeError as err:
+                raise HTTPException(status_code=400, detail="Could not read file. Only PDF, DOCX, and TXT files are supported.") from err
 
     session_id = str(uuid.uuid4())
 
@@ -883,11 +883,11 @@ def admin_stats(user: dict[str, Any] = Depends(require_recruiter)):
 def admin_benchmark(user: dict[str, Any] = Depends(require_recruiter)):
     """
     Get platform-wide benchmark data for candidate comparison.
-    
+
     Returns percentile distributions and median scores across dimensions.
     """
     sessions = get_all_sessions()
-    
+
     # Collect all scores from completed sessions
     score_data = {
         "overall": [],
@@ -898,12 +898,12 @@ def admin_benchmark(user: dict[str, Any] = Depends(require_recruiter)):
         "coding": [],
         "behavioral": [],
     }
-    
+
     for s in sessions:
         # Check AI interview data first
         ai_interview = s.get("aiInterview", {})
         if ai_interview:
-            for interview_id, interview_data in ai_interview.items():
+            for _interview_id, interview_data in ai_interview.items():
                 scores = interview_data.get("scores", {})
                 if scores:
                     score_data["overall"].append(scores.get("overall_score", 0))
@@ -913,7 +913,7 @@ def admin_benchmark(user: dict[str, Any] = Depends(require_recruiter)):
                     score_data["system_design"].append(scores.get("system_design_score", 0))
                     score_data["coding"].append(scores.get("coding_score", 0))
                     score_data["behavioral"].append(scores.get("behavioral_score", 0))
-        
+
         # Fallback to platform scores
         scores = s.get("scores", {})
         if scores:
@@ -923,7 +923,7 @@ def admin_benchmark(user: dict[str, Any] = Depends(require_recruiter)):
             score_data["technical"].append(scores.get("technical", overall))
             score_data["communication"].append(scores.get("communication", overall))
             score_data["problem_solving"].append(scores.get("problem_solving", overall))
-    
+
     def calculate_stats(values):
         if not values:
             return {
@@ -940,14 +940,14 @@ def admin_benchmark(user: dict[str, Any] = Depends(require_recruiter)):
                 "p95": 0,
                 "percentiles": [],
             }
-        
+
         sorted_vals = sorted(values)
         n = len(sorted_vals)
-        
+
         def percentile(p):
             idx = int(p / 100 * (n - 1))
             return sorted_vals[idx]
-        
+
         return {
             "count": n,
             "median": round(sum(values) / n),
@@ -962,11 +962,11 @@ def admin_benchmark(user: dict[str, Any] = Depends(require_recruiter)):
             "p95": percentile(95),
             "percentiles": sorted_vals,  # For calculating candidate percentiles
         }
-    
+
     benchmark = {}
     for dim, vals in score_data.items():
         benchmark[f"{dim}_stats"] = calculate_stats(vals)
-    
+
     # Flatten for easier frontend consumption
     result = {
         "total_sessions_analyzed": len([s for s in sessions if s.get("scores") or s.get("aiInterview")]),
@@ -1003,7 +1003,7 @@ def admin_benchmark(user: dict[str, Any] = Depends(require_recruiter)):
             for stats in [benchmark.get(f"{dim}_stats", {})]
         },
     }
-    
+
     return {"benchmark": result}
 
 
@@ -1333,7 +1333,7 @@ def _create_system_templates() -> None:
             is_system=True,
         ),
     ]
-    
+
     for template in system_templates:
         filepath = TEMPLATES_DIR / f"{template.id}.json"
         if not filepath.exists():
@@ -1453,7 +1453,7 @@ def update_interview_template(
         raise HTTPException(status_code=403, detail="Cannot modify system templates")
     if template.created_by != user.get("email", "") and user.get("role") != "admin":
         raise HTTPException(status_code=403, detail="Can only edit your own templates")
-    
+
     template.name = request.name
     template.description = request.description
     template.role = request.role
@@ -1479,7 +1479,7 @@ def delete_interview_template(
         raise HTTPException(status_code=403, detail="Cannot delete system templates")
     if template.created_by != user.get("email", "") and user.get("role") != "admin":
         raise HTTPException(status_code=403, detail="Can only delete your own templates")
-    
+
     filepath = TEMPLATES_DIR / f"{template_id}.json"
     filepath.unlink(missing_ok=True)
     return {"ok": True, "message": "Template deleted"}
@@ -1495,10 +1495,10 @@ def apply_interview_template(
     template = _load_template(template_id)
     if not template:
         raise HTTPException(status_code=404, detail="Template not found")
-    
+
     # Create session with template settings
     session_id = str(uuid.uuid4())
-    
+
     # Build interview plan from template stages
     stages = []
     for i, stage in enumerate(template.stages):
@@ -1510,7 +1510,7 @@ def apply_interview_template(
             "target_questions": stage.get("target_questions", 2),
             "completed": False,
         })
-    
+
     interview_plan = {
         "stages": stages,
         "total_questions": template.max_questions,
@@ -1519,7 +1519,7 @@ def apply_interview_template(
         "closing_strategy": "Wrap up with behavioral questions",
         "estimated_duration_minutes": template.max_questions * 4,
     }
-    
+
     state = {
         "sessionId": session_id,
         "user_id": user.get("email", ""),
@@ -1536,9 +1536,9 @@ def apply_interview_template(
         "ai_interview_max_questions": template.max_questions,
         "ai_interview_voice_enabled": template.voice_enabled,
     }
-    
+
     save_session(session_id, state, user_id=user.get("email", ""))
-    
+
     return {
         "session_id": session_id,
         "template": {

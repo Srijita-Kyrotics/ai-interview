@@ -23,6 +23,7 @@ Security features:
 from __future__ import annotations
 
 import asyncio
+import contextlib
 import hashlib
 import logging
 import os
@@ -530,10 +531,8 @@ async def execute_docker_sandbox(
 
     finally:
         # Cleanup temp file
-        try:
+        with contextlib.suppress(Exception):
             os.unlink(temp_path)
-        except Exception:
-            pass
 
 
 def _missing_runtime(runtime: str, language: str) -> dict[str, Any]:
@@ -559,5 +558,5 @@ def get_cache_stats() -> dict:
     """Get compilation cache statistics."""
     return {
         "entries": len(_compilation_cache),
-        "languages": list(set(k.split(":")[0] for k in _compilation_cache.keys())) if _compilation_cache else [],
+        "languages": list(set(k.split(":")[0] for k in _compilation_cache)) if _compilation_cache else [],
     }

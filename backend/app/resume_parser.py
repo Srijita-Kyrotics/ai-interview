@@ -25,8 +25,9 @@ def extract_text_from_pdf_content(content: bytes) -> str:
 
 def extract_text_from_docx_content(content: bytes) -> str:
     """Extract text from DOCX bytes."""
-    import docx
     from io import BytesIO
+
+    import docx
     try:
         doc = docx.Document(BytesIO(content))
         return "\n".join([para.text for para in doc.paragraphs])

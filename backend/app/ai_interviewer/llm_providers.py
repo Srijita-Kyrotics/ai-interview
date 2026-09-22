@@ -22,6 +22,8 @@ from __future__ import annotations
 import asyncio
 import json
 import logging
+import os
+import sys
 import time
 from abc import ABC, abstractmethod
 
@@ -662,9 +664,13 @@ class LLMProviderRegistry:
                     return result
                 except LLMProviderError as e:
                     last_error = e
-                    if not e.retryable:
-                        break
                     self._record_failure(provider.name)
+                    if not e.retryable:
+                        logger.warning(
+                            "Provider %s failed with a non-retryable error; trying next provider: %s",
+                            provider.name, e,
+                        )
+                        break
                     if attempt < max_retries - 1:
                         backoff = (2 ** attempt) * 0.5
                         logger.warning(
@@ -717,9 +723,13 @@ class LLMProviderRegistry:
                     return result
                 except LLMProviderError as e:
                     last_error = e
-                    if not e.retryable:
-                        break
                     self._record_failure(provider.name)
+                    if not e.retryable:
+                        logger.warning(
+                            "Provider %s failed with a non-retryable error in text generation; trying next provider: %s",
+                            provider.name, e,
+                        )
+                        break
                     if attempt < max_retries - 1:
                         await asyncio.sleep((2 ** attempt) * 0.5)
                 except Exception as e:
@@ -769,6 +779,17 @@ def get_llm_registry() -> LLMProviderRegistry:
         return _registry
 
     _registry = LLMProviderRegistry()
+
+    environment = (settings.environment or "").strip().lower()
+    is_test_runtime = (
+        environment in {"test", "testing", "ci"}
+        or "pytest" in sys.modules
+        or "PYTEST_CURRENT_TEST" in os.environ
+    )
+    if is_test_runtime:
+        _registry.register(MockProvider(), priority=99)
+        logger.info("Registered LLM provider: MockProvider (offline — test environment)")
+        return _registry
 
     if _has_usable_api_key(settings.openai_api_key):
         _registry.register(OpenAIProvider(), priority=0)

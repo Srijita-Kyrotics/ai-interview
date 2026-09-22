@@ -25,6 +25,7 @@ import logging
 import time
 import uuid
 
+from app.ai_interviewer import state as interview_state_module
 from app.ai_interviewer.communication_analyzer import analyze_communication
 from app.ai_interviewer.memory import MemoryManager
 from app.ai_interviewer.prompts import (
@@ -76,6 +77,8 @@ from app.ai_interviewer.state import (
 )
 from app.config import settings
 
+make_initial_state = interview_state_module.make_initial_state
+
 logger = logging.getLogger("ai_interview.nodes")
 
 # ── LLM Provider Abstraction ──────────────────────────────────────────────────
@@ -85,6 +88,12 @@ logger = logging.getLogger("ai_interview.nodes")
 class LLMUnavailableError(Exception):
     """Raised when no LLM provider is configured or all providers are unavailable."""
     pass
+
+
+def _tagged_system(system_tag: str, base_system: str) -> str:
+    """Prepend a stable routing tag to the system prompt so mock providers and runtime routing stay aligned."""
+    tag = system_tag.strip()
+    return f"{tag}\n{base_system}" if tag else base_system
 
 
 async def _call_llm_json(system: str, prompt: str, model: str | None = None) -> dict:
@@ -163,7 +172,7 @@ async def resume_analyzer_node(state: InterviewState) -> dict:
         resume_text=enriched_text[:8000],  # LLM context limit
     )
 
-    result = await _call_llm_json(RESUME_ANALYZER_SYSTEM, prompt)
+    result = await _call_llm_json(_tagged_system("RESUME_ANALYZER", RESUME_ANALYZER_SYSTEM), prompt)
 
     # Normalize — the model must return all required fields, no silent fallbacks
     analysis: ResumeAnalysis = {
@@ -242,7 +251,7 @@ async def claim_extractor_node(state: InterviewState) -> dict:
         role=state["role"],
     )
     claim_result = await _call_llm_json(
-        CLAIM_EXTRACTOR_SYSTEM,
+        _tagged_system("CLAIM_EXTRACTOR", CLAIM_EXTRACTOR_SYSTEM),
         claim_prompt,
     )
 
@@ -337,7 +346,7 @@ async def interview_planner_node(state: InterviewState) -> dict:
         max_questions=state["max_questions"],
     )
 
-    result = await _call_llm_json(INTERVIEW_PLANNER_SYSTEM, prompt)
+    result = await _call_llm_json(_tagged_system("INTERVIEW_PLANNER", INTERVIEW_PLANNER_SYSTEM), prompt)
 
     raw_stages = result.get("stages", [])
     stages: list[InterviewStage] = []
@@ -608,7 +617,11 @@ async def question_generator_node(state: InterviewState) -> dict:
                 "or the target role. Focus on architecture, scalability, tradeoffs."
             )
 
-        result = await _call_llm_json(QUESTION_GENERATOR_SYSTEM, prompt, model=_fast_model())
+        result = await _call_llm_json(
+            _tagged_system("QUESTION_GENERATOR", QUESTION_GENERATOR_SYSTEM),
+            prompt,
+            model=_fast_model(),
+        )
 
         question_record = QuestionRecord(
             id=question_id,
@@ -790,8 +803,15 @@ async def answer_analyzer_node(state: InterviewState) -> dict:
     )
 
     # Run answer evaluation and contradiction detection in parallel to eliminate sequential latency
-    analyzer_task = _call_llm_json(ANSWER_ANALYZER_SYSTEM, prompt, model=_fast_model())
-    contradiction_task = _call_llm_json(CONTRADICTION_DETECTOR_SYSTEM, contradiction_prompt)
+    analyzer_task = _call_llm_json(
+        _tagged_system("ANSWER_ANALYZER", ANSWER_ANALYZER_SYSTEM),
+        prompt,
+        model=_fast_model(),
+    )
+    contradiction_task = _call_llm_json(
+        _tagged_system("CONTRADICTION_DETECTOR", CONTRADICTION_DETECTOR_SYSTEM),
+        contradiction_prompt,
+    )
 
     result, contradiction_result = await asyncio.gather(analyzer_task, contradiction_task)
 
@@ -1007,7 +1027,11 @@ async def follow_up_generator_node(state: InterviewState) -> dict:
     difficulty_hint = DIFFICULTY_GUIDANCE.get(current_diff, DIFFICULTY_GUIDANCE["intermediate"])
     prompt += f"\n\nDIFFICULTY GUIDANCE (current level: {current_diff}):\n{difficulty_hint}"
 
-    result = await _call_llm_json(FOLLOW_UP_GENERATOR_SYSTEM, prompt, model=_fast_model())
+    result = await _call_llm_json(
+        _tagged_system("FOLLOW_UP_GENERATOR", FOLLOW_UP_GENERATOR_SYSTEM),
+        prompt,
+        model=_fast_model(),
+    )
 
     follow_up_text = result.get("follow_up_question", "")
 
@@ -1298,13 +1322,14 @@ async def report_generator_node(state: InterviewState) -> dict:
         overall_score=scores.get("overall_score", 50),
     )
 
-    result = await _call_llm_json(REPORT_GENERATOR_SYSTEM, prompt)
+    result = await _call_llm_json(_tagged_system("REPORT_GENERATOR", REPORT_GENERATOR_SYSTEM), prompt)
 
     report: FinalReport = {
         "candidate_name": analysis.get("candidate_name", "Candidate"),
         "session_id": state["session_id"],
         "interview_duration_seconds": duration_secs,
         "scores": scores,
+        "recommendation": scores.get("recommendation", "Lean Reject"),
         "strengths": result.get("strengths", []),
         "weaknesses": result.get("weaknesses", []),
         "areas_for_improvement": result.get("areas_for_improvement", []),
@@ -1460,7 +1485,10 @@ async def coding_problem_generator_node(state: InterviewState) -> dict:
         question_index=state.get("questions_asked", 0),
     )
 
-    result = await _call_llm_json(CODING_PROBLEM_GENERATOR_SYSTEM, prompt)
+    result = await _call_llm_json(
+        _tagged_system("CODING_PROBLEM_GENERATOR", CODING_PROBLEM_GENERATOR_SYSTEM),
+        prompt,
+    )
 
     examples = _as_list(result.get("examples"))
     problem = CodingProblem(
@@ -1549,7 +1577,7 @@ async def stage_advance_node(state: InterviewState) -> dict:
         candidate_name=analysis.get("candidate_name", ""),
     )
     result = await _call_llm_json(
-        "You are a professional interviewer transitioning between topics.",
+        _tagged_system("STAGE_TRANSITION", "You are a professional interviewer transitioning between topics."),
         prompt,
         model=_fast_model(),
     )
@@ -1591,7 +1619,7 @@ async def opening_node(state: InterviewState) -> dict:
     )
 
     result = await _call_llm_json(
-        "You are a professional technical interviewer opening the interview.",
+        _tagged_system("INTERVIEW_OPENING", "You are a professional technical interviewer opening the interview."),
         prompt,
         model=_fast_model(),
     )
@@ -1632,7 +1660,7 @@ async def closing_node(state: InterviewState) -> dict:
     )
 
     result = await _call_llm_json(
-        "You are a professional technical interviewer closing the interview.",
+        _tagged_system("INTERVIEW_CLOSING", "You are a professional technical interviewer closing the interview."),
         prompt,
     )
 
@@ -1703,7 +1731,7 @@ async def claim_verifier_node(state: InterviewState) -> dict:
             previous_evidence=previous_evidence,
         )
 
-        result = await _call_llm_json(CLAIM_VERIFIER_SYSTEM, prompt)
+        result = await _call_llm_json(_tagged_system("CLAIM_VERIFIER", CLAIM_VERIFIER_SYSTEM), prompt)
 
         new_status = result.get("verification_status", "UNVERIFIED")
         evidence = result.get("evidence", "")
@@ -1811,7 +1839,7 @@ async def interview_replanner_node(state: InterviewState) -> dict:
         difficulty_level=difficulty_level.get("level", "intermediate"),
     )
 
-    result = await _call_llm_json(INTERVIEW_REPLANNER_SYSTEM, prompt)
+    result = await _call_llm_json(_tagged_system("INTERVIEW_REPLANNER", INTERVIEW_REPLANNER_SYSTEM), prompt)
 
     # Apply replanning — update stage topics if provided
     replanned_stages = result.get("replanned_stages", [])
@@ -1906,7 +1934,10 @@ async def system_design_evaluator_node(state: InterviewState) -> dict:
         company=state.get("company", "the company"),
     )
 
-    result = await _call_llm_json(SYSTEM_DESIGN_EVALUATOR_SYSTEM, prompt)
+    result = await _call_llm_json(
+        _tagged_system("SYSTEM_DESIGN_EVALUATOR", SYSTEM_DESIGN_EVALUATOR_SYSTEM),
+        prompt,
+    )
 
     # Store system design scores in state
     system_design_scores = {
@@ -1946,7 +1977,6 @@ async def system_design_question_generator_node(state: InterviewState) -> dict:
 
     analysis = state.get("resume_analysis", {})
     current_stage = state.get("current_stage", {})
-    memory = state.get("memory", {})
     transcript = state.get("conversation_transcript", [])
     evaluations = state.get("evaluations_history", [])
     system_design_scores = state.get("system_design_scores", {})
@@ -2012,7 +2042,11 @@ async def system_design_question_generator_node(state: InterviewState) -> dict:
         last_suggested_followup=last_followup,
     )
 
-    result = await _call_llm_json(SYSTEM_DESIGN_GENERATOR_SYSTEM, prompt, model=_fast_model())
+    result = await _call_llm_json(
+        _tagged_system("SYSTEM_DESIGN_GENERATOR", SYSTEM_DESIGN_GENERATOR_SYSTEM),
+        prompt,
+        model=_fast_model(),
+    )
 
     question_id = str(uuid.uuid4())
     question_record = QuestionRecord(

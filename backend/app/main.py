@@ -1,11 +1,13 @@
 from __future__ import annotations
 
 import logging
+import os
 from contextlib import asynccontextmanager
 
-from fastapi import FastAPI
+from fastapi import APIRouter, FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import JSONResponse, Response
+from fastapi.responses import FileResponse, JSONResponse, Response
+from fastapi.staticfiles import StaticFiles
 from pythonjsonlogger import json as json_logger
 
 from app.ai_interviewer.router import router as ai_interviewer_router
@@ -23,7 +25,6 @@ from app.db import (
 from app.helpers import create_token, decode_token, default_scores
 from app.observability import (
     ObservabilityMiddleware,
-    configure_logging,
     get_health_status,
     get_metrics,
 )
@@ -96,7 +97,6 @@ app.include_router(ai_interviewer_router)
 app.include_router(auth_router)
 app.include_router(session_router)
 
-from fastapi import APIRouter
 api_router = APIRouter(prefix="/api")
 api_router.include_router(ai_interviewer_router)
 api_router.include_router(auth_router)
@@ -176,10 +176,6 @@ async def metrics():
     return Response(content=await get_metrics(), media_type="text/plain")
 
 
-import os
-from fastapi.staticfiles import StaticFiles
-from fastapi.responses import FileResponse
-
 static_dir = os.path.join(settings.base_dir, "static")
 if not os.path.exists(static_dir):
     static_dir = os.path.join(os.getcwd(), "static")
@@ -188,7 +184,7 @@ if os.path.exists(static_dir):
     assets_dir = os.path.join(static_dir, "assets")
     if os.path.exists(assets_dir):
         app.mount("/assets", StaticFiles(directory=assets_dir), name="assets")
-    
+
     @app.get("/{full_path:path}")
     async def serve_frontend(full_path: str):
         path = os.path.join(static_dir, full_path)

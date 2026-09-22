@@ -11,7 +11,7 @@ from __future__ import annotations
 import time
 from typing import Any
 
-from app.code_executor import EXEC_TIMEOUT_SECONDS, execute_code, normalize_output
+from app.code_executor import execute_code, normalize_output
 from app.config import settings
 
 _COMPILED_LANGS = {"c", "c++", "cpp", "java"}

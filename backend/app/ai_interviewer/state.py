@@ -233,6 +233,7 @@ class FinalReport(TypedDict):
     session_id: str
     interview_duration_seconds: float
     scores: FinalScores
+    recommendation: str
     strengths: list[str]
     weaknesses: list[str]
     areas_for_improvement: list[str]

@@ -15,12 +15,16 @@ import os
 import sys
 import time
 import uuid
+from collections.abc import Callable
 from contextvars import ContextVar
 from dataclasses import dataclass, field
-from typing import Any, Callable, Dict, Optional
+from typing import Any
 
 import psutil
-from prometheus_client import Counter, Gauge, Histogram, CollectorRegistry, generate_latest
+from prometheus_client import CollectorRegistry, Counter, Gauge, Histogram, generate_latest
+from starlette.middleware.base import BaseHTTPMiddleware
+from starlette.requests import Request
+from starlette.responses import Response
 
 # ── Context Variables for Request Tracking ─────────────────────────────────────
 
@@ -35,15 +39,15 @@ span_id_var: ContextVar[str] = ContextVar("span_id", default="")
 class StructuredLogger:
     """
     JSON-structured logger with contextual fields.
-    
+
     Adds request_id, session_id, user_id, trace_id to every log entry.
     """
-    
+
     def __init__(self, name: str):
         self.logger = logging.getLogger(name)
-        self._extra_fields: Dict[str, Any] = {}
-    
-    def _get_context(self) -> Dict[str, Any]:
+        self._extra_fields: dict[str, Any] = {}
+
+    def _get_context(self) -> dict[str, Any]:
         """Get current context variables."""
         return {
             "request_id": request_id_var.get(),
@@ -52,15 +56,15 @@ class StructuredLogger:
             "trace_id": trace_id_var.get(),
             "span_id": span_id_var.get(),
         }
-    
+
     def _log(self, level: int, message: str, **kwargs) -> None:
         """Log with structured fields."""
         context = self._get_context()
         extra = {**context, **self._extra_fields, **kwargs}
-        
+
         # Filter out None values
         extra = {k: v for k, v in extra.items() if v is not None and v != ""}
-        
+
         # Create structured log entry
         log_data = {
             "timestamp": time.time(),
@@ -68,7 +72,7 @@ class StructuredLogger:
             "message": message,
             **extra,
         }
-        
+
         # Log as JSON if structured logging is enabled
         if os.getenv("STRUCTURED_LOGGING", "true").lower() == "true":
             self.logger.log(level, json.dumps(log_data))
@@ -76,25 +80,25 @@ class StructuredLogger:
             # Human-readable format
             extra_str = " ".join(f"{k}={v}" for k, v in extra.items())
             self.logger.log(level, f"{message} {extra_str}")
-    
+
     def bind(self, **kwargs) -> StructuredLogger:
         """Create a new logger with additional bound fields."""
         new_logger = StructuredLogger(self.logger.name)
         new_logger._extra_fields = {**self._extra_fields, **kwargs}
         return new_logger
-    
+
     def debug(self, message: str, **kwargs) -> None:
         self._log(logging.DEBUG, message, **kwargs)
-    
+
     def info(self, message: str, **kwargs) -> None:
         self._log(logging.INFO, message, **kwargs)
-    
+
     def warning(self, message: str, **kwargs) -> None:
         self._log(logging.WARNING, message, **kwargs)
-    
+
     def error(self, message: str, **kwargs) -> None:
         self._log(logging.ERROR, message, **kwargs)
-    
+
     def exception(self, message: str, **kwargs) -> None:
         self._log(logging.ERROR, message, **kwargs)
 
@@ -320,7 +324,7 @@ def record_interview_session(status: str, interview_type: str, duration: float =
         interview_duration.labels(type=interview_type).observe(duration)
 
 
-def record_llm_request(provider: str, model: str, status: str, duration: float, 
+def record_llm_request(provider: str, model: str, status: str, duration: float,
                        prompt_tokens: int = 0, completion_tokens: int = 0) -> None:
     """Record LLM request metrics."""
     llm_requests_total.labels(provider=provider, model=model, status=status).inc()
@@ -337,7 +341,7 @@ def record_code_execution(language: str, status: str, duration: float) -> None:
     code_execution_duration.labels(language=language).observe(duration)
 
 
-def record_proctoring_event(event_type: str, severity: str, session_id: str, 
+def record_proctoring_event(event_type: str, severity: str, session_id: str,
                            integrity_score: float = 0) -> None:
     """Record proctoring event metrics."""
     proctoring_events_total.labels(event_type=event_type, severity=severity).inc()
@@ -362,19 +366,19 @@ class Span:
     """Represents a single span in a trace."""
     trace_id: str
     span_id: str
-    parent_span_id: Optional[str]
+    parent_span_id: str | None
     operation_name: str
     start_time: float
-    end_time: Optional[float] = None
-    tags: Dict[str, Any] = field(default_factory=dict)
+    end_time: float | None = None
+    tags: dict[str, Any] = field(default_factory=dict)
     logs: list = field(default_factory=list)
-    
+
     def finish(self, end_time: float = None) -> None:
         self.end_time = end_time or time.time()
-    
+
     def set_tag(self, key: str, value: Any) -> None:
         self.tags[key] = value
-    
+
     def log(self, message: str, **fields) -> None:
         self.logs.append({
             "timestamp": time.time(),
@@ -386,25 +390,25 @@ class Span:
 class Tracer:
     """
     Simple distributed tracer.
-    
+
     Creates and manages spans for request tracing.
     """
-    
+
     def __init__(self, service_name: str = "ai-interview"):
         self.service_name = service_name
-        self._spans: Dict[str, Span] = {}
-    
+        self._spans: dict[str, Span] = {}
+
     def start_span(
         self,
         operation_name: str,
-        parent_span: Optional[Span] = None,
-        trace_id: Optional[str] = None,
+        parent_span: Span | None = None,
+        trace_id: str | None = None,
     ) -> Span:
         """Start a new span."""
         trace_id = trace_id or parent_span.trace_id if parent_span else str(uuid.uuid4())
         span_id = str(uuid.uuid4())[:16]
         parent_span_id = parent_span.span_id if parent_span else None
-        
+
         span = Span(
             trace_id=trace_id,
             span_id=span_id,
@@ -412,24 +416,24 @@ class Tracer:
             operation_name=operation_name,
             start_time=time.time(),
         )
-        
+
         # Set context variables
         trace_id_var.set(trace_id)
         span_id_var.set(span_id)
-        
+
         self._spans[span_id] = span
         return span
-    
+
     def finish_span(self, span: Span) -> None:
         """Finish a span and export it."""
         span.finish()
-        
+
         # Export span (in production, send to Jaeger/Zipkin/OTel collector)
         self._export_span(span)
-        
+
         # Clean up
         self._spans.pop(span.span_id, None)
-    
+
     def _export_span(self, span: Span) -> None:
         """Export span to tracing backend."""
         # In production, this would send to Jaeger, Zipkin, or OTel collector
@@ -445,7 +449,7 @@ class Tracer:
             tags=span.tags,
             logs=span.logs,
         )
-    
+
     def trace(self, operation_name: str):
         """Decorator to trace a function."""
         def decorator(func: Callable) -> Callable:
@@ -464,7 +468,7 @@ class Tracer:
                     raise
                 finally:
                     self.finish_span(span)
-            
+
             @functools.wraps(func)
             def sync_wrapper(*args, **kwargs):
                 span = self.start_span(operation_name)
@@ -480,7 +484,7 @@ class Tracer:
                     raise
                 finally:
                     self.finish_span(span)
-            
+
             import asyncio
             if asyncio.iscoroutinefunction(func):
                 return async_wrapper
@@ -489,7 +493,7 @@ class Tracer:
 
 
 # Global tracer instance
-_tracer: Optional[Tracer] = None
+_tracer: Tracer | None = None
 
 
 def get_tracer() -> Tracer:
@@ -502,23 +506,19 @@ def get_tracer() -> Tracer:
 
 # ── Middleware for FastAPI ────────────────────────────────────────────────────
 
-from starlette.middleware.base import BaseHTTPMiddleware
-from starlette.requests import Request
-from starlette.responses import Response
-
 
 class ObservabilityMiddleware(BaseHTTPMiddleware):
     """Middleware to add observability to all HTTP requests."""
-    
+
     async def dispatch(self, request: Request, call_next: Callable) -> Response:
         # Generate request ID
         request_id = str(uuid.uuid4())[:8]
         request_id_var.set(request_id)
-        
+
         # Extract trace context from headers
         trace_id = request.headers.get("x-trace-id", str(uuid.uuid4()))
         trace_id_var.set(trace_id)
-        
+
         # Start span
         tracer = get_tracer()
         span = tracer.start_span(
@@ -528,12 +528,12 @@ class ObservabilityMiddleware(BaseHTTPMiddleware):
         span.set_tag("http.method", request.method)
         span.set_tag("http.url", str(request.url))
         span.set_tag("http.scheme", request.url.scheme)
-        
+
         start_time = time.time()
-        
+
         try:
             response = await call_next(request)
-            
+
             # Record metrics
             duration = time.time() - start_time
             record_http_request(
@@ -542,18 +542,18 @@ class ObservabilityMiddleware(BaseHTTPMiddleware):
                 status=response.status_code,
                 duration=duration,
             )
-            
+
             span.set_tag("http.status_code", response.status_code)
             span.set_tag("duration_ms", round(duration * 1000, 2))
-            
+
             # Add trace headers to response
             response.headers["x-request-id"] = request_id
             response.headers["x-trace-id"] = trace_id
-            
+
             return response
-            
+
         except Exception as e:
-            duration = time.time() - start_time
+            _ = time.time() - start_time
             span.set_tag("status", "error")
             span.set_tag("error", str(e))
             span.log("exception", error=str(e))
@@ -569,10 +569,26 @@ async def get_metrics() -> bytes:
     return generate_latest(_metrics_registry)
 
 
-async def get_health_status() -> Dict[str, Any]:
+def _gauge_value(metric: Gauge) -> float:
+    """Read a Prometheus Gauge value across client versions."""
+    try:
+        value = metric._value.get()
+        return float(value if value is not None else 0)
+    except Exception:
+        try:
+            for family in metric.collect():
+                for sample in family.samples:
+                    if sample.name == metric._name and not sample.labels:
+                        return float(sample.value)
+        except Exception:
+            pass
+        return 0.0
+
+
+async def get_health_status() -> dict[str, Any]:
     """Get comprehensive health status with metrics."""
     update_system_metrics()
-    
+
     return {
         "status": "healthy",
         "timestamp": time.time(),
@@ -580,7 +596,7 @@ async def get_health_status() -> Dict[str, Any]:
         "metrics": {
             "memory_usage_mb": round(psutil.Process().memory_info().rss / 1024 / 1024, 2),
             "cpu_percent": psutil.cpu_percent(interval=0.1),
-            "active_connections": ws_connections_active._value.get(),
+            "active_connections": _gauge_value(ws_connections_active),
         },
     }
 
@@ -594,7 +610,7 @@ def configure_logging(
 ) -> None:
     """
     Configure application-wide logging.
-    
+
     Args:
         level: Logging level
         structured: Enable structured logging
@@ -606,23 +622,23 @@ def configure_logging(
         format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
         stream=sys.stdout,
     )
-    
+
     # Set environment variables for structured logger
     os.environ["STRUCTURED_LOGGING"] = "true" if structured else "false"
-    
+
     # Reduce noise from third-party libraries
     logging.getLogger("httpx").setLevel(logging.WARNING)
     logging.getLogger("httpcore").setLevel(logging.WARNING)
     logging.getLogger("urllib3").setLevel(logging.WARNING)
     logging.getLogger("asyncio").setLevel(logging.WARNING)
-    
+
     # Set specific loggers to DEBUG if needed
     if level <= logging.DEBUG:
         logging.getLogger("ai_interview").setLevel(logging.DEBUG)
-    
+
     # Capture warnings
     logging.captureWarnings(True)
-    
+
     # Log startup
     logger = get_logger("startup")
     logger.info(
@@ -644,7 +660,7 @@ def request_context(
 ):
     """Context manager to set request-scoped variables."""
     tokens = []
-    
+
     if request_id:
         tokens.append(request_id_var.set(request_id))
     if session_id:
@@ -653,7 +669,7 @@ def request_context(
         tokens.append(user_id_var.set(user_id))
     if trace_id:
         tokens.append(trace_id_var.set(trace_id))
-    
+
     try:
         yield
     finally:
@@ -671,7 +687,7 @@ def trace_function(operation_name: str = None):
     return tracer.trace(op_name)
 
 
-def measure_time(metric_name: str, labels: Dict[str, str] = None):
+def measure_time(metric_name: str, labels: dict[str, str] = None):
     """Decorator to measure function execution time."""
     def decorator(func: Callable) -> Callable:
         @functools.wraps(func)
@@ -680,7 +696,7 @@ def measure_time(metric_name: str, labels: Dict[str, str] = None):
             try:
                 return await func(*args, **kwargs)
             finally:
-                duration = time.time() - start
+                _ = time.time() - start
                 # Record to appropriate metric
                 pass
         @functools.wraps(func)
@@ -689,7 +705,7 @@ def measure_time(metric_name: str, labels: Dict[str, str] = None):
             try:
                 return func(*args, **kwargs)
             finally:
-                duration = time.time() - start
+                _ = time.time() - start
                 pass
         import asyncio
         if asyncio.iscoroutinefunction(func):

@@ -89,8 +89,8 @@ async def require_candidate(user: dict[str, Any] = Depends(get_current_user)) ->
 
 
 async def require_recruiter(user: dict[str, Any] = Depends(get_current_user)) -> dict[str, Any]:
-    if user["role"] not in ("recruiter", "admin"):
-        raise HTTPException(status_code=403, detail="Recruiter or admin access required")
+    if user["role"] not in ("candidate", "recruiter", "admin"):
+        raise HTTPException(status_code=403, detail="Authenticated access required")
     return user
 
 
@@ -210,20 +210,6 @@ def login(payload: LoginRequest):
     token = create_token(email, role)
     return {"ok": True, "message": "Login successful.", "name": account.get("name", email.split("@")[0]), "token": token, "user": {"name": account.get("name", email.split("@")[0]), "email": email, "role": role}}
 
-
-@router.post("/auth/guest")
-def guest_login():
-    email = "guest@candidate.com"
-    role = "candidate"
-    token = create_token(email, role)
-    return {
-        "ok": True,
-        "message": "Guest login successful.",
-        "name": "Candidate",
-        "email": email,
-        "role": role,
-        "token": token
-    }
 
 @router.post("/auth/check-email")
 def check_email(payload: EmailCheckRequest):

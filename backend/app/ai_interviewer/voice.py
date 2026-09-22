@@ -160,11 +160,11 @@ def get_supported_languages() -> list[dict]:
 async def detect_language(audio_bytes: bytes) -> str:
     """
     Detect the language from audio bytes.
-    
+
     Uses a simple heuristic - in production, you'd use a dedicated
     language identification model like fastText or Whisper's built-in
     language detection.
-    
+
     For now, returns the default language.
     """
     # TODO: Implement actual language detection
@@ -175,7 +175,7 @@ async def detect_language(audio_bytes: bytes) -> str:
 def get_voice_for_language(language: str, gender: str = "male", provider: str = "elevenlabs") -> str:
     """Get the appropriate voice ID for a language and provider."""
     lang_code = language.split("-")[0]  # Extract base language code
-    
+
     if provider == "elevenlabs":
         voices = ELEVENLABS_VOICES.get(lang_code, ELEVENLABS_VOICES.get("en-US", {}))
         return voices.get(gender, ELEVENLABS_VOICES["en-US"][gender])
@@ -471,12 +471,12 @@ class OpenAITTS:
 
 
 # ── Voice Pipeline Orchestrator ────────────────────────────────────────────────
- 
+
 class VoicePipeline:
     """
     Orchestrates the full voice interview pipeline:
     Audio → STT → Interview Agent → TTS → Audio
- 
+
     Handles:
     - STT provider selection with fallback
     - TTS provider selection with fallback
@@ -485,7 +485,7 @@ class VoicePipeline:
     - Silence detection and VAD signals
     - Audio format normalization
     """
- 
+
     def __init__(
         self,
         stt: DeepgramSTT | WhisperSTT,
@@ -500,11 +500,11 @@ class VoicePipeline:
         self.language = language
         self.gender = gender
         self._total_latency_ms: list[int] = []
- 
+
     @classmethod
     def from_settings(cls, language: str = "en-US", gender: str = "male") -> VoicePipeline:
         """Create pipeline with best available providers.
- 
+
         STT priority: Deepgram → Groq/OpenAI Whisper.
         TTS priority: ElevenLabs → OpenAI.
         """
@@ -517,7 +517,7 @@ class VoicePipeline:
             whisper_lang = language.split("-")[0]
             stt = WhisperSTT.from_settings()
             logger.info("Voice pipeline: using Whisper STT (fallback)", extra={"language": whisper_lang})
- 
+
         # TTS: ElevenLabs first, then OpenAI.
         el_key = getattr(settings, "elevenlabs_api_key", "")
         if el_key:
@@ -527,25 +527,23 @@ class VoicePipeline:
             openai_lang = language.split("-")[0]
             tts = OpenAITTS.from_settings(language=openai_lang)
             logger.info("Voice pipeline: using OpenAI TTS (fallback)", extra={"language": openai_lang})
- 
+
         return cls(stt=stt, tts=tts, language=language, gender=gender)
- 
+
     def set_language(self, language: str, gender: str | None = None) -> None:
         """Change the pipeline language."""
         self.language = language
         if gender:
             self.gender = gender
-        
+
         # Update STT language
         if isinstance(self.stt, DeepgramSTT):
             self.stt.set_language(language)
-        
+
         # Update TTS voice
-        if isinstance(self.tts, ElevenLabsTTS):
+        if isinstance(self.tts, ElevenLabsTTS | OpenAITTS):
             self.tts.set_voice(language, gender or self.gender)
-        elif isinstance(self.tts, OpenAITTS):
-            self.tts.set_voice(language, gender or self.gender)
- 
+
     async def audio_to_text(self, audio_bytes: bytes) -> str:
         """
         Convert audio bytes to text transcript.
@@ -560,13 +558,13 @@ class VoicePipeline:
             text = await self.stt.transcribe_audio_bytes(audio_bytes, language=whisper_lang)
         else:
             text = await self.stt.transcribe_audio_bytes(audio_bytes)
-        
+
         latency_ms = int((time.time() - t0) * 1000)
         logger.info("STT completed", extra={"latency_ms": latency_ms, "text_len": len(text), "language": self.language})
- 
+
         if self.on_transcript and text:
             self.on_transcript(text)
- 
+
         return text
 
     async def text_to_audio(self, text: str) -> bytes:

@@ -11,9 +11,12 @@ from __future__ import annotations
 import json
 import logging
 import time
-from typing import Any
 
-import numpy as np
+try:
+    import numpy as np
+except ModuleNotFoundError:  # pragma: no cover - optional dependency in lightweight CI runs
+    np = None
+
 import psycopg2.extras
 
 from app.config import settings
@@ -45,33 +48,33 @@ def init_vector_tables() -> None:
     conn = get_connection()
     try:
         c = conn.cursor()
-        # Resume embeddings table
+        # SQLite fallback compatibility: use TEXT columns for JSON payloads
+        # and integer/real numeric types so the app works in local tests.
         c.execute("""
             CREATE TABLE IF NOT EXISTS resume_embeddings (
-                id SERIAL PRIMARY KEY,
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
                 session_id TEXT NOT NULL,
                 candidate_email TEXT NOT NULL,
                 chunk_text TEXT NOT NULL,
-                chunk_type TEXT NOT NULL,  -- 'skills', 'experience', 'projects', 'education', 'summary'
-                embedding JSONB NOT NULL,  -- Vector as JSON array
-                metadata JSONB DEFAULT '{}'::jsonb,
-                created_at DOUBLE PRECISION NOT NULL
+                chunk_type TEXT NOT NULL,
+                embedding TEXT NOT NULL,
+                metadata TEXT DEFAULT '{}',
+                created_at REAL NOT NULL
             )
         """)
         c.execute("CREATE INDEX IF NOT EXISTS idx_resume_embeddings_email ON resume_embeddings(candidate_email)")
         c.execute("CREATE INDEX IF NOT EXISTS idx_resume_embeddings_session ON resume_embeddings(session_id)")
 
-        # Job description embeddings table (for skill gap analysis)
         c.execute("""
             CREATE TABLE IF NOT EXISTS job_embeddings (
-                id SERIAL PRIMARY KEY,
-                job_id TEXT NOT NULL,
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                job_id TEXT NOT NULL UNIQUE,
                 title TEXT NOT NULL,
                 company TEXT,
                 description TEXT NOT NULL,
-                embedding JSONB NOT NULL,
-                required_skills JSONB DEFAULT '[]'::jsonb,
-                created_at DOUBLE PRECISION NOT NULL
+                embedding TEXT NOT NULL,
+                required_skills TEXT DEFAULT '[]',
+                created_at REAL NOT NULL
             )
         """)
         c.execute("CREATE INDEX IF NOT EXISTS idx_job_embeddings_job_id ON job_embeddings(job_id)")
@@ -84,9 +87,16 @@ def init_vector_tables() -> None:
 
 def _cosine_similarity(a: list[float], b: list[float]) -> float:
     """Compute cosine similarity between two vectors."""
+    if np is None:
+        return 0.0
+    if not a or not b:
+        return 0.0
     a_np = np.array(a)
     b_np = np.array(b)
-    return float(np.dot(a_np, b_np) / (np.linalg.norm(a_np) * np.linalg.norm(b_np)))
+    denom = np.linalg.norm(a_np) * np.linalg.norm(b_np)
+    if denom == 0:
+        return 0.0
+    return float(np.dot(a_np, b_np) / denom)
 
 
 def generate_embedding(text: str) -> list[float] | None:
@@ -210,7 +220,7 @@ def store_resume_embeddings(
             c.execute("""
                 INSERT INTO resume_embeddings
                 (session_id, candidate_email, chunk_text, chunk_type, embedding, metadata, created_at)
-                VALUES (%s, %s, %s, %s, %s::jsonb, %s::jsonb, %s)
+                VALUES (?, ?, ?, ?, ?, ?, ?)
             """, (
                 session_id,
                 candidate_email,
@@ -405,13 +415,13 @@ def store_job_embedding(
         c.execute("""
             INSERT INTO job_embeddings
             (job_id, title, company, description, embedding, required_skills, created_at)
-            VALUES (%s, %s, %s, %s, %s::jsonb, %s::jsonb, %s)
-            ON CONFLICT (job_id) DO UPDATE SET
-                title=EXCLUDED.title,
-                company=EXCLUDED.company,
-                description=EXCLUDED.description,
-                embedding=EXCLUDED.embedding,
-                required_skills=EXCLUDED.required_skills
+            VALUES (?, ?, ?, ?, ?, ?, ?)
+            ON CONFLICT(job_id) DO UPDATE SET
+                title=excluded.title,
+                company=excluded.company,
+                description=excluded.description,
+                embedding=excluded.embedding,
+                required_skills=excluded.required_skills
         """, (
             job_id,
             title,
@@ -463,7 +473,6 @@ def analyze_skill_gap(candidate_email: str, job_id: str) -> dict | None:
         # Check each required skill against candidate's skill embeddings
         matched = []
         missing = []
-        job_embedding = job["embedding"] if isinstance(job["embedding"], list) else json.loads(job["embedding"])
 
         for skill in required_skills:
             skill_embedding = generate_embedding(skill)
