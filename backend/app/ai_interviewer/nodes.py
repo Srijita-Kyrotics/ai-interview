@@ -460,9 +460,9 @@ async def question_generator_node(state: InterviewState) -> dict:
     logger.info("Executing question_generator_node", extra={"session": state["session_id"]})
 
     analysis = state.get("resume_analysis", {})
+    memory = state.get("memory", {})
     state.get("interview_plan", {})
     current_stage = state.get("current_stage", {})
-    memory = state.get("memory", {})
     evaluations = state.get("evaluations_history", [])
     transcript = state.get("conversation_transcript", [])
 

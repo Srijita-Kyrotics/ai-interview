@@ -506,7 +506,6 @@ def get_tracer() -> Tracer:
 
 # ── Middleware for FastAPI ────────────────────────────────────────────────────
 
-
 class ObservabilityMiddleware(BaseHTTPMiddleware):
     """Middleware to add observability to all HTTP requests."""
 

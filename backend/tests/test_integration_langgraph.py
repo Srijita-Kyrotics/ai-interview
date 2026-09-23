@@ -675,7 +675,6 @@ class TestProctoringIntegration:
 
     def test_proctoring_rest_endpoints(self, client, auth_header):
         """Test proctoring REST API endpoints."""
-
         # Create session first
         create_res = client.post(
             "/ai-interview/create-session",

@@ -473,7 +473,6 @@ def analyze_skill_gap(candidate_email: str, job_id: str) -> dict | None:
         # Check each required skill against candidate's skill embeddings
         matched = []
         missing = []
-
         for skill in required_skills:
             skill_embedding = generate_embedding(skill)
             if not skill_embedding:

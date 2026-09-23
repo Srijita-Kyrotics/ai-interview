@@ -60,7 +60,6 @@ import re
 import sys
 import time
 import uuid
-from pathlib import Path
 
 from fastapi import (
     APIRouter,
@@ -339,7 +338,6 @@ async def upload_ai_interview_resume(
     """
     filename = Path(file.filename or "resume.txt").name
     _ = Path(filename).suffix.lower()
-
     content = await file.read()
     if len(content) > settings.max_upload_bytes:
         raise HTTPException(
